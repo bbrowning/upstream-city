@@ -7,6 +7,10 @@ hooks/
 # Claude Code / Gas City skill materialization (machine-local)
 .claude/skills/
 
+# Codex / Gas City skill materialization (machine-local)
+.codex/skills/
+.codex/hooks.json
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 .dolt-backup/
