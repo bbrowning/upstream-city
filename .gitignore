@@ -17,3 +17,6 @@ hooks/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Individual rigs
+rigs/
