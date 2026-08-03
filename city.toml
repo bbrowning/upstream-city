@@ -5,6 +5,7 @@ provider = "claude"
 [providers.claude]
 base = "builtin:claude"
 ready_delay_ms = 0
+args = ["--effort", "xhigh"]
 
 [defaults]
 [defaults.rig]
