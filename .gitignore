@@ -6,6 +6,7 @@ hooks/
 
 # Beads / Dolt files (added by bd init)
 .dolt/
+.dolt-backup/
 *.db
 .beads-credential-key
 .beads/proxieddb/
