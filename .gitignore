@@ -1,0 +1,15 @@
+# Gas City
+.gc/
+.beads/*
+!.beads/identity.toml
+hooks/
+
+# Claude Code / Gas City skill materialization (machine-local)
+.claude/skills/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+.dolt-backup/
+*.db
+.beads-credential-key
+.beads/proxieddb/
