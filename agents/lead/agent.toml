@@ -1,0 +1,3 @@
+scope = "rig"
+description = "Lead planner/worker for its rig"
+prompt_template = "agents/lead/prompt.template.md"

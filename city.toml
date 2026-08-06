@@ -24,3 +24,12 @@ default_branch = "main"
 name = "gascity"
 prefix = "gascity"
 default_branch = "main"
+
+# One lead per rig, from a single template. scope="rig" + no dir fans this
+# out to paude/lead, vllm/lead, gascity/lead. mode="on_demand" reserves the
+# identity and materializes on dispatch; set mode="always" for always-awake.
+[[named_session]]
+name = "lead"
+template = "lead"
+scope = "rig"
+mode = "on_demand"
