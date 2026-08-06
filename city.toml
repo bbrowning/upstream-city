@@ -19,6 +19,18 @@ default_branch = "main"
 name = "vllm"
 prefix = "vllm"
 default_branch = "main"
+includes = ["pr-review-pack"]   # in-city folder
+
+  # Per-agent model/effort (my choice, not the pack's). Triage is backstopped by
+  # the deterministic prescan + reviewer re-derivation, so it stays lean; the
+  # reviewer's verdict is what I act on, so it gets the deeper pass.
+  [[rigs.patches]]
+  agent = "triage"
+  option_defaults = { model = "opus", effort = "high" }
+
+  [[rigs.patches]]
+  agent = "reviewer"
+  option_defaults = { model = "opus", effort = "xhigh" }
 
 [[rigs]]
 name = "gascity"

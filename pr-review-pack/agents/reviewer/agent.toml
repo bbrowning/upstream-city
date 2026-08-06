@@ -1,0 +1,35 @@
+# Reviewer — read-only, single-lane PR reviewer.
+#
+# On-demand and rig-scoped: a session spins up when a `pr-review` formula step
+# (or a direct review bead) is routed to it, and idles out afterward.
+#
+# Division of labor:
+#   - prompt.template.md  → the reviewer's standing METHOD (how it reviews,
+#                           the checklist, the read-only discipline).
+#   - formulas/pr-review.toml → the per-run TASK (which diff) + the exact
+#                           output contract it must emit.
+
+scope = "rig"
+nudge = "You have a review assignment. Run `gc prime`, read your bead, review the diff read-only, and write your verdict to gc.output_json — then close the step."
+idle_timeout = "30m"
+min_active_sessions = 0
+max_active_sessions = 2
+
+# --- Per-slot worktree isolation (the fix for the shared-checkout bug) -------
+# Without work_dir, a rig-scoped session resolves straight to the rig root
+# (verified: internal/workdir/workdir.go:241-256), so scaling max_active_sessions
+# past 1 would put every reviewer in the SAME checkout/HEAD. With this template,
+# a bounded pool expands to reviewer-1 / reviewer-2 (SupportsInstanceExpansion is
+# true when max_active_sessions > 1), each with a distinct {{.AgentBase}} → its
+# own worktree. That is the paude-container guarantee, via native gascity.
+work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
+
+# pre_start runs before the session starts, so the reviewer opens IN its worktree.
+# It only creates the isolated (detached) worktree — it has NO per-bead context,
+# so it does NOT fetch a specific PR; the reviewer does that itself (see prompt).
+# {{.ConfigDir}} resolves to THIS pack's root dir (verified: pack agents get
+# SourceDir = pack topoDir; doctor's pre_start-scripts check expands ConfigDir
+# against it). Matches the shipping t3bridge-gastown worktree example. Do NOT use
+# {{.CityRoot}} here — that is the city root, not the pack dir, so the script
+# would not be found (exit 127) when the pack is installed as a subdirectory.
+pre_start = ["{{.ConfigDir}}/assets/scripts/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]

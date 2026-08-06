@@ -1,0 +1,41 @@
+# pr-review-pack — parallel PR review + a single feature-dev lane, with true
+# per-agent worktree isolation, built entirely from native gascity v1.4.0
+# mechanics (work_dir + pre_start), no phantom `isolation="worktree"` primitive.
+#
+# What it contributes (all discovered by directory convention — see gascity's
+# conventionDiscoveryDirNames: agents/, formulas/, orders/):
+#
+#   agents/reviewer/       read-only reviewer, pooled up to 2 slots
+#                          (reviewer-1, reviewer-2), each in its OWN worktree.
+#   agents/feature-dev/    single write lane (1 slot: feature-dev), its own
+#                          worktree, real paude/<bead> branch, pushes to origin.
+#   formulas/pr-review.toml   per-run review task + structured verdict contract.
+#   formulas/feature-dev.toml per-run implement task + structured report contract.
+#   orders/fetch-origin.toml  read-only `git fetch --prune` on a cooldown to keep
+#                             origin refs warm (faster agent fetches).
+#   assets/scripts/worktree-setup.sh  pre_start hook: makes each slot's detached
+#                             worktree + .beads redirect; refuses to run in the
+#                             rig root (loud fail instead of silent stomp).
+#   assets/scripts/fetch-origin.sh    the fetch order's exec body.
+#
+# Isolation guarantee: a rig-scoped session with an empty work_dir resolves to
+# the rig root, so scaling reviewers past 1 would share one checkout. Each agent
+# sets work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"; pool expansion makes
+# {{.AgentBase}} distinct per slot (reviewer-1/reviewer-2/feature-dev), so every
+# slot gets a distinct worktree — the paude-container guarantee, natively.
+#
+# Referenced from a rig's `pack` in city.toml; both agents are rig-scoped
+# (scope="rig" in their agent.toml), so they expand once per rig they're
+# attached to (intended: vllm).
+#
+# NOTE — no [[named_session]] blocks: both agents are POOL agents (they set
+# min/max_active_sessions), and gc lint forbids a named_session that targets a
+# pool-controlled agent. Pool agents are auto-discovered from agents/ and
+# expanded by the scope in their own agent.toml — exactly like hyperscale's
+# `worker`, lifecycle's `polecat`, and swarm's `coder`. min_active_sessions = 0
+# makes them on-demand (they materialize when work is slung to them).
+
+[pack]
+name = "pr-review-pack"
+schema = 2
+description = "Parallel read-only PR reviewers + one feature-dev write lane, each isolated in its own git worktree (native work_dir + pre_start; no phantom worktree primitive)."

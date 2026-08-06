@@ -1,0 +1,27 @@
+# Feature-dev — writes code on a real branch, in its own isolated worktree.
+#
+# The one WRITE lane, deliberately capped at a single slot (max_active_sessions
+# = 1) so there is exactly one feature-dev worktree (`feature-dev`) that never
+# collides with the N read-only reviewer slots. It does real work: create a
+# branch, implement, commit, PUSH to origin. The point of no return is
+# "pushed to origin" — until then, the reaper's git-safety gate protects the
+# worktree from removal.
+#
+# Division of labor:
+#   - prompt.template.md         → the standing METHOD (branch discipline, push
+#                                  gate, "never self-close the arc bead").
+#   - formulas/feature-dev.toml  → the per-run TASK + the output contract.
+
+scope = "rig"
+nudge = "You have a feature assignment. Run `gc prime`, read your bead, implement on a paude/<bead> branch in your worktree, push to origin, and report — do NOT close the arc bead yourself."
+idle_timeout = "30m"
+min_active_sessions = 0
+max_active_sessions = 1
+
+# Single-slot worktree isolation. max_active_sessions = 1 (no namepool, no
+# min/scale override) does NOT expand into numbered instances, so this resolves
+# to one stable slot named "feature-dev" at .gc/worktrees/<rig>/feature-dev.
+work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
+# {{.ConfigDir}} = this pack's root (NOT the city root); matches the reviewer and
+# the shipping t3bridge example. Using {{.CityRoot}} would miss the script (127).
+pre_start = ["{{.ConfigDir}}/assets/scripts/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]

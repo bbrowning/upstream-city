@@ -1,0 +1,11 @@
+# Keep the vllm rig's origin refs warm (read-only) so reviewers and feature-dev
+# fetch fast. This is a warmer-cadence, read-only cousin of core's
+# prune-branches order (which fetches all rigs every 6h but also deletes stale
+# branches). This one ONLY fetches --prune; it never touches working trees or
+# branches. Override the target rigs with GC_FETCH_RIGS (default "vllm").
+[order]
+description = "Keep vllm origin refs warm (read-only fetch --prune) for fast reviewer/feature-dev fetches"
+trigger = "cooldown"
+interval = "15m"
+exec = "$PACK_DIR/assets/scripts/fetch-origin.sh"
+timeout = "300s"

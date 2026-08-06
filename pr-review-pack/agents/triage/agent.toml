@@ -1,0 +1,42 @@
+# Triage — deterministic-first PR posture classifier (the security gate).
+#
+# On-demand and rig-scoped: a session spins up when the `triage` step of a
+# `pr-review` formula run is routed to it, and idles out afterward. It runs FIRST;
+# the reviewer step `needs` it.
+#
+# Division of labor:
+#   - assets/scripts/pr-prescan.sh → the DETERMINISTIC hard floor. No LLM. It
+#                           computes the FACTS and the CEILING posture from diff
+#                           text + `gh` metadata. Injection-proof by construction.
+#   - prompt.template.md  → the JUDGMENT. Applies Ben's maintainer heuristics to
+#                           pick a posture <= the script's ceiling, and NOTHING
+#                           above it. A prompt-injected triage can only downgrade.
+#   - formulas/pr-review.toml → the per-run TASK (which diff) + the exact
+#                           pr-triage.v1 output contract it must emit.
+
+scope = "rig"
+nudge = "Triage assignment: run `gc prime`, run the deterministic pre-scan, classify the PR posture (<= the script ceiling — never above it), write pr-triage.v1 to gc.output_json, and close the step."
+idle_timeout = "30m"
+min_active_sessions = 0
+
+# Single slot: triage is the gate, not a throughput bottleneck, and it must not
+# fan out into parallel checkouts of the same diff. One classifier per run.
+max_active_sessions = 1
+
+# Model/effort intentionally unset — keeps this pack portable (triage inherits
+# the installing city's default). It's the security gate, so pin it to max effort
+# from the city.toml, not here, via a rig-scoped patch:
+#   [[rigs.patches]]
+#   agent = "triage"
+#   option_defaults = { model = "opus", effort = "max" }
+
+# --- Per-slot worktree isolation (same mechanism as the reviewer) -----------
+# triage needs a real checkout so pr-prescan.sh can `git fetch` / `git diff`
+# locally when handed a branch/sha (the PR-number path uses `gh` and needs no
+# checkout, but we give it one uniformly). Detached, dedicated to this slot.
+work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
+
+# Reuse the SHARED, battle-tested setup script (do not fork it). {{.ConfigDir}}
+# resolves to this pack's root — NOT {{.CityRoot}} (that would be exit-127 when
+# the pack is installed as a city subdirectory). Matches the reviewer exactly.
+pre_start = ["{{.ConfigDir}}/assets/scripts/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]
