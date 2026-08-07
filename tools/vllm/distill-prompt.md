@@ -45,7 +45,7 @@ lines are ignored, so keep commentary on non-bullet lines.
 ## How to slice one domain from the raw file
 
 ```bash
-jq -c 'select(.domain=="tool_parsers")' "$GC_PR_KNOWLEDGE/_seed/candidates-raw.jsonl"
+jq -c 'select(.domain=="parsers")' "$GC_PR_KNOWLEDGE/_seed/candidates-raw.jsonl"
 ```
 Read the `body` (the comment) with its `diff_hunk` (the code it was attached to) and
 `path` for context; those three together tell you what the maintainer was asserting.

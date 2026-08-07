@@ -453,8 +453,8 @@ touches**.
 **How it works**
 
 - The corpus lives at `$GC_PR_KNOWLEDGE` (`//tools/vllm/review-knowledge/`), one file
-  per domain — `general.md` (always applies) plus `tool_parsers.md`, `reasoning.md`,
-  `openai_frontend.md` — and a `_manifest.md` router.
+  per domain — `general.md` (always applies) plus `parsers.md` (tool-call + reasoning +
+  shared Parser Engine) and `openai_frontend.md` — and a `_manifest.md` router.
 - The pack's `pr-prescan.sh` stays **project-agnostic**: it reports the changed
   files (`facts.changed_files`) + generic security classes, and knows nothing about
   vLLM domains. The domain→file mapping lives entirely in the project-specific

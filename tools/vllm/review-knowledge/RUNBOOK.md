@@ -6,8 +6,9 @@ posture gating) see the pack + the project memory; this file is the day-to-day p
 
 ## What's here
 - `general.md` — cross-cutting invariants, loaded on **every** review.
-- `<domain>.md` (`tool_parsers`, `reasoning`, `openai_frontend`, …) — per-domain
-  invariants, loaded only when a PR touches that domain.
+- `<domain>.md` (`parsers`, `openai_frontend`, …) — per-domain invariants, loaded only
+  when a PR touches that domain. (`parsers` unifies tool-call + reasoning + the shared
+  Parser Engine — they interact and share a substrate.)
 - `_manifest.md` — the router: changed-path substring → which `<domain>.md` to load.
 - `_seed/` — miner output: `<domain>.candidates.md` (curate → accept) and
   `candidates-raw.jsonl` (raw mined comments; git-ignored).

@@ -23,7 +23,7 @@
 # repo scan. --max-prs caps it; a cap that bites is logged (no silent truncation).
 #
 # Domains (vLLM-specific — this script is why the corpus lives outside the generic
-# pack): tool_parsers (vllm/tool_parsers), reasoning (vllm/reasoning),
+# pack): parsers (vllm/tool_parsers + vllm/reasoning + vllm/parser [Parser Engine]),
 # openai_frontend (vllm/entrypoints/openai).
 set -euo pipefail
 
@@ -100,10 +100,9 @@ owners_for_prefixes() {  # <prefix>...  -> unique @handles
 to_json_array() { jq -Rn '[inputs]'; }
 
 OWNERS_JSON=$(jq -n \
-    --argjson tool_parsers    "$(owners_for_prefixes vllm/tool_parsers tests/tool_parsers tests/tool_use | to_json_array)" \
-    --argjson reasoning       "$(owners_for_prefixes vllm/reasoning tests/reasoning | to_json_array)" \
+    --argjson parsers         "$(owners_for_prefixes vllm/tool_parsers tests/tool_parsers tests/tool_use vllm/reasoning tests/reasoning vllm/parser tests/parser | to_json_array)" \
     --argjson openai_frontend "$(owners_for_prefixes vllm/entrypoints/openai tests/entrypoints | to_json_array)" \
-    '{tool_parsers:$tool_parsers, reasoning:$reasoning, openai_frontend:$openai_frontend}')
+    '{parsers:$parsers, openai_frontend:$openai_frontend}')
 log "owner sets: $(printf '%s' "$OWNERS_JSON" | jq -c 'map_values(length)')"
 
 # --- discover domain PRs by path (commits API, server-side `since`) ----------
@@ -115,7 +114,7 @@ discover() {  # <source-path> -> PR numbers (trailing "(#N)" in squash subjects)
 }
 
 log "discovering PRs by path…"
-PRS=$( { discover vllm/tool_parsers; discover vllm/reasoning; discover vllm/entrypoints/openai; } \
+PRS=$( { discover vllm/tool_parsers; discover vllm/reasoning; discover vllm/parser; discover vllm/entrypoints/openai; } \
          | sort -un )
 NPR=$(printf '%s\n' "$PRS" | grep -c . || true)
 log "discovered $NPR unique domain PRs since $SINCE_ISO"
@@ -142,9 +141,11 @@ for pr in $PRS; do
     gh api "repos/$REPO/pulls/$pr/comments?per_page=100" --paginate 2>/dev/null \
       | jq -c --arg pr "$pr" --argjson owners "$OWNERS_JSON" '
           def domain(p):
-              if   (p|test("/tool_parsers/"))     then "tool_parsers"
-              elif (p|test("/reasoning/"))        then "reasoning"
+              if   (p|test("/tool_parsers/"))       then "parsers"
+              elif (p|test("/reasoning/"))          then "parsers"
+              elif (p|test("/tool_use/"))           then "parsers"
               elif (p|test("/entrypoints/openai/")) then "openai_frontend"
+              elif (p|test("/parser/"))             then "parsers"
               else null end;
           .[]
           | . as $c

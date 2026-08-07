@@ -20,9 +20,8 @@ Knowledge files live in `$GC_PR_KNOWLEDGE` (absolute path injected via the rig
 
 | Load domain file     | when a changed path contains | Notes / priority |
 |----------------------|------------------------------|------------------|
-| `tool_parsers.md`    | `/tool_parsers/`             | High-signal; a real finding here is usually `major`/`blocker`. |
-| `reasoning.md`       | `/reasoning/`                | Also load `tool_parsers.md` if the PR also touches tool parsers (they interact). |
-| `openai_frontend.md` | `/entrypoints/openai/`       | Schema/protocol fidelity; treat spec drift as `major`. |
+| `parsers.md`         | `/tool_parsers/`, `/reasoning/`, `/parser/`, `/tool_use/` | Tool-call + reasoning + shared Parser Engine (unified 2026-08-07). High-signal; a real finding here is usually `major`/`blocker`. |
+| `openai_frontend.md` | `/entrypoints/openai/`       | Schema/protocol fidelity; treat spec drift as `major`. A change under `entrypoints/openai/parser/` also matches `parsers.md` (both load). |
 | `general.md`         | **always**                   | Cross-cutting invariants; layer domain files on top. |
 
 A changed path matching no domain row contributes only `general.md` (review from
