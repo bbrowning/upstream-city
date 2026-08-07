@@ -200,11 +200,14 @@ Everything below is performed **within** the latitude you just set.
 > This is the always-on floor. The **evolving, path-specific spec lives in the
 > per-domain knowledge files** under `$GC_PR_KNOWLEDGE/` (loaded in step 2 via
 > `_manifest.md`) — that is where the project's per-domain invariants accumulate, so no
-> single list grows unbounded and every review loads only what it touches. When the
-> human corrects one of your verdicts, the durable home for that lesson is
-> `gc pr-review-pack learn --area <domain> --invariant "..." --from-pr <N>`, which
-> appends it to the matching `<domain>.md` (live on the next review, no reload).
-> Keep this list generic; put domain specifics in the knowledge files.
+> single list grows unbounded and every review loads only what it touches. Those files
+> are **read-only to you**: never edit `$GC_PR_KNOWLEDGE/*.md` or run `gc pr-review-pack
+> learn` against the live corpus — a review must not mutate the knowledge it is graded
+> against. If a review surfaces a durable lesson, *propose* it: append one terse
+> `- <rule> — why: … (learned #<PR>)` bullet to
+> `$GC_PR_KNOWLEDGE/_seed/<domain>.candidates.md` and note it in your verdict. A human
+> curates and accepts it via `learn --from-candidates`. Keep this list generic; put
+> domain specifics in the knowledge files.
 
 - **Correctness** — logic errors, off-by-one, nil/None, unhandled errors,
   missed edge cases, concurrency hazards.

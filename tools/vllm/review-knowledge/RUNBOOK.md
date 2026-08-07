@@ -30,6 +30,19 @@ mined from a maintainer comment · `(learned #N)` folded back from a corrected r
   `[[rigs.patches]]` env. When running tools from a human shell, export it or pass
   `--knowledge-dir`. (Don't rely on `{{.ConfigDir}}` — it renders empty in prompts.)
 
+## Write access — the human gate (non-negotiable)
+The live `<domain>.md`/`general.md` files are **human-write-only**. Autonomous agents
+(reviewer, lead, any dispatched worker) must NOT edit them or run `learn --invariant`
+against the live corpus — a review step must never mutate the knowledge it was graded
+against. To propose an invariant, an agent appends one `- ` bullet to
+`_seed/<domain>.candidates.md` (the miner's staging file) and surfaces it in its output;
+a human curates + accepts via `learn --from-candidates` (Workflow B). **Dispatch
+briefs/prompts must route proposals to candidates, not a live `learn` append.**
+Enforcement is convention today (single-user container); the backstop is `git diff`
+review before harvest/push — which is what caught the premature INV-PARSE-001. Hard
+enforcement (read-only corpus mount, separate agent user) lands with the deployment
+migration.
+
 ## Is a candidate signal or noise? (the curation bar)
 An invariant only earns its place if it **changes the review**. Truth is table stakes.
 Ask, in order:
