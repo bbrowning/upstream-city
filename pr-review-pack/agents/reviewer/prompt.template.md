@@ -237,11 +237,13 @@ bash {{.ConfigDir}}/assets/scripts/emit-verdict.sh --bead <your-review-bead> \
 
 ## Notifying the human — automatic
 
-You do **not** send a verdict mail yourself. `emit-verdict.sh` (above) derives a
-one-line summary from your verdict and mails it as part of closing — for **every**
-terminal outcome (`approve`, `approve_with_nits`, `request_changes`, `blocked`,
-infra `fail`), so the human gets the result in their inbox (`gc mail check`) without
-you managing it. The only case that adds a mail is a `blocked` posture
+You do **not** send a verdict mail yourself. `emit-verdict.sh` (above) renders your
+verdict into a full human-readable summary — a one-line **subject** plus a **body**
+carrying the summary, merge recommendation, and every finding — and mails it as part
+of closing, for **every** terminal outcome (`approve`, `approve_with_nits`,
+`request_changes`, `blocked`, infra `fail`), so the human gets the whole result in
+their inbox (`gc mail check`) without you managing it. (The same rendering is
+available on demand via `gc pr-review-pack summary <bead|PR>`.) The only case that adds a mail is a `blocked` posture
 (GATE=blocked): `gc mail send <rig>/lead` first (see the posture disposition), then
 finish with `emit-verdict.sh`.
 

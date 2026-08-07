@@ -24,22 +24,28 @@ hunting for its result:
                                                               │
         emits pr-review.v1 verdict on its step bead ◀─────────┘
                                                               │
-   inbox ◀── one-line verdict mail (gc mail check) ───────────┘   ← comes to YOU
+   inbox ◀── verdict mail — subject + full summary ───────────┘   ← comes to YOU
      │
-     ├─ enough?  you make the merge call. Done.
+     ├─ verdict + reasoning + nits are already in the body → make the merge call. Done.
      │
-     └─ want to see/run it yourself?
-            gc pr-review-pack materialize 51296     ← durable checkout on disk
+     ├─ want it again later? (verdict mail is ephemeral)
+     │      gc pr-review-pack summary 51296       ← re-render the verdict, LLM-free
+     │
+     └─ want to see/run the code yourself?
+            gc pr-review-pack materialize 51296   ← durable checkout on disk
             cd <city>/pr-worktrees/vllm/pr-51296
-            git diff origin/main...HEAD             ← read it
+            git diff origin/main...HEAD           ← read it
             # run the reviewer's suggested dynamic_request.command right here
 ```
 
 A few things make this ergonomic instead of a scavenger hunt:
 
-1. **The verdict comes to you.** On finish, the reviewer drops a one-line summary
-   in your mail (`gc mail check`) with the dashboard link — five parallel reviews
-   become five lines in a queue, not five metadata digs. See
+1. **The verdict comes to you — readable.** On finish, the reviewer drops the full
+   summary in your mail (`gc mail check`): a one-line subject (so five parallel
+   reviews are still five scannable lines, not five metadata digs) plus a body with
+   the verdict's reasoning and every finding — no JSON to parse, nothing to ask the
+   lead to render. Re-read any verdict later with `gc pr-review-pack summary
+   <bead|PR>`, and the raw JSON stays on the bead. See
    [Read the verdict](#read-the-verdict-this-is-the-gate).
 2. **You can always get the code back.** The reviewer's own worktree is transient
    per-slot scratch (reused across PRs), so after a review closes there is no tree
@@ -151,10 +157,12 @@ formulas/pr-review-dynamic.toml       # human-approved check TASK + pr-review-dy
 formulas/feature-dev.toml             # per-run implement TASK + feature-dev.v1 report contract
 orders/fetch-origin.toml              # read-only `git fetch --prune` on a cooldown (warm refs)
 commands/materialize/                 # `gc pr-review-pack materialize <PR>` — durable human checkout
+commands/summary/                     # `gc pr-review-pack summary <bead|PR>` — re-render a verdict readably
 assets/scripts/pr-prescan.sh          # deterministic, injection-proof posture ceiling
 assets/scripts/posture-latitude.sh    # pure posture → FETCH/EXEC/GATE table
 assets/scripts/run-scoped-check.sh    # the deterministic EXEC gate for dynamic checks
 assets/scripts/emit-verdict.sh        # atomic finish: write verdict + close + notify human
+assets/scripts/render-verdict.sh      # verdict JSON → human-readable summary (mail body + `summary` cmd)
 assets/scripts/worktree-setup.sh      # pre_start: make each slot's detached worktree
 assets/scripts/fetch-origin.sh        # the fetch order's exec body
 ```
@@ -259,7 +267,9 @@ workflow tree instead:
 # 2. Expand the workflow to find the review step bead:
 gc graph <root-bead-id> --tree           # step beads + their status
 # 3. Read the verdict off the review step bead:
-gc bd show <review-step-bead-id> --json   # -> metadata["gc.output_json"]
+gc bd show <review-step-bead-id> --json   # -> metadata["gc.output_json"] (raw JSON)
+# …or render it as the same readable summary the verdict mail carries:
+gc pr-review-pack summary <review-step-bead-id>   # also accepts a bare PR number
 ```
 
 Or just open `gc dashboard` — it renders the workflow tree and each bead's
@@ -339,7 +349,8 @@ two ways, both gated by the deterministic `pr-prescan.sh` ceiling — never by t
    The `runner` fetches the PR head into its own worktree and runs it through the
    **same gate** with `--min-ceiling limited`: if the fresh ceiling dropped to
    `restricted`/`block`, the approved command is still **declined** (a correct,
-   honest outcome). It emits `pr-review-dynamic.v1` and mails you a one-liner.
+   honest outcome). It emits `pr-review-dynamic.v1` and mails you the full result
+   summary (command, outcome, and output tail).
 
 **The gate (`run-scoped-check.sh`) is where safety lives, deterministically:** it
 re-derives the ceiling and refuses below the floor, requires prepared-env command
@@ -386,12 +397,17 @@ the shared wheels instead of copying. Without any of these set, dynamic checks
 simply report `could_not_verify` (no runnable env) — the review still lands.
 
 **Notifications are operator policy, not the pack's.** Every review/check finishes
-with `emit-verdict.sh`, which writes the verdict, closes the bead, **and** mails a
-one-line result to `$GC_PR_NOTIFY_TO` (default `human`) — atomically, so the
-notification can't be skipped. To route it elsewhere or handle notification your own
-way, set it in the same `[[rigs.patches]]` env, e.g. `GC_PR_NOTIFY_TO = ""` to
-disable the built-in mail (then, say, drive notifications from your own
-`bead.closed` order). The generic pack ships a sensible default; the city decides.
+with `emit-verdict.sh`, which writes the verdict, closes the bead, **and** mails the
+full human-readable summary (a one-line subject + a body with the summary, merge
+recommendation, and every finding, via `render-verdict.sh`) to `$GC_PR_NOTIFY_TO`
+(default `human`) — atomically, so the notification can't be skipped. The scanning
+inbox (`gc mail inbox`) shows only the subject + a 60-char preview, so the fuller
+body never clutters a scan; open a message (`gc mail read`) for the whole thing, or
+re-render any stored verdict on demand with `gc pr-review-pack summary <bead|PR>`. To
+route it elsewhere or handle notification your own way, set it in the same
+`[[rigs.patches]]` env, e.g. `GC_PR_NOTIFY_TO = ""` to disable the built-in mail
+(then, say, drive notifications from your own `bead.closed` order). The generic pack
+ships a sensible default; the city decides.
 
 > **Network:** the check RUN is not network-isolated; egress is governed by the
 > paude-proxy. Tests may attempt downloads; when the proxy blocks one (e.g.

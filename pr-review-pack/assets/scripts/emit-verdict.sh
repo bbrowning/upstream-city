@@ -18,6 +18,7 @@
 set -euo pipefail
 
 GC="${GC_BIN:-gc}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BEAD="" ; VF="" ; OUTCOME="pass" ; FCLASS="none" ; FREASON="" ; REASON=""
 
 die() { printf '%s\n' "emit-verdict: $*" >&2; exit 2; }
@@ -68,25 +69,22 @@ TO="${GC_PR_NOTIFY_TO-human}"
 root=$("$GC" bd show "$BEAD" --json 2>/dev/null | jq -r '.[0].metadata["gc.root_bead_id"] // empty' || true)
 base="${GC_DASHBOARD_BASE:-http://127.0.0.1:8372/city/workspace/runs}"
 
+# Subject stays a scannable one-liner (the inbox shows it in full); the body is
+# the full human-readable summary, rendered from the SAME renderer that backs
+# `gc pr-review-pack summary`.
 if jq -e '.verdict' "$VF" >/dev/null 2>&1; then
     head=$(jq -r '.head_ref // "?"' "$VF")
     v=$(jq -r '.verdict // "?"' "$VF")
     fc=$(jq -r '.findings_count // 0' "$VF")
-    dc=$(jq -r '.dynamic_check.outcome // "n/a"' "$VF")
-    mrec=$(jq -r '.merge_recommendation // ""' "$VF")
     subj="PR review $head: $v — $fc finding(s)"
-    body="$mrec
-posture=$(jq -r '.effective_posture // "?"' "$VF")  verdict=$v  check=$dc"
 else
     head=$(jq -r '.head_ref // "?"' "$VF")
     oc=$(jq -r '.outcome // "?"' "$VF")
     subj="Dynamic check $head: $oc"
-    body="command: $(jq -r '.command // "?"' "$VF")
-outcome=$oc  rc=$(jq -r '.rc // "n/a"' "$VF")  ceiling=$(jq -r '.ceiling_posture // "?"' "$VF")"
 fi
-body="$body
-run:     ${base}/${root}
-verdict: gc bd show $BEAD --json"
+body=$("$SCRIPT_DIR/render-verdict.sh" "$VF" --bead "$BEAD" --run-url "${base}/${root}" --rig "${GC_RIG:-}") \
+    || { printf '%s\n' "emit-verdict: WARN summary render failed; sending pointer-only body" >&2
+         body="(summary render failed — full verdict: gc bd show $BEAD --json)"; }
 
 # Best-effort: the step already closed; a mail hiccup must not fail the step.
 "$GC" mail send "$TO" -s "$subj" -m "$body" || printf '%s\n' "emit-verdict: WARN notify to '$TO' failed (bead already closed)" >&2
