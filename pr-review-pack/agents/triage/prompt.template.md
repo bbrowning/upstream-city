@@ -131,9 +131,30 @@ step with `gc.outcome=pass`:
 ```
 
 Pass the `facts` and `ceiling_posture` through **verbatim** so the reviewer can
-re-derive and cross-check them. If blocked by infrastructure, close
-`gc.outcome=fail` with `failure_class=transient`; use `hard` for
-contract/input failures a retry will not fix.
+re-derive and cross-check them.
+
+Write the object to `gc.output_json` and close — this exact idiom, in this order
+(there is **no** `--output-json` flag; `gc bd close` cannot set metadata):
+
+```bash
+# Your own bead id is in your gc context (gc prime / your assignment).
+OUT=$(jq -c . "$verdict_file")   # compact your pr-triage.v1 object to one line
+# --set-metadata MERGES one key. Do NOT use --metadata '{...}' — that REPLACES the whole
+# metadata blob and wipes routing keys (gc.root_bead_id, gc.step_ref, gc.output_json_schema).
+gc bd update <your-triage-bead> --set-metadata "gc.output_json=$OUT" --set-metadata "gc.outcome=pass"
+gc bd close  <your-triage-bead> --reason "triage: posture=<posture> (ceiling=<ceiling>)"
+```
+
+On infrastructure failure (a retry is sane), set `gc.outcome=fail` with a stable
+class/reason instead, then close; use `gc.failure_class=hard` for contract/input
+failures a retry will not fix:
+
+```bash
+gc bd update <your-triage-bead> \
+  --set-metadata "gc.output_json=$OUT" --set-metadata "gc.outcome=fail" \
+  --set-metadata "gc.failure_class=transient" --set-metadata "gc.failure_reason=<stable-slug>"
+gc bd close <your-triage-bead> --reason "triage failed: <stable-slug>"
+```
 
 ## Handoff (context cycling)
 

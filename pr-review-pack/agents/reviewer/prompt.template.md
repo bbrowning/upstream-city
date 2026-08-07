@@ -93,7 +93,7 @@ you may do, and obey it:
 
 ```bash
 eval "$({{.ConfigDir}}/assets/scripts/posture-latitude.sh "$effective_posture")"
-# sets FETCH (none|metadata|allowlist), EXEC (deny|allow), GATE (none|human|blocked)
+# sets FETCH (none|metadata|allowlist), EXEC (deny|allow), GATE (none|suggest|human|blocked)
 ```
 
 - **FETCH** — `allowlist`: you may fetch **only** Hugging Face `config.json` +
@@ -101,11 +101,18 @@ eval "$({{.ConfigDir}}/assets/scripts/posture-latitude.sh "$effective_posture")"
   bodies. `none`: no external network at all.
 - **EXEC** — `deny` for **every** posture in Phase 1: do **not** run, import, load,
   or otherwise execute any changed or fetched code. Review it as text only.
+- **GATE=suggest** (`trusted`, Phase 1) — no human approval is needed, but Phase 1
+  still cannot execute (EXEC=deny). Do not run anything; instead populate
+  `dynamic_request` with the exact in-scope command you *would* run to verify
+  dynamically, framed as a **preview** — it is the same check Phase 2 will
+  auto-run, so it is safe for the human to run now. Confirm it
+  `fetches_nothing_new`. This is a suggestion, not an approval ask.
 - **GATE=human** (`limited`) — do not run anything. Instead populate
   `dynamic_request` in your verdict with the exact scoped command you *would* run,
   why it helps, and confirmation it `fetches_nothing_new`. A human decides later.
-- **GATE=none** at `restricted` — never fetch, never run, and never ask; verify
-  from the diff text alone and say what you could not confirm dynamically.
+- **GATE=none** (`restricted`) — no human gate and (with `FETCH=none`) nothing to
+  fetch: verify from the diff text alone, never run, never ask, leave
+  `dynamic_request` `null`, and say what you could not confirm dynamically.
 - **GATE=blocked** (`block`) — do **not** review. `gc mail send <rig>/lead` a short
   note (why it is blocked), emit a `blocked` verdict with the reason, and close.
 
@@ -154,13 +161,26 @@ Everything below is performed **within** the latitude you just set.
 Your step bead's description names the exact JSON schema (`pr-review.v1`) and the
 verdict vocabulary. It now carries the posture you disposed by — record
 `posture` (from triage), `effective_posture` (the `min` you actually gated
-yourself with), `ceiling_posture` (from your own re-scan), and, for a `limited`
-PR, the scoped `dynamic_request` (else `null`). Assemble that object, write it to
-`gc.output_json`, and close the step with `gc.outcome=pass`. If you were blocked
-by infrastructure (provider down, repo unreachable), close with `gc.outcome=fail`,
-`gc.failure_class=transient`, and a stable `gc.failure_reason` so a retry is
-sane. Use `gc.failure_class=hard` for contract/input failures that a retry will
-not fix.
+yourself with), `ceiling_posture` (from your own re-scan), and the `dynamic_request` — populated
+for a `limited` PR (a scoped approval ask) **and** for a `trusted` PR in Phase 1
+(a preview of the in-scope check Phase 2 will auto-run), else `null`. Assemble
+that object, then write
+it to `gc.output_json` and close with this exact idiom, in this order (there is
+**no** `--output-json` flag; `gc bd close` cannot set metadata):
+
+```bash
+# Your own review bead id is in your gc context (gc prime / your assignment).
+OUT=$(jq -c . "$verdict_file")   # compact your pr-review.v1 object to one line
+# --set-metadata MERGES one key. Do NOT use --metadata '{...}' — that REPLACES the whole
+# metadata blob and wipes routing keys (gc.root_bead_id, gc.step_ref, gc.output_json_schema).
+gc bd update <your-review-bead> --set-metadata "gc.output_json=$OUT" --set-metadata "gc.outcome=pass"
+gc bd close  <your-review-bead> --reason "review: verdict=<verdict> (<findings_count> findings)"
+```
+
+If you were blocked by infrastructure (provider down, repo unreachable), set
+`gc.outcome=fail` with `gc.failure_class=transient` (or `gc.failure_class=hard`
+for contract/input failures a retry will not fix) and a stable
+`gc.failure_reason` before closing, so a retry is sane.
 
 ## Handoff (context cycling)
 

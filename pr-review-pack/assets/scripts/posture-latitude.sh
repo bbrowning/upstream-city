@@ -15,18 +15,22 @@
 #   EXEC  : deny      -> never run any changed/untrusted code
 #           allow     -> may run in-scope unit tests on changed code
 #   GATE  : none      -> proceed, no human needed
+#           suggest   -> proceed (no approval needed) but surface the check you
+#                        WOULD run as a preview dynamic_request; do NOT run it
 #           human     -> surface a scoped approval request; do NOT run it yourself
 #           blocked   -> do not review; route to a human
 #
 # PHASE 1: EXEC is 'deny' for EVERY posture (the reviewer is fully read-only).
-# PHASE 2 flips ONLY the trusted row to EXEC=allow (see marked line). Nothing
-# else about this table changes.
+# Trusted uses GATE=suggest so it still surfaces the (safe, in-scope) command
+# Phase 2 will auto-run, as an optional manual run for the human.
+# PHASE 2 flips ONLY the trusted row to EXEC=allow GATE=none (see marked line):
+# trusted then auto-runs instead of suggesting. Nothing else changes.
 set -euo pipefail
 
 POSTURE="${1:?usage: posture-latitude.sh <trusted|limited|restricted|block>}"
 
 case "$POSTURE" in
-    trusted)    echo 'FETCH=allowlist EXEC=deny GATE=none' ;;   # Phase 2: EXEC=allow
+    trusted)    echo 'FETCH=allowlist EXEC=deny GATE=suggest' ;;   # Phase 2: EXEC=allow GATE=none
     limited)    echo 'FETCH=metadata EXEC=deny GATE=human' ;;
     restricted) echo 'FETCH=none EXEC=deny GATE=none' ;;
     block)      echo 'FETCH=none EXEC=deny GATE=blocked' ;;
