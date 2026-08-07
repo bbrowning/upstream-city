@@ -10,7 +10,9 @@
 # unrelated areas. Two modes:
 #
 #   --invariant  : fold one lesson back (e.g. after the human corrects a verdict).
-#                  Stamped `(learned #N[ by @author])`.
+#                  Stamped `(learned vllm#N[ by @author])`. The `vllm#` prefix keeps
+#                  provenance de-linked: GitHub won't autolink it to THIS repo (a bare
+#                  `#N` would mislink), yet it stays greppable/reconstructable.
 #   --from-candidates <file> : batch-accept curated seed candidates (the human has
 #                  already pruned the file to the ones they trust). Every `- ` bullet
 #                  in the file is appended, re-numbered into the target domain, with
@@ -124,6 +126,6 @@ fi
 [ -n "$INVARIANT" ] || { usage >&2; die "missing --invariant (or use --from-candidates)"; }
 
 prov="learned"
-[ -n "$FROM_PR" ] && prov="$prov #$FROM_PR"
+[ -n "$FROM_PR" ] && prov="$prov vllm#${FROM_PR#\#}"
 [ -n "$AUTHOR" ]  && prov="$prov by $AUTHOR"
 append_bullet "$AREA" "$INVARIANT ($prov)"

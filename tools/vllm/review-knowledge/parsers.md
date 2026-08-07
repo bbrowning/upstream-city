@@ -14,7 +14,7 @@ CODEOWNERS (`/vllm/{tool_parsers,reasoning,parser}` + tests): @aarnphm @chauncey
 Shape: `[ID] rule — why: failure it prevents (provenance)`; the rule states *what* to
 check, not how. **IDs are stable citation handles** — `INV-TOOL-*`/`INV-REAS-*` kept
 verbatim (never renumbered); new ones are `INV-PARSE-*`. Provenance: `(starter)` ·
-`(PR #N, @author)` mined · `(learned #N)` folded back.
+`(vllm#N, @author)` mined · `(learned vllm#N)` folded back.
 
 ## Invariants
 
@@ -61,13 +61,13 @@ verbatim (never renumbered); new ones are `INV-PARSE-*`. Provenance: `(starter)`
 
 ## Learned / seeded invariants
 <!-- gc pr-review-pack learn --area parsers --invariant "..." --from-pr N  appends here -->
-- [INV-TOOL-008] Don't gate Harmony tool-call capture on an exact channel name (e.g. `commentary`); keep channel handling consistent across extraction paths. — why: real outputs vary (`comment` vs `commentary`), so a strict per-path check drops valid calls. (PR #42454, @bbrowning)
-- [INV-TOOL-009] Treat tool parameter schemas as always nested under `properties`; don't add "flat"-schema fallbacks. — why: flat schemas don't exist in valid tool defs, so the fallback is dead code that can mis-parse. (PR #43140, @sfeng33)
-- [INV-TOOL-010] Every tool parser must implement a correct `extract_tool_calls_streaming`, not only the non-streaming path. — why: a broken streaming path yields no/aborted calls → clients hit "Tool use interrupted." (PR #50093, @chaunceyjiang)
-- [INV-TOOL-011] Handle both tool shapes — ChatCompletion (nested `tool.function.name`) and Responses (flat `FunctionTool.name`, plus `NamespaceTool`). — why: assuming nested raises AttributeError and crashes the required/named path when `supports_required_and_named=False` routes a flat tool there. (PR #46486, @sfeng33)
-- [INV-TOOL-012] Constrain the tool-calling phase with structural-tag/grammar, not the reasoning phase. — why: constraining reasoning can trap the model in a loop; unconstrained tool calling degrades over long conversations. (PR #45003, @chaunceyjiang)
-- [INV-TOOL-013] Keep reasoning-state-dependent structural-tag construction in the parser layer, not the tool parser. — why: the tool parser lacks the reasoning kwargs to build the full grammar. (PR #45003, @sfeng33)
-- [INV-TOOL-014] Build a model's structural tag natively and completely; never post-hoc monkey-patch a generated tag. — why: patch-based construction is fragile and hides the real grammar. (PR #45560, @chaunceyjiang)
-- [INV-TOOL-015] Build new tool parsers on the Parser Engine, not standalone `ToolParser` subclasses. — why: standalone parsers miss shared streaming/structural-tag machinery and re-introduce solved bugs. (PR #50093, @chaunceyjiang)
-- [INV-TOOL-016] Ground value coercion (e.g. accepted boolean literals) in the model's official tool-calling guide, not an invented alias set. — why: over-accepting spellings the model never emits mis-coerces arguments. (PR #43006, @sfeng33)
-- [INV-REAS-006] Represent absent reasoning as `None`, not `""`. — why: consumers/tests that distinguish "no reasoning" from "empty" break when conflated. (PR #45701, @bbrowning)
+- [INV-TOOL-008] Don't gate Harmony tool-call capture on an exact channel name (e.g. `commentary`); keep channel handling consistent across extraction paths. — why: real outputs vary (`comment` vs `commentary`), so a strict per-path check drops valid calls. (vllm#42454, @bbrowning)
+- [INV-TOOL-009] Treat tool parameter schemas as always nested under `properties`; don't add "flat"-schema fallbacks. — why: flat schemas don't exist in valid tool defs, so the fallback is dead code that can mis-parse. (vllm#43140, @sfeng33)
+- [INV-TOOL-010] Every tool parser must implement a correct `extract_tool_calls_streaming`, not only the non-streaming path. — why: a broken streaming path yields no/aborted calls → clients hit "Tool use interrupted." (vllm#50093, @chaunceyjiang)
+- [INV-TOOL-011] Handle both tool shapes — ChatCompletion (nested `tool.function.name`) and Responses (flat `FunctionTool.name`, plus `NamespaceTool`). — why: assuming nested raises AttributeError and crashes the required/named path when `supports_required_and_named=False` routes a flat tool there. (vllm#46486, @sfeng33)
+- [INV-TOOL-012] Constrain the tool-calling phase with structural-tag/grammar, not the reasoning phase. — why: constraining reasoning can trap the model in a loop; unconstrained tool calling degrades over long conversations. (vllm#45003, @chaunceyjiang)
+- [INV-TOOL-013] Keep reasoning-state-dependent structural-tag construction in the parser layer, not the tool parser. — why: the tool parser lacks the reasoning kwargs to build the full grammar. (vllm#45003, @sfeng33)
+- [INV-TOOL-014] Build a model's structural tag natively and completely; never post-hoc monkey-patch a generated tag. — why: patch-based construction is fragile and hides the real grammar. (vllm#45560, @chaunceyjiang)
+- [INV-TOOL-015] Build new tool parsers on the Parser Engine, not standalone `ToolParser` subclasses. — why: standalone parsers miss shared streaming/structural-tag machinery and re-introduce solved bugs. (vllm#50093, @chaunceyjiang)
+- [INV-TOOL-016] Ground value coercion (e.g. accepted boolean literals) in the model's official tool-calling guide, not an invented alias set. — why: over-accepting spellings the model never emits mis-coerces arguments. (vllm#43006, @sfeng33)
+- [INV-REAS-006] Represent absent reasoning as `None`, not `""`. — why: consumers/tests that distinguish "no reasoning" from "empty" break when conflated. (vllm#45701, @bbrowning)

@@ -177,8 +177,12 @@ Everything below is performed **within** the latitude you just set.
    `git diff --name-only <base>...<head>`) against its rules; load ONLY the matching
    `<domain>.md` files (plus `general.md`, always). That is your bounded, curated
    review spec for these exact paths — apply every invariant in the loaded files
-   against the diff, and cite the ones you actually checked in `evidence`. Do NOT
-   load domains this PR does not touch — keeping context tight is the point.
+   against the diff, and cite the ones you actually checked by their `INV-*` id in
+   `evidence` **only**. Those ids (and any `vllm#N`/`@author` provenance) are internal
+   attribution for the feedback loop — **never** put them in a finding's
+   `title`/`detail`/`suggested_fix` or the `summary`, which go to an upstream
+   maintainer and must read as plain review prose. Do NOT load domains this PR does
+   not touch — keeping context tight is the point.
    ```bash
    cat "$GC_PR_KNOWLEDGE/_manifest.md"     # changed-path -> domain-file router
    cat "$GC_PR_KNOWLEDGE/general.md"       # always applies
@@ -204,7 +208,7 @@ Everything below is performed **within** the latitude you just set.
 > are **read-only to you**: never edit `$GC_PR_KNOWLEDGE/*.md` or run `gc pr-review-pack
 > learn` against the live corpus — a review must not mutate the knowledge it is graded
 > against. If a review surfaces a durable lesson, *propose* it: append one terse
-> `- <rule> — why: … (learned #<PR>)` bullet to
+> `- <rule> — why: … (learned vllm#<PR>)` bullet to
 > `$GC_PR_KNOWLEDGE/_seed/<domain>.candidates.md` and note it in your verdict. A human
 > curates and accepts it via `learn --from-candidates`. Keep this list generic; put
 > domain specifics in the knowledge files.
@@ -223,7 +227,10 @@ Everything below is performed **within** the latitude you just set.
 ## Output
 
 Your step bead's description names the exact JSON schema (`pr-review.v1`) and the
-verdict vocabulary. It now carries the posture you disposed by — record
+verdict vocabulary. Honor its **audience split**: the human-facing fields (`summary`,
+`merge_recommendation`, and each finding's `title`/`detail`/`suggested_fix`) must read
+as upstream-ready prose — no `INV-*` ids, no `vllm#N`/`@author` provenance; those go in
+`evidence` only. It now carries the posture you disposed by — record
 `head_ref`/`base_ref` (the refs you reviewed; `head_ref` also titles your
 notification), `posture` (from triage), `effective_posture` (the `min` you actually
 gated yourself with), `ceiling_posture` (from your own re-scan), and two dynamic

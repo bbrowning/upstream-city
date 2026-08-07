@@ -120,6 +120,15 @@ Read-only discipline (unchanged):
 
 Write this JSON object (schema `pr-review.v1`) to `gc.output_json`:
 
+**Audience split — keep the upstream-facing prose clean of internal bookkeeping.**
+The human-facing fields — `summary`, `merge_recommendation`, and every finding's
+`title`, `detail`, and `suggested_fix` — are written for an upstream maintainer and
+must read as plain review prose that could be posted to the PR as-is: NO invariant
+IDs (`INV-*`), NO knowledge provenance (`vllm#N`, `@author`), no references to this
+review harness. State each problem and its fix on their own merits. Invariant
+attribution lives ONLY in `evidence` (below) — internal plumbing for the knowledge
+feedback loop that is never rendered into the notification or posted upstream.
+
 - `head_ref`, `base_ref`: the refs you reviewed (so the verdict is self-describing;
   `head_ref` also titles the human notification)
 - `verdict`: one of `approve`, `approve_with_nits`, `request_changes`, `blocked`
@@ -146,7 +155,10 @@ Write this JSON object (schema `pr-review.v1`) to `gc.output_json`:
   ran (provenance for `dynamic_check`); for `limited`, the scoped command a human can
   approve via `gc sling <rig>/runner pr-review-dynamic --var command='…'`; `null` for
   `restricted`/`block`
-- `evidence`: commands run / files inspected that back the findings
+- `evidence`: internal attribution — the commands you ran / files you inspected, and
+  the invariant IDs (`INV-*`) you actually checked — that back the findings. This is
+  the feedback-loop hook and is NOT shown in the human summary or posted upstream;
+  keep the IDs here, out of the prose fields above.
 - `read_only_enforcement`: object with `baseline_command`, `after_command`,
   `clean` (boolean — true if you introduced no mutations), and `mutations_delta`
   (array; empty if none)

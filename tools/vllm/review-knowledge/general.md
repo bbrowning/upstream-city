@@ -6,8 +6,8 @@ Loaded on **every** vLLM review, layered under any domain file. Shape:
 check (imperative; no how-to / no command — that's the reviewer's method); the why is
 one clause. Append learned/seeded rules under "Learned / seeded".
 
-Provenance: `(starter)` baseline · `(PR #N, @author)` mined from a maintainer comment ·
-`(learned #N)` folded back from a corrected review.
+Provenance: `(starter)` baseline · `(vllm#N, @author)` mined from a maintainer comment ·
+`(learned vllm#N)` folded back from a corrected review.
 
 ## Invariants
 
@@ -35,4 +35,4 @@ Provenance: `(starter)` baseline · `(PR #N, @author)` mined from a maintainer c
 
 ## Learned / seeded invariants
 <!-- gc pr-review-pack learn --area general --invariant "..." --from-pr N  appends here -->
-- [INV-GEN-008] Flag when another open PR edits the same function/hunk — competing in-flight fixes are a merge/coordination risk even when each is correct. — why: piecemeal merges conflict and entrench divergent designs. (learned #51391)
+- [INV-GEN-008] Flag when another open PR edits the same function/hunk — competing in-flight fixes are a merge/coordination risk even when each is correct. — why: piecemeal merges conflict and entrench divergent designs. (learned vllm#51391)

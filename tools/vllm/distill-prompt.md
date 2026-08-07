@@ -25,7 +25,9 @@ invariants** a human will review before they enter the live corpus. Write
    comments don't support.
 5. **Prefer** architectural/contract feedback and anything that reads like a blocking
    objection over stylistic remarks.
-6. **Provenance**: end each bullet with `(PR #N, @author)` (the strongest source).
+6. **Provenance**: end each bullet with `(vllm#N, @author)` (the strongest source).
+   Use the `vllm#` prefix, NOT a bare `#N` — bare `#N` autolinks to THIS repo on
+   GitHub (wrong repo); `vllm#N` renders as plain text yet stays reconstructable.
 
 ## Output format (one bullet per invariant; matches the live knowledge files)
 
@@ -35,8 +37,8 @@ invariants** a human will review before they enter the live corpus. Write
 # Accept the ones you trust:  gc pr-review-pack learn --from-candidates this-file.md
 # (that assigns IDs and appends them to <domain>.md; delete any line you reject first)
 
-- <terse rule> — why: <failure prevented>. (PR #N, @author)
-- <terse rule> — why: <failure prevented>. (PR #N, @author)
+- <terse rule> — why: <failure prevented>. (vllm#N, @author)
+- <terse rule> — why: <failure prevented>. (vllm#N, @author)
 ```
 
 Only `- ` bullet lines are accepted by `learn --from-candidates`; the header/comment

@@ -17,9 +17,18 @@ Each invariant is one line: `[ID] rule — why: the failure it prevents (provena
 The **rule states *what* to check** (imperative; no how-to, command, or inline example —
 those are the reviewer's *method*, not the knowledge line); the **why is one clause**
 naming the failure. Keep it terse — the whole matching corpus is injected into a review,
-so length is context cost. Provenance tags: `(starter)` baseline · `(PR #N, @author)`
-mined from a maintainer comment · `(learned #N)` folded back from a corrected review
+so length is context cost. Provenance tags: `(starter)` baseline · `(vllm#N, @author)`
+mined from a maintainer comment · `(learned vllm#N)` folded back from a corrected review
 (no date — git history has it).
+
+**PR refs are de-linked on purpose.** These `N` are vLLM PR numbers, not this repo's.
+Always write them `vllm#N`, never a bare `#N`: a bare `#N` autolinks to *this* repo on
+GitHub (a wrong link or 404) and clutters the rendered view, whereas `vllm#N` isn't valid
+`owner/repo#N` shorthand so GitHub renders it as plain text — no autolink, no cross-repo
+leak — while staying greppable and reconstructable. (Full `vllm-project/vllm#N` would be a
+correct clickable link but re-introduces the link clutter; we don't browse these on GitHub
+enough to want it.) Keep vLLM PR numbers out of *commit messages* too — a commit-message
+ref is the one file-side vector that does post a real cross-ref into vLLM.
 
 ## How the reviewer consumes it (important properties)
 - Files are **read fresh each review** → content edits (learn/seed/manual) are **LIVE on
@@ -67,7 +76,7 @@ gc pr-review-pack learn --area <domain> \
   --from-pr <N> --author @handle
 ```
 Appends to `<domain>.md` under "## Learned / seeded invariants" with a fresh ID, stamped
-`(learned #N by @handle)`. (No `<domain>.md`? create it — see "New domain".)
+`(learned vllm#N by @handle)`. (No `<domain>.md`? create it — see "New domain".)
 
 ## Workflow B — seed from history (mine → distill → curate → accept)
 1. **Mine** maintainer comments (CODEOWNERS-filtered, ~1 API call/PR):
