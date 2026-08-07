@@ -10,11 +10,9 @@ Each agent slot runs inside its **own git worktree**, so parallel reviewers can
 each sit on a different PR (or the same one) and the writer can hold a dirty
 branch, all without touching the shared rig checkout or each other.
 
-> Grounded against **gascity v1.4.0** (installed binary + source at HEAD
-> `a7297c5`), verified claim-by-claim in
-> `../VERIFICATION-vs-live-v1.4.0.md`. The original design doc was written
-> without the live city and several of its claims did not hold up; this pack is
-> the corrected artifact.
+> Grounded against **gascity v1.4.0** (installed binary + source). Every
+> mechanism below is verified against live behavior: this pack is built,
+> installed on the `vllm` rig, and has run PR reviews end-to-end.
 
 ## The flow at a glance (the "aha")
 
@@ -160,9 +158,9 @@ in their own `agent.toml`, exactly like hyperscale's `worker` or swarm's
 
 This is a normal pack. Copy it into the city and attach it to the `vllm` rig.
 
-**Prerequisite:** the city and the `vllm` rig must be **running** first (`gc
-status` to check; `gc start` / bring the rig up if not). With the rig stopped,
-nothing below will spin up a session.
+**Prerequisite:** the city (controller/supervisor) must be up (`gc status`). The
+`vllm` rig itself does **not** need to be started first — slinging work to an
+on-demand slot auto-materializes the rig and the session.
 
 1. Copy the pack into the city (so `{{.ConfigDir}}` → `<city>/pr-review-pack`
    resolves for the `pre_start` script path):
@@ -208,10 +206,6 @@ nothing below will spin up a session.
 > what **core's own `mol-review-quorum`** formula does for all its steps. We
 > share the warning with core; the pattern is the established one for reviews.
 
-> The exact `city.toml` wiring is the one step to confirm against your live
-> config before installing — see the pre-install checklist in
-> `../VERIFICATION-vs-live-v1.4.0.md`.
-
 ## Run a PR review
 
 **Primary path — ask the lead.** Tell `vllm/lead` what you want reviewed ("review
@@ -241,7 +235,7 @@ workflow** (a DAG), **not** a convoy. `gc convoy …` subcommands explicitly do
 workflow tree instead:
 
 ```bash
-# 1. From the sling --json output above, take the root bead id.
+# 1. From the sling --json output above, take the root bead id (the `bead_id` field).
 # 2. Expand the workflow to find the review step bead:
 gc graph <root-bead-id> --tree           # step beads + their status
 # 3. Read the verdict off the review step bead:
@@ -254,10 +248,6 @@ Or just open `gc dashboard` — it renders the workflow tree and each bead's
 `verdict` ∈ `approve` / `approve_with_nits` / `request_changes` / `blocked`,
 with `merge_recommendation` and `findings`. You make the merge call — there is
 no mid-workflow human gate.
-
-> The exact JSON field the root id lands in, and the precise `gc graph` output,
-> are pinned during the first live run (below) — this pack has not yet been slung,
-> so treat the id-discovery commands as the shape, confirmed on first use.
 
 ## Materialize a PR for human review
 
