@@ -60,7 +60,7 @@ done
 # integer is a PR number to look up among closed pr-review verdict beads.
 if printf '%s' "$SPEC" | grep -qE '^[0-9]+$'; then
     N="$SPEC"
-    BEAD=$("$GC" --city "$CITY" bd list --all --json \
+    BEAD=$("$GC" --city "$CITY" --rig "$RIG" bd list --all --json \
              --metadata-field "gc.output_json_schema=pr-review.v1" -n 0 2>/dev/null \
            | jq -r --arg n "$N" '
                [ .[]?
@@ -69,10 +69,18 @@ if printf '%s' "$SPEC" | grep -qE '^[0-9]+$'; then
                  | select($vj != null
                           and (($vj.head_ref // "") | tostring
                                | test("(^|[^0-9])" + $n + "([^0-9]|$)")))
-                 | {id: $b.id, ts: ($b.closed_at // $b.updated_at // $b.created_at // "")}
-               ] | sort_by(.ts) | last | .id // empty' 2>/dev/null || true)
-    [ -n "$BEAD" ] || die "no pr-review verdict bead found for PR $N.
-Pass the bead id from the verdict mail instead: gc pr-review-pack summary <bead-id>"
+                 | {id: $b.id,
+                    ts: ($b.closed_at // $b.updated_at // $b.created_at // ""),
+                    canon: (($b.close_reason // "") | test("^(review|dynamic check):"))}
+               ] as $all
+               # Prefer the bead emit-verdict.sh actually closed+mailed (its close
+               # reason marks it); a run can also leave framework copy/finalize beads
+               # carrying the same schema. Fall back to all if none are marked.
+               | (($all | map(select(.canon))) as $c
+                  | if ($c|length) > 0 then $c else $all end)
+               | sort_by(.ts) | last | .id // empty' 2>/dev/null || true)
+    [ -n "$BEAD" ] || die "no pr-review verdict bead found for PR $N in rig '$RIG'.
+Try --rig <name>, or pass the bead id from the verdict mail: gc pr-review-pack summary <bead-id>"
     printf '%s\n' "summary: PR $N -> review bead $BEAD" >&2
 else
     BEAD="$SPEC"
@@ -80,10 +88,10 @@ fi
 
 # Read the stored verdict JSON + root bead id from metadata (the same
 # gc.output_json emit-verdict.sh wrote at finish time).
-SHOW=$("$GC" --city "$CITY" bd show "$BEAD" --json 2>/dev/null) \
-    || die "could not read bead '$BEAD' in city '$CITY'"
+SHOW=$("$GC" --city "$CITY" --rig "$RIG" bd show "$BEAD" --json 2>/dev/null) \
+    || die "could not read bead '$BEAD' in rig '$RIG' (city '$CITY') — wrong --rig?"
 [ "$(printf '%s' "$SHOW" | jq -r 'length')" -gt 0 ] 2>/dev/null \
-    || die "bead '$BEAD' not found in city '$CITY'"
+    || die "bead '$BEAD' not found in rig '$RIG' (try --rig <name>)"
 VJSON=$(printf '%s' "$SHOW" | jq -r '.[0].metadata["gc.output_json"] // empty')
 [ -n "$VJSON" ] \
     || die "bead '$BEAD' has no gc.output_json verdict (not a finished review / dynamic-check step?)"
