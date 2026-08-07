@@ -30,3 +30,4 @@ maintainer comment; `(learned PR #N)` folded back from a corrected review.
 
 ## Learned / seeded invariants
 <!-- gc pr-review-pack learn --area reasoning --invariant "..." --from-pr N  appends here -->
+- [INV-REAS-006] Represent absent reasoning as `None`, not the empty string `""` — why: consumers and tests that distinguish "no reasoning" from "empty reasoning" break when the parser conflates the two. (PR #45701, @bbrowning)

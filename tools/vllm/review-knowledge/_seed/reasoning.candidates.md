@@ -1,3 +1,4 @@
+# STATUS: ACCEPTED 2026-08-07 -> reasoning.md as INV-REAS-006 (1 invariants). Re-running learn on this file is a safe no-op.
 # reasoning — candidate invariants (review, prune, then accept)
 #
 # Accept the ones you trust:  gc pr-review-pack learn --from-candidates this-file.md
@@ -12,4 +13,4 @@
 # exact representation. NOTE: domain is thin — consider a longer --since re-mine or
 # hand-seeding (flywheel follow-up #4).
 
-- Represent absent reasoning as `None`, not the empty string `""` — why: consumers and tests that distinguish "no reasoning" from "empty reasoning" break when the parser conflates the two. (PR #45701, @bbrowning)
+# [accepted] Represent absent reasoning as `None`, not the empty string `""` — why: consumers and tests that distinguish "no reasoning" from "empty reasoning" break when the parser conflates the two. (PR #45701, @bbrowning)
