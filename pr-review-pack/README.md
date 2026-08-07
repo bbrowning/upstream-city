@@ -158,6 +158,7 @@ formulas/feature-dev.toml             # per-run implement TASK + feature-dev.v1 
 orders/fetch-origin.toml              # read-only `git fetch --prune` on a cooldown (warm refs)
 commands/materialize/                 # `gc pr-review-pack materialize <PR>` — durable human checkout
 commands/summary/                     # `gc pr-review-pack summary <bead|PR>` — re-render a verdict readably
+commands/learn/                       # `gc pr-review-pack learn --area X --invariant "…"` — grow the knowledge flywheel
 assets/scripts/pr-prescan.sh          # deterministic, injection-proof posture ceiling
 assets/scripts/posture-latitude.sh    # pure posture → FETCH/EXEC/GATE table
 assets/scripts/run-scoped-check.sh    # the deterministic EXEC gate for dynamic checks
@@ -173,6 +174,11 @@ PR's tests needs a project-specific env, kept **out** of the pack: for vLLM that
 the `vllm` rig via `[[rigs.patches]]` env (`$GC_PR_TEST_VENV`) — see
 [Dynamic checks](#dynamic-checks-running-a-prs-tests). The generic gate
 (`run-scoped-check.sh`) only consumes `$GC_PR_TEST_VENV`; it never builds it.
+
+The same split applies to **domain knowledge**: the *mechanism* (the reviewer loads
+per-domain invariants a PR touches) lives in the pack; the vLLM *content* lives out
+of the pack at `//tools/vllm/review-knowledge/`, wired via `[[rigs.patches]]` env
+(`$GC_PR_KNOWLEDGE`). See [Domain knowledge: the review flywheel](#domain-knowledge-the-review-flywheel).
 
 Agents, formulas, and orders are all discovered by **directory convention**
 (gascity's `conventionDiscoveryDirNames`), so the manifest carries **no
@@ -435,6 +441,67 @@ worktree**, implements, runs tests, and **pushes** (the durable output). It does
 **not** open a PR unless the assignment says to, and it **never closes the
 arc/tracking bead** — that closes on a real checkpoint (PR opened, CI green,
 merged), not on self-report.
+
+## Domain knowledge: the review flywheel
+
+The reviewer's quality comes less from a generic checklist than from **durable,
+path-specific invariants that compound over time**. Rather than one growing blob
+injected into every review (which bloats context and dilutes attention), knowledge
+is **partitioned per domain**, and each review loads **only the domains the PR
+touches**.
+
+**How it works**
+
+- The corpus lives at `$GC_PR_KNOWLEDGE` (`//tools/vllm/review-knowledge/`), one file
+  per domain — `general.md` (always applies) plus `tool_parsers.md`, `reasoning.md`,
+  `openai_frontend.md` — and a `_manifest.md` router.
+- The pack's `pr-prescan.sh` stays **project-agnostic**: it reports the changed
+  files (`facts.changed_files`) + generic security classes, and knows nothing about
+  vLLM domains. The domain→file mapping lives entirely in the project-specific
+  `_manifest.md` (a changed-path → domain router), so no vLLM assumption leaks into
+  the generic pack.
+- The reviewer (method step 2) matches the changed paths against `_manifest.md` and
+  loads **only** the matching `<domain>.md` (+ `general.md`). Bounded context; one
+  independent flywheel per domain, so no unrelated list ever accumulates. Files are
+  read fresh each run, so edits are **live on the next review — no `gc reload`**.
+  (Routing which knowledge to load is not a security decision — the deterministic
+  security ceiling stays wholly in `pr-prescan.sh`.)
+
+**Grow it (the harvest loop)** — when you correct a verdict, fold the lesson back:
+
+```bash
+gc pr-review-pack learn --area tool_parsers \
+  --invariant "streaming and non-streaming must yield identical tool_calls" \
+  --from-pr 45560 --author @bbrowning
+```
+
+It appends a fresh `[INV-TOOL-NNN]` bullet under that domain's "Learned / seeded"
+section (LLM-free, deterministic).
+
+**Seed it from history (one-shot bootstrap)** — mine invariants from real maintainer
+review comments on recently-merged PRs, keeping only CODEOWNER-authored comments for
+the touched path (bots dropped):
+
+```bash
+# 1. Fetch + filter (deterministic; ~1 API call per domain PR, path-filtered first):
+GC_PR_KNOWLEDGE=/pvc/workspace/tools/vllm/review-knowledge \
+  bash /pvc/workspace/tools/vllm/mine-review-comments.sh --since 90d
+#    -> $GC_PR_KNOWLEDGE/_seed/candidates-raw.jsonl   (--dry-run to preview PRs only)
+
+# 2. Distill per domain (LLM pass; spec at //tools/vllm/distill-prompt.md)
+#    -> $GC_PR_KNOWLEDGE/_seed/<domain>.candidates.md
+
+# 3. Curate + accept the ones you trust (delete rejects from the file first):
+gc pr-review-pack learn --from-candidates \
+  /pvc/workspace/tools/vllm/review-knowledge/_seed/tool_parsers.candidates.md
+```
+
+Nothing enters the live corpus until you accept it — you (a CODEOWNER) stay in the
+loop, and every entry keeps its `(PR #N, @author)` provenance.
+
+> **Next (Phase 2 — designed, not yet built):** split review into parallel
+> **correctness** + **domain** lanes with a deterministic synthesizer, so the domain
+> lane applies this corpus as its whole mandate. See [Growing up](#growing-up-later).
 
 ## Deliberate boundaries
 

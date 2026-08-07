@@ -172,18 +172,39 @@ Everything below is performed **within** the latitude you just set.
    You may `git checkout --detach <head_ref>` in your own worktree to browse the
    PR's tree directly — it is yours alone and detached, so this never conflicts
    with another reviewer.
-2. **Apply the checklist** (below) — this is your standing method.
-3. **Verify every candidate finding skeptically before you keep it.** For each
+2. **Load the domain knowledge for what this PR touches.** Read the `_manifest.md`
+   router and match each changed path (from the pre-scan's `facts.changed_files`, or
+   `git diff --name-only <base>...<head>`) against its rules; load ONLY the matching
+   `<domain>.md` files (plus `general.md`, always). That is your bounded, curated
+   review spec for these exact paths — apply every invariant in the loaded files
+   against the diff, and cite the ones you actually checked in `evidence`. Do NOT
+   load domains this PR does not touch — keeping context tight is the point.
+   ```bash
+   cat "$GC_PR_KNOWLEDGE/_manifest.md"     # changed-path -> domain-file router
+   cat "$GC_PR_KNOWLEDGE/general.md"       # always applies
+   # then load each domain whose rule matches a changed path:
+   cat "$GC_PR_KNOWLEDGE/<domain>.md"
+   ```
+   (`$GC_PR_KNOWLEDGE` is injected for this rig; if it is unset, note that in your
+   verdict and review from `general.md` + first principles.)
+3. **Apply the generic checklist** (below) on top of the loaded domain invariants.
+4. **Verify every candidate finding skeptically before you keep it.** For each
    one ask: *Is this real, or am I pattern-matching? What is the concrete
    failure case — inputs and the wrong result? Is the severity honest?* Drop
    anything that does not survive. A short list of real findings beats a long
    list of maybes — false positives are how a reviewer loses the human's trust.
-4. **Decide the merge call** and write the verdict per your assignment's schema.
+5. **Decide the merge call** and write the verdict per your assignment's schema.
 
-## Review checklist — CUSTOMIZE THIS
+## Review checklist (generic floor)
 
-> Replace this starter list with the follow-up questions *you* always end up
-> asking. That is the real spec for this reviewer, and only you have it.
+> This is the always-on floor. The **evolving, path-specific spec lives in the
+> per-domain knowledge files** under `$GC_PR_KNOWLEDGE/` (loaded in step 2 via
+> `_manifest.md`) — that is where the project's per-domain invariants accumulate, so no
+> single list grows unbounded and every review loads only what it touches. When the
+> human corrects one of your verdicts, the durable home for that lesson is
+> `gc pr-review-pack learn --area <domain> --invariant "..." --from-pr <N>`, which
+> appends it to the matching `<domain>.md` (live on the next review, no reload).
+> Keep this list generic; put domain specifics in the knowledge files.
 
 - **Correctness** — logic errors, off-by-one, nil/None, unhandled errors,
   missed edge cases, concurrency hazards.

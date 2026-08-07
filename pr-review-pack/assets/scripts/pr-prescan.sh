@@ -177,6 +177,7 @@ jq -n \
     --argjson reasons "$REASONS_JSON" \
     --arg author "$AUTHOR_ASSOC" \
     --argjson changed_count "${#FILES[@]}" \
+    --argjson changed_files "$FILES_JSON" \
     --argjson files_by_class "$FILES_BY_CLASS" \
     --argjson added_lines "${ADDED_LINES:-0}" \
     --argjson removed_lines "${REMOVED_LINES:-0}" \
@@ -206,6 +207,7 @@ jq -n \
         facts: {
             author_association: $author,
             changed_file_count: $changed_count,
+            changed_files: $changed_files,
             added_lines: $added_lines,
             removed_lines: $removed_lines,
             files_by_risk_class: $files_by_class,
