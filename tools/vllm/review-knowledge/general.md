@@ -11,20 +11,24 @@ human corrected.
 
 ## Invariants
 
-- [INV-GEN-001] Public API changes (`LLM`, `SamplingParams`, `EngineArgs`, CLI
-  flags, OpenAI request/response fields) must be backward compatible — additive,
-  deprecate-don't-remove. — why: silent user-facing breakage. (starter)
+- [INV-GEN-001] Python/CLI public API changes (`LLM`, `SamplingParams`,
+  `EngineArgs`, CLI flags) must be backward compatible — additive,
+  deprecate-don't-remove. — why: silent user-facing breakage. (OpenAI HTTP
+  request/response fields are covered by INV-OAI-005.) (starter)
 - [INV-GEN-002] New `EngineArgs`/`ModelConfig`/config fields must plumb through and
   round-trip (CLI ↔ config object ↔ any serialization), not be silently dropped.
   — why: config that parses but never takes effect. (starter)
 - [INV-GEN-003] Hot-path changes (scheduler step, model-runner loop, sampling)
   must not add host↔device syncs, `.item()`/`.cpu()` calls, or per-step Python
   overhead. — why: throughput/latency regressions invisible in unit tests. (starter)
-- [INV-GEN-004] Changes that affect sampling/output must preserve seeded
-  determinism where vLLM promises it. — why: reproducibility guarantees. (starter)
-- [INV-GEN-005] The diff should do only what it claims — flag unrelated or
-  accidental changes, especially in risky paths. — why: scope creep hides defects.
-  (starter)
+- [INV-GEN-004] If the change touches sampling/RNG/output ordering, verify a fixed
+  `seed` still reproduces identical output and that results don't depend on batch
+  size/composition. — why: order-dependent reductions silently break seeded
+  reproducibility. (starter)
+<!-- [INV-GEN-005] retired 2026-08-07: generic code-review truism ("diff does only
+  what it claims"), not vLLM-specific and already the prescan/triage's job — noise.
+  ID left as a tombstone; never reuse it (citation IDs must be stable). -->
+
 - [INV-GEN-006] Tests must assert observable behavior through public APIs, not just
   execute the code path; new behavior needs a test that would fail without the
   change. — why: fake coverage (see repo AGENTS.md). (starter)

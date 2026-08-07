@@ -2,6 +2,11 @@
 #
 # Accept the ones you trust:  gc pr-review-pack learn --from-candidates this-file.md
 # (that assigns IDs and appends them to openai_frontend.md; delete any line you reject first)
+#
+# CURATED 2026-08-07 (Claude, rubric pass): 18 mined -> 16 accept (2 reworded), 2 reject.
+# Reworded lines had a durable code invariant tangled with a process/rendering nit; the
+# nit was stripped and the checkable core kept. Rejects are generic/style or doc-render
+# minutiae the model already applies.
 
 - Don't mix threading and asyncio in the OpenAI server entrypoints; run background work as an asyncio task (e.g. under uvloop, as api_server does) instead of a background thread — why: mixing the two models is an antipattern that yields fragile shutdown and error handling. (PR #40841, @robertgshaw2-redhat)
 - Raise `VLLMValidationError` (not bare `ValueError`) for request-field validation, and set `parameter` to the most specific offending field using dotted paths (e.g. `tool_choice.function.name`); omit `parameter` when the error spans multiple fields — why: gives clients a precise, machine-usable pointer to the bad field. (PR #36254, @DarkLight1337)
@@ -10,14 +15,23 @@
 - Keep the OpenAI protocol schemas independent of other APIs (e.g. Cohere); factor shared logic into common helpers that accept both protocols rather than expanding OpenAI request/response classes to cover another API — why: prevents OpenAI API changes from unexpectedly breaking the other API. (PR #47189, @DarkLight1337)
 - Use `logger.warning_once` (not `logger.warning`) for warnings on the per-request serving path — why: a plain warning spams the logs on every request. (PR #43606, @DarkLight1337)
 - A test must drive the real serving/production code path, not a local helper that manually calls the internal function under test — why: a helper-only test doesn't prove the production loop is actually wired to call that function. (PR #42683, @AndreasKaratzas)
-- Prefer e2e tests against a real model over mock-based tests for entrypoints, never hardcode local filesystem paths in tests, and manually curate AI-generated tests — why: mock-heavy tests give false coverage when a renderer unit test already exists. (PR #44226, @DarkLight1337)
-- Give new request/response protocol fields explicit `Field` descriptions/docstrings, and use single backticks in them — why: undocumented fields and double-backticks render incorrectly in the generated MkDocs Markdown API docs. (PR #45458, @DarkLight1337)
-- Don't leave hardcoded numeric literals inline; extract them to named constants — why: unexplained magic numbers are unreviewable and hard to tune. (PR #40841, @robertgshaw2-redhat)
+- Don't hardcode local filesystem paths in entrypoint tests, and be wary of mock-heavy entrypoint tests that pass without exercising the real serving path — why: hardcoded paths break portability and mock-only tests give false coverage. (PR #44226, @DarkLight1337)
+- Give new request/response protocol fields explicit `Field(description=...)` docstrings — why: undocumented public API fields ship with no generated reference docs. (PR #45458, @DarkLight1337)
 - Reuse existing CLI arguments/config (e.g. `--shutdown-timeout`) instead of inventing parallel options for the same concept — why: duplicate knobs drift apart and confuse operators. (PR #40841, @robertgshaw2-redhat)
 - Follow uvicorn conventions in server code: store shared state/objects on `app.state.*`, and stop a server task with `server.should_exit = True; await server_task` (setting the stop event from a done_callback) rather than managing another task's lifecycle inside a request coroutine — why: bespoke shutdown handling is bug-prone and forces needless null-checks. (PR #40841, @robertgshaw2-redhat)
 - Don't rely on an HTTP `/health` probe to determine process liveness; use a process-level check — why: a hung server can return 500 while its process keeps running, so the probe misses hung-but-alive processes. (PR #40841, @robertgshaw2-redhat)
 - Make `engine_client` optional (accept `None`) in tokenization/render serving paths so endpoint plugins can opt out under CPU-only deployment — why: CPU-only/render deployments have no engine and shouldn't be forced to attach one. (PR #47454, @noooop)
 - When a validator or default is duplicated across parallel request-protocol classes (chat vs engine vs completion vs speech_to_text), apply the change to every copy — why: parallel request schemas silently diverge otherwise. (PR #48252, @DarkLight1337)
 - Introduce a clearly-named new parameter rather than overloading an existing one with misleading semantics (e.g. `return_prompt_text`/`return_inputs` instead of repurposing an existing flag) — why: overloaded params confuse the public API contract. (PR #42052, @DarkLight1337)
-- Return an extensible dict keyed by name (e.g. modality) rather than hardcoding per-name fields — why: hardcoded names must be edited for every new case, while a dict extends automatically. (PR #45458, @DarkLight1337)
 - Normalize sentinel parameter values (e.g. `-1`) to preserve prior semantics when changing a parameter's handling — why: silently changing sentinel behavior breaks backward compatibility. (PR #43402, @DarkLight1337)
+
+# REJECTED / RESHAPED 2026-08-07:
+# - Return an extensible dict keyed by name (e.g. modality) rather than hardcoding per-name fields (PR #45458, @DarkLight1337)
+#   reason: KEPT? No -> design-pattern preference, risks opinionated "use a dict" review noise;
+#   not a defect the reviewer can assert. Borderline; dropped to keep the corpus high-signal.
+# - Don't leave hardcoded numeric literals inline; extract them to named constants (PR #40841, @robertgshaw2-redhat)
+#   reason: generic code-style rule, not vLLM-specific; a strong reviewer already flags magic
+#   numbers. Fails the counterfactual test (no marginal behavior change).
+# - RESHAPED (nit stripped, core kept above): PR #44226 originally also said "manually curate
+#   AI-generated tests" (process rule); PR #45458 originally also said "use single backticks"
+#   (MkDocs render minutia). Both nits dropped; the checkable code invariants were kept.

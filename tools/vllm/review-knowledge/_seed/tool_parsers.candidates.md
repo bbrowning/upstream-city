@@ -2,6 +2,10 @@
 #
 # Accept the ones you trust:  gc pr-review-pack learn --from-candidates this-file.md
 # (that assigns IDs and appends them to tool_parsers.md; delete any line you reject first)
+#
+# CURATED 2026-08-07 (Claude, rubric pass): 10 mined -> 9 accept, 1 reject.
+# Reject bar for mined candidates is deliberately high (each has a real maintainer PR
+# behind it); only process/doc rules and non-generalizable nits are dropped.
 
 - Don't gate Harmony tool-call capture on an exact channel name (e.g. `commentary`), and keep channel handling consistent across every extraction path — why: real outputs vary (`comment` vs `commentary`), so a strict per-path channel check silently drops valid tool calls. (PR #42454, @bbrowning)
 - Treat tool parameter schemas as always nested under `properties`; don't add fallback handling for "flat" schemas (a params dict used directly as the properties map) — why: flat schemas don't exist in valid tool defs, so the fallback is dead code that can mis-parse. (PR #43140, @sfeng33)
@@ -12,4 +16,8 @@
 - Build a model's structural tag completely and natively; never post-hoc monkey-patch a generated tag — why: patch-based tag construction is fragile and hides the real grammar. (PR #45560, @chaunceyjiang)
 - Build new tool parsers on the new Parser Engine rather than as standalone `ToolParser` subclasses — why: standalone parsers miss shared streaming/structural-tag machinery and re-introduce bugs already solved there. (PR #50093, @chaunceyjiang)
 - Ground value coercion (e.g. the accepted boolean literals) in the model's official tool-calling guide instead of an invented alias set — why: over-accepting spellings the model never emits mis-coerces arguments. (PR #43006, @sfeng33)
-- Update `docs/features/tool_calling.md` whenever you change tool-calling behavior — why: user-facing tool-calling docs otherwise drift out of sync with the code. (PR #45600, @chaunceyjiang)
+
+# REJECTED 2026-08-07:
+# - Update `docs/features/tool_calling.md` whenever you change tool-calling behavior (PR #45600, @chaunceyjiang)
+#   reason: process/doc rule, not a code invariant. A reviewer flags missing docs from
+#   first principles; this is not durable domain knowledge. (matches flywheel follow-up #5)

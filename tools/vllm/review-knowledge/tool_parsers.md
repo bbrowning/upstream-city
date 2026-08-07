@@ -25,14 +25,17 @@ maintainer comment; `(learned PR #N)` folded back from a corrected review.
   deltas, and `index` values monotonic and contiguous. — why: clients key on
   id/index to reassemble calls from deltas. (starter)
 - [INV-TOOL-005] A new parser must register with `ToolParserManager` (the
-  registration decorator) and be selectable via `--tool-call-parser <name>`. — why:
-  an unregistered parser is dead code. (starter)
+  registration decorator) and be selectable via `--tool-call-parser <name>` — this
+  holds for engine-based parsers (`*_engine_tool_parser.py`) too. — why: an
+  unregistered parser is dead code. (starter)
 - [INV-TOOL-006] Tests must include a **partial-JSON streamed chunk sequence**, not
   only a full-message parse. — why: streaming boundaries are where parsers break.
   (starter)
-- [INV-TOOL-007] Shared logic belongs in `abstract_tool_parser.py` / `utils.py`;
-  a new per-model parser should not copy-paste accumulation logic. — why:
-  divergent copies drift and rot. (starter)
+- [INV-TOOL-007] Shared logic belongs in `abstract_tool_parser.py` / `utils.py`,
+  or the newer Parser Engine (`vllm/parser/engine/`); prefer building a new parser
+  on the engine (`*_engine_tool_parser.py`) over a standalone `ToolParser` subclass
+  that re-implements streaming/structural-tag machinery. — why: divergent copies
+  drift and rot. (starter)
 
 ## Learned / seeded invariants
 <!-- gc pr-review-pack learn --area tool_parsers --invariant "..." --from-pr N  appends here -->

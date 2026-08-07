@@ -24,8 +24,9 @@ maintainer comment; `(learned PR #N)` folded back from a corrected review.
   extraction must not swallow or corrupt tool-call segments. — why: combined
   reasoning+tool flows are a known break. (starter)
 - [INV-REAS-005] A new reasoning parser must register and be selectable via
-  `--reasoning-parser <name>`, and handle a model that emits no reasoning at all.
-  — why: unregistered = dead code; no-reasoning is a valid case. (starter)
+  `--reasoning-parser <name>`, and handle a model that emits no reasoning at all;
+  this holds for engine-based parsers (`*_engine_reasoning_parser.py`) too. — why:
+  unregistered = dead code; no-reasoning is a valid case. (starter)
 
 ## Learned / seeded invariants
 <!-- gc pr-review-pack learn --area reasoning --invariant "..." --from-pr N  appends here -->

@@ -22,9 +22,10 @@ maintainer comment; `(learned PR #N)` folded back from a corrected review.
 - [INV-OAI-003] SSE streaming shape must be well-formed — each chunk a valid
   `data:` event, terminal `[DONE]`, `usage` emitted where the spec/flags require.
   — why: malformed SSE breaks streaming clients. (starter)
-- [INV-OAI-004] Usage accounting (prompt/completion/total tokens) must be correct
-  and present where the spec requires it. — why: clients meter cost/limits on it.
-  (starter)
+- [INV-OAI-004] Usage token counts (prompt/completion/total) must be internally
+  consistent and reflect the actual generation (total = prompt + completion). — why:
+  clients meter cost/limits on them. (Presence/where-required is covered by
+  INV-OAI-003.) (starter)
 - [INV-OAI-005] Changes to `serving_chat`/`serving_completion`/`responses` request
   and response fields must be backward compatible (additive). — why: public HTTP
   API stability. (starter)
