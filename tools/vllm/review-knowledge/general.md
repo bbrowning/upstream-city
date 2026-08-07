@@ -38,3 +38,4 @@ human corrected.
 
 ## Learned / seeded invariants
 <!-- gc pr-review-pack learn --area general --invariant "..." --from-pr N  appends here -->
+- [INV-GEN-008] Before finalizing a verdict, scan for other *open* PRs modifying the same file/function this change touches (within FETCH latitude, e.g. `gh pr list`/search) and flag any that edit the same hunk — a competing in-flight fix is a coordination/merge risk to surface even when each PR is individually correct and not a strict duplicate. — why: independent contributors routinely band-aid the same hot spot (e.g. #49876/#50528/#51391 all rewrote `_on_terminal`); a piecemeal merge conflicts and entrenches divergent designs (learned PR #51391, 2026-08-07)
