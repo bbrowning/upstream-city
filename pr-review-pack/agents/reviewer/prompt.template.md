@@ -114,7 +114,8 @@ eval "$({{.ConfigDir}}/assets/scripts/posture-latitude.sh "$effective_posture")"
   fetch: verify from the diff text alone, never run, never ask, leave
   `dynamic_request` `null`, and say what you could not confirm dynamically.
 - **GATE=blocked** (`block`) — do **not** review. `gc mail send <rig>/lead` a short
-  note (why it is blocked), emit a `blocked` verdict with the reason, and close.
+  note (why it is blocked), emit a `blocked` verdict with the reason, and close —
+  then still notify the human (see **Notify the human**).
 
 Everything below is performed **within** the latitude you just set.
 
@@ -181,6 +182,33 @@ If you were blocked by infrastructure (provider down, repo unreachable), set
 `gc.outcome=fail` with `gc.failure_class=transient` (or `gc.failure_class=hard`
 for contract/input failures a retry will not fix) and a stable
 `gc.failure_reason` before closing, so a retry is sane.
+
+## Notify the human (do this LAST, after the close)
+
+The verdict is the product, but it lands in bead metadata where a human has to go
+digging for it. So once the bead is closed, drop a one-line summary in the human's
+inbox — they read it with `gc mail check` / `gc mail inbox`, so five reviews
+become five lines in a queue, not five metadata spelunks. Send this for **every**
+terminal verdict (`approve`, `approve_with_nits`, `request_changes`, `blocked`,
+and infra `fail`):
+
+```bash
+# gc.root_bead_id is the run id — the dashboard groups the whole review under it.
+root=$(gc bd show <your-review-bead> --json | jq -r '.[0].metadata["gc.root_bead_id"]')
+# Supervisor-mode dashboard default. Override GC_DASHBOARD_BASE if your city uses a
+# different host/port/name (standalone [api] port, remote city, renamed city, …).
+base="${GC_DASHBOARD_BASE:-http://127.0.0.1:8372/city/workspace/runs}"
+gc mail send human \
+  -s "PR review <head_ref>: <verdict> — <findings_count> finding(s)" \
+  -m "<merge_recommendation>
+posture=<effective_posture>  verdict=<verdict>
+run:     ${base}/${root}
+verdict: gc bd show <your-review-bead> --json   # full pr-review.v1 JSON"
+```
+
+It is a notification, not a handoff: do **not** pass `--notify` — let it sit in
+the inbox as a queue rather than nudging the human per review. For a `blocked`
+verdict this human line is *in addition* to the `<rig>/lead` mail above.
 
 ## Handoff (context cycling)
 

@@ -146,6 +146,10 @@ On success, close the step with `gc.outcome=pass` and the JSON in
 rate-limited, repo unreachable) close with `gc.outcome=fail`,
 `gc.failure_class=transient`, and a stable `gc.failure_reason`. For non-retryable
 contract/input failures use `gc.failure_class=hard`.
+
+Finally, after the bead is closed, notify the human of the verdict per your
+reviewer method — a one-line `gc mail send human` with the run's dashboard link,
+so the verdict comes to their inbox instead of sitting in bead metadata.
 """
 metadata = { "gc.run_target" = "{{review_target}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true" }
 
