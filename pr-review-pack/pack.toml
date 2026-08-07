@@ -3,7 +3,7 @@
 # mechanics (work_dir + pre_start), no phantom `isolation="worktree"` primitive.
 #
 # What it contributes (all discovered by directory convention — see gascity's
-# conventionDiscoveryDirNames: agents/, formulas/, orders/):
+# conventionDiscoveryDirNames: agents/, formulas/, orders/, commands/):
 #
 #   agents/reviewer/       read-only reviewer, pooled up to 2 slots
 #                          (reviewer-1, reviewer-2), each in its OWN worktree.
@@ -13,6 +13,9 @@
 #   formulas/feature-dev.toml per-run implement task + structured report contract.
 #   orders/fetch-origin.toml  read-only `git fetch --prune` on a cooldown to keep
 #                             origin refs warm (faster agent fetches).
+#   commands/materialize/  `gc pr-review-pack materialize <PR>` — check a PR out
+#                          into a DURABLE, human-owned worktree (outside .gc/, never
+#                          reaped) so a person can read/diff/run it after a review.
 #   assets/scripts/worktree-setup.sh  pre_start hook: makes each slot's detached
 #                             worktree + .beads redirect; refuses to run in the
 #                             rig root (loud fail instead of silent stomp).

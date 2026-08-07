@@ -20,3 +20,6 @@ hooks/
 
 # Individual rigs
 rigs/
+
+# Human-owned PR worktrees materialized by `gc pr-review-pack materialize`
+pr-worktrees/

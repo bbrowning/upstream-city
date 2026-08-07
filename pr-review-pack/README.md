@@ -16,6 +16,42 @@ branch, all without touching the shared rig checkout or each other.
 > without the live city and several of its claims did not hold up; this pack is
 > the corrected artifact.
 
+## The flow at a glance (the "aha")
+
+The whole loop, human's-eye view — a review is a **push**, and you never go
+hunting for its result:
+
+```
+   you ──"review PR 51296"──▶  vllm/lead ──dispatch──▶ reviewer slot (own worktree)
+                                                              │
+        emits pr-review.v1 verdict on its step bead ◀─────────┘
+                                                              │
+   inbox ◀── one-line verdict mail (gc mail check) ───────────┘   ← comes to YOU
+     │
+     ├─ enough?  you make the merge call. Done.
+     │
+     └─ want to see/run it yourself?
+            gc pr-review-pack materialize 51296     ← durable checkout on disk
+            cd <city>/pr-worktrees/vllm/pr-51296
+            git diff origin/main...HEAD             ← read it
+            # run the reviewer's suggested dynamic_request.command right here
+```
+
+Two things make this ergonomic instead of a scavenger hunt:
+
+1. **The verdict comes to you.** On finish, the reviewer drops a one-line summary
+   in your mail (`gc mail check`) with the dashboard link — five parallel reviews
+   become five lines in a queue, not five metadata digs. See
+   [Read the verdict](#read-the-verdict-this-is-the-gate).
+2. **You can always get the code back.** The reviewer's own worktree is transient
+   per-slot scratch (reused across PRs), so after a review closes there is no tree
+   on disk with that PR's bits. `gc pr-review-pack materialize <PR>` re-checks it
+   out into a **durable, human-owned** worktree that agent slot-reuse and
+   `gc stop --clean` never touch. See
+   [Materialize a PR for human review](#materialize-a-pr-for-human-review).
+
+Everything below is the detail behind those arrows.
+
 ## How you drive it (through the rig `lead`)
 
 This city gives each rig a **`lead`** — a rig-scoped singleton planner/dispatcher
@@ -107,6 +143,7 @@ agents/feature-dev/prompt.template.md # feature-dev METHOD: branch/push, never s
 formulas/pr-review.toml               # per-run review TASK + pr-review.v1 verdict contract
 formulas/feature-dev.toml             # per-run implement TASK + feature-dev.v1 report contract
 orders/fetch-origin.toml              # read-only `git fetch --prune` on a cooldown (warm refs)
+commands/materialize/                 # `gc pr-review-pack materialize <PR>` — durable human checkout
 assets/scripts/worktree-setup.sh      # pre_start: make each slot's detached worktree
 assets/scripts/fetch-origin.sh        # the fetch order's exec body
 ```
@@ -159,6 +196,8 @@ nothing below will spin up a session.
                                  # disk (the pre-start-scripts check) — not gc lint
    gc formula list               # expect: pr-review, feature-dev
    gc agent list                 # expect: vllm/reviewer, vllm/feature-dev
+   gc pr-review-pack --help      # expect: the `materialize` command (discovered
+                                 # per-invocation from commands/, no reload needed)
    ```
    (Confirm exact subcommands with `gc formula --help` / `gc agent --help`.)
 
@@ -219,6 +258,53 @@ no mid-workflow human gate.
 > The exact JSON field the root id lands in, and the precise `gc graph` output,
 > are pinned during the first live run (below) — this pack has not yet been slung,
 > so treat the id-discovery commands as the shape, confirmed on first use.
+
+## Materialize a PR for human review
+
+The verdict tells you *whether* to merge. When you want to see or run the change
+**yourself** — read the diff with your own eyes, run the reviewer's suggested
+check, poke at a new test — you need the PR's code on disk. The reviewer's
+worktree won't have it: those are **per-slot scratch** (`reviewer-1` is reused
+across every PR it reviews), so once a review closes nothing on disk holds that
+PR's bits. Re-materialize it:
+
+```bash
+gc pr-review-pack materialize 51296          # a PR number → fetches origin pull/51296/head
+gc pr-review-pack materialize my-branch       # or any branch / tag / sha
+gc pr-review-pack materialize 51296 --base v0.6.0   # diff against a different baseline
+```
+
+That fetches the ref and checks it out **detached** into a durable, human-owned
+worktree at:
+
+```
+<city>/pr-worktrees/<rig>/pr-<N>       # e.g. pr-worktrees/vllm/pr-51296
+```
+
+Why a separate path (not the reviewer's worktree): it lives **outside `.gc/`**, so
+`gc stop --clean` never reaps it; it's **PR-keyed**, so many PRs coexist; and it's
+never an agent slot, so slot reuse can't stomp it. It shares the rig's git object
+store, so the checkout is cheap (~seconds, ~100MB working tree). The command
+prints the head sha, a `--stat` against the base, and the next steps:
+
+```bash
+cd <city>/pr-worktrees/vllm/pr-51296
+git diff origin/main...HEAD                   # read the change
+# then run the reviewer's suggested dynamic_request.command right here
+```
+
+It is **idempotent**: re-run to no-op if already current, or `--force` to move an
+existing checkout to a newer head. Tear it down when finished:
+
+```bash
+gc pr-review-pack materialize 51296 --remove
+```
+
+> **Env caveat:** this materializes the **code** — enough to read, diff, and
+> review by hand. Actually *running* vLLM's tests needs its build/venv, which this
+> paude container does not carry; run those where vLLM builds. (This is the same
+> gap the Phase-2 `dynamic_request` auto-run lane will need to close — see the
+> reviewer method + the posture-design memory.)
 
 ## Run a feature
 

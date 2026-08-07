@@ -194,7 +194,8 @@ and infra `fail`):
 
 ```bash
 # gc.root_bead_id is the run id — the dashboard groups the whole review under it.
-root=$(gc bd show <your-review-bead> --json | jq -r '.[0].metadata["gc.root_bead_id"]')
+bead_raw=$(gc bd show <your-review-bead> --json)
+root=$(printf '%s' "$bead_raw" | jq -r '.[0].metadata["gc.root_bead_id"]')
 # Supervisor-mode dashboard default. Override GC_DASHBOARD_BASE if your city uses a
 # different host/port/name (standalone [api] port, remote city, renamed city, …).
 base="${GC_DASHBOARD_BASE:-http://127.0.0.1:8372/city/workspace/runs}"
