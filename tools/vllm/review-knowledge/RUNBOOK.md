@@ -14,8 +14,12 @@ posture gating) see the pack + the project memory; this file is the day-to-day p
   `candidates-raw.jsonl` (raw mined comments; git-ignored).
 
 Each invariant is one line: `[ID] rule — why: the failure it prevents (provenance)`.
-Provenance tags: `(starter)` hand-authored baseline · `(PR #N, @author)` mined from a
-maintainer comment · `(learned PR #N ..., <date>)` folded back from a corrected review.
+The **rule states *what* to check** (imperative; no how-to, command, or inline example —
+those are the reviewer's *method*, not the knowledge line); the **why is one clause**
+naming the failure. Keep it terse — the whole matching corpus is injected into a review,
+so length is context cost. Provenance tags: `(starter)` baseline · `(PR #N, @author)`
+mined from a maintainer comment · `(learned #N)` folded back from a corrected review
+(no date — git history has it).
 
 ## How the reviewer consumes it (important properties)
 - Files are **read fresh each review** → content edits (learn/seed/manual) are **LIVE on
@@ -50,7 +54,7 @@ gc pr-review-pack learn --area <domain> \
   --from-pr <N> --author @handle
 ```
 Appends to `<domain>.md` under "## Learned / seeded invariants" with a fresh ID, stamped
-`(learned PR #N by @handle, <date>)`. (No `<domain>.md`? create it — see "New domain".)
+`(learned #N by @handle)`. (No `<domain>.md`? create it — see "New domain".)
 
 ## Workflow B — seed from history (mine → distill → curate → accept)
 1. **Mine** maintainer comments (CODEOWNERS-filtered, ~1 API call/PR):

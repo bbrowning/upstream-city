@@ -10,7 +10,7 @@
 # unrelated areas. Two modes:
 #
 #   --invariant  : fold one lesson back (e.g. after the human corrects a verdict).
-#                  Stamped `(learned PR #N[ by @author], <date>)`.
+#                  Stamped `(learned #N[ by @author])`.
 #   --from-candidates <file> : batch-accept curated seed candidates (the human has
 #                  already pruned the file to the ones they trust). Every `- ` bullet
 #                  in the file is appended, re-numbered into the target domain, with
@@ -124,7 +124,6 @@ fi
 [ -n "$INVARIANT" ] || { usage >&2; die "missing --invariant (or use --from-candidates)"; }
 
 prov="learned"
-[ -n "$FROM_PR" ] && prov="$prov PR #$FROM_PR"
+[ -n "$FROM_PR" ] && prov="$prov #$FROM_PR"
 [ -n "$AUTHOR" ]  && prov="$prov by $AUTHOR"
-prov="$prov, $(date +%F)"
 append_bullet "$AREA" "$INVARIANT ($prov)"
