@@ -31,6 +31,17 @@ includes = ["pr-review-pack"]   # in-city folder
   [[rigs.patches]]
   agent = "reviewer"
   option_defaults = { model = "opus", effort = "xhigh" }
+  # Dynamic checks: lazily build/reuse a CPU vLLM test venv (vLLM-specific, kept out
+  # of the generic pack). GC_PREPARE_TEST_ENV is the builder the gate runs only when
+  # a trusted check actually executes; UV_CACHE_DIR stays on btrfs for reflinks.
+  env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh" }
+
+  # Human-approved dynamic-check lane. Same env wiring as the reviewer; the gate
+  # (run-scoped-check.sh --min-ceiling limited) still floors it on the fresh ceiling.
+  [[rigs.patches]]
+  agent = "runner"
+  option_defaults = { model = "opus", effort = "high" }
+  env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh" }
 
 [[rigs]]
 name = "gascity"
