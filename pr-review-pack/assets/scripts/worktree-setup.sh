@@ -131,7 +131,7 @@ EXCLUDE=$(git -C "$WT" rev-parse --git-path info/exclude)
 case "$EXCLUDE" in /*) ;; *) EXCLUDE="$WT/$EXCLUDE" ;; esac
 mkdir -p "$(dirname "$EXCLUDE")"
 for p in ".gc/" ".beads/redirect" ".beads/hooks/" ".beads/formulas/" ".logs/" \
-         ".claude/" ".codex/" ".gemini/" "__pycache__/"; do
+         ".claude/" ".codex/" ".gemini/" "__pycache__/" ".venv/" ".pytest_cache/"; do
     grep -qxF "$p" "$EXCLUDE" 2>/dev/null || printf '%s\n' "$p" >> "$EXCLUDE"
 done
 

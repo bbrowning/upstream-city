@@ -35,7 +35,7 @@ hunting for its result:
             # run the reviewer's suggested dynamic_request.command right here
 ```
 
-Two things make this ergonomic instead of a scavenger hunt:
+A few things make this ergonomic instead of a scavenger hunt:
 
 1. **The verdict comes to you.** On finish, the reviewer drops a one-line summary
    in your mail (`gc mail check`) with the dashboard link — five parallel reviews
@@ -47,6 +47,10 @@ Two things make this ergonomic instead of a scavenger hunt:
    out into a **durable, human-owned** worktree that agent slot-reuse and
    `gc stop --clean` never touch. See
    [Materialize a PR for human review](#materialize-a-pr-for-human-review).
+3. **Trusted PRs get tested, not just read.** When the deterministic ceiling is
+   `trusted`, the reviewer auto-runs one in-scope check and folds the result into
+   the verdict; a `limited` PR surfaces a scoped check you can approve with one
+   sling. See [Dynamic checks](#dynamic-checks-running-a-prs-tests).
 
 Everything below is the detail behind those arrows.
 
@@ -134,17 +138,33 @@ skip) and never deletes branches. **Naming constraint:** never name a slot
 
 ```
 pack.toml                             # manifest (schema 2); no [[named_session]] — see note below
-agents/reviewer/agent.toml            # read-only reviewer, pooled up to 2 slots
-agents/reviewer/prompt.template.md    # reviewer METHOD: checklist + read-only discipline
+agents/triage/agent.toml              # deterministic-first posture triage (1 slot)
+agents/triage/prompt.template.md      # triage METHOD: classify posture ≤ prescan ceiling
+agents/reviewer/agent.toml            # posture-gated reviewer, pooled up to 2 slots
+agents/reviewer/prompt.template.md    # reviewer METHOD: checklist, read-only + trusted auto-run
+agents/runner/agent.toml              # human-approved dynamic-check lane (1 slot)
+agents/runner/prompt.template.md      # runner METHOD: run one approved check, report honestly
 agents/feature-dev/agent.toml         # single write lane (1 slot)
 agents/feature-dev/prompt.template.md # feature-dev METHOD: branch/push, never self-close arc
-formulas/pr-review.toml               # per-run review TASK + pr-review.v1 verdict contract
+formulas/pr-review.toml               # triage → review TASK + pr-review.v1 verdict contract
+formulas/pr-review-dynamic.toml       # human-approved check TASK + pr-review-dynamic.v1 contract
 formulas/feature-dev.toml             # per-run implement TASK + feature-dev.v1 report contract
 orders/fetch-origin.toml              # read-only `git fetch --prune` on a cooldown (warm refs)
 commands/materialize/                 # `gc pr-review-pack materialize <PR>` — durable human checkout
+assets/scripts/pr-prescan.sh          # deterministic, injection-proof posture ceiling
+assets/scripts/posture-latitude.sh    # pure posture → FETCH/EXEC/GATE table
+assets/scripts/run-scoped-check.sh    # the deterministic EXEC gate for dynamic checks
+assets/scripts/emit-verdict.sh        # atomic finish: write verdict + close + notify human
 assets/scripts/worktree-setup.sh      # pre_start: make each slot's detached worktree
 assets/scripts/fetch-origin.sh        # the fetch order's exec body
 ```
+
+The pack is **project-agnostic** — nothing above mentions vLLM. Actually running a
+PR's tests needs a project-specific env, kept **out** of the pack: for vLLM that is
+`//tools/vllm/vllm-testenv.sh` (a fast CPU-only, no-compile venv builder), wired to
+the `vllm` rig via `[[rigs.patches]]` env (`$GC_PR_TEST_VENV`) — see
+[Dynamic checks](#dynamic-checks-running-a-prs-tests). The generic gate
+(`run-scoped-check.sh`) only consumes `$GC_PR_TEST_VENV`; it never builds it.
 
 Agents, formulas, and orders are all discovered by **directory convention**
 (gascity's `conventionDiscoveryDirNames`), so the manifest carries **no
@@ -192,8 +212,8 @@ on-demand slot auto-materializes the rig and the session.
    gc reload                     # or gc restart, per your setup
    gc doctor                     # THIS validates the pre_start script exists on
                                  # disk (the pre-start-scripts check) — not gc lint
-   gc formula list               # expect: pr-review, feature-dev
-   gc agent list                 # expect: vllm/reviewer, vllm/feature-dev
+   gc formula list               # expect: pr-review, pr-review-dynamic, feature-dev
+   gc agent list                 # expect: vllm/triage, vllm/reviewer, vllm/runner, vllm/feature-dev
    gc pr-review-pack --help      # expect: the `materialize` command (discovered
                                  # per-invocation from commands/, no reload needed)
    ```
@@ -290,11 +310,93 @@ existing checkout to a newer head. Tear it down when finished:
 gc pr-review-pack materialize 51296 --remove
 ```
 
-> **Env caveat:** this materializes the **code** — enough to read, diff, and
-> review by hand. Actually *running* vLLM's tests needs its build/venv, which this
-> paude container does not carry; run those where vLLM builds. (This is the same
-> gap the Phase-2 `dynamic_request` auto-run lane will need to close — see the
-> reviewer method + the posture-design memory.)
+> **Env note:** materialize gives you the **code**. To *run* a check in it, build
+> the CPU test venv once with `//tools/vllm/vllm-testenv.sh --src .` and use
+> `.venv/bin/python -m pytest …` — the very same venv the reviewer/runner use. See
+> [Dynamic checks](#dynamic-checks-running-a-prs-tests).
+
+## Dynamic checks: running a PR's tests
+
+Phase 1 only *read* the diff. Phase 2 adds one **test-running capability**, entered
+two ways, both gated by the deterministic `pr-prescan.sh` ceiling — never by the LLM:
+
+1. **Trusted auto-run (unattended).** When triage + the reviewer's own re-scan both
+   land on `trusted`, the reviewer auto-runs **one** in-scope check
+   (`python -m pytest <the PR's relevant test> -q`) through
+   `run-scoped-check.sh`, and records the result as `dynamic_check` in its
+   `pr-review.v1` verdict. A failing test factors into the verdict; a
+   network/env-limited result is reported as `could_not_verify`, not a rejection.
+2. **Human-approved run (`limited` PRs).** A `limited` verdict carries a scoped
+   `dynamic_request {command, reason}` — the check the reviewer *would* run. You
+   approve it by slinging the `pr-review-dynamic` lane with that exact command:
+   ```bash
+   gc sling vllm/runner pr-review-dynamic --formula \
+     --var head_ref=51296 --var base_ref=origin/main \
+     --var command='python -m pytest tests/parser/engine/test_deepseek_v4.py -q' \
+     --var reason='approved from PR 51296 review verdict' \
+     --title 'dynamic check PR 51296' --json
+   ```
+   The `runner` fetches the PR head into its own worktree and runs it through the
+   **same gate** with `--min-ceiling limited`: if the fresh ceiling dropped to
+   `restricted`/`block`, the approved command is still **declined** (a correct,
+   honest outcome). It emits `pr-review-dynamic.v1` and mails you a one-liner.
+
+**The gate (`run-scoped-check.sh`) is where safety lives, deterministically:** it
+re-derives the ceiling and refuses below the floor, requires prepared-env command
+form (`python -m pytest …`, no `.venv/bin/python`, no shell metacharacters),
+bounds the target to test paths, pins the head sha (optional), enforces a timeout +
+output cap, and records `git status` before/after. A prompt-injected reviewer
+cannot widen any of this.
+
+### The test env (vLLM-specific, kept out of the generic pack)
+
+Running the tests needs a Python env with vLLM importable. The trap is the full
+CUDA stack (~15GB, long compile) and vLLM's non-GPU test-teardown hook, which
+false-fails every test on a GPU-less box. `//tools/vllm/vllm-testenv.sh` sidesteps
+both: a **fast (~35s cold / ~6s warm), ~3-5GB, no-compile** CPU venv (uv +
+`VLLM_TARGET_DEVICE=empty`), tagged `+cpu` so `current_platform.is_cpu()` is true
+and the teardown hook stays quiet. It is deliberately **not** in this pack (the
+pack is project-agnostic); it lives in the city's `tools/` and is reusable
+standalone:
+
+```bash
+//tools/vllm/vllm-testenv.sh --src /path/to/vllm-checkout   # prints <venv>/bin/python
+```
+
+Wire it to the `vllm` rig so the reviewer/runner can find or build it, via
+`[[rigs.patches]]` on those agents (env reaches the agent's session + scripts —
+verified in the gascity source). The gate resolves an interpreter in this order:
+`$GC_PR_TEST_VENV` → a worktree-local `.venv` → **`$GC_PREPARE_TEST_ENV`** (a
+builder it runs *lazily*, only when a check needs to execute):
+
+```toml
+[[rigs]]
+name = "vllm"
+includes = ["pr-review-pack"]
+  [[rigs.patches]]
+  agent = "reviewer"
+  env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh" }
+  [[rigs.patches]]
+  agent = "runner"
+  env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh" }
+```
+
+Keep `UV_CACHE_DIR` on the same (btrfs) filesystem as the worktrees so uv reflinks
+the shared wheels instead of copying. Without any of these set, dynamic checks
+simply report `could_not_verify` (no runnable env) — the review still lands.
+
+**Notifications are operator policy, not the pack's.** Every review/check finishes
+with `emit-verdict.sh`, which writes the verdict, closes the bead, **and** mails a
+one-line result to `$GC_PR_NOTIFY_TO` (default `human`) — atomically, so the
+notification can't be skipped. To route it elsewhere or handle notification your own
+way, set it in the same `[[rigs.patches]]` env, e.g. `GC_PR_NOTIFY_TO = ""` to
+disable the built-in mail (then, say, drive notifications from your own
+`bead.closed` order). The generic pack ships a sensible default; the city decides.
+
+> **Network:** the check RUN is not network-isolated; egress is governed by the
+> paude-proxy. Tests may attempt downloads; when the proxy blocks one (e.g.
+> openai-harmony's rust client), the agent recognizes the network-egress failure
+> and reports `could_not_verify` rather than failing the PR.
 
 ## Run a feature
 
@@ -318,13 +420,17 @@ worktree**, implements, runs tests, and **pushes** (the durable output). It does
 arc/tracking bead** — that closes on a real checkpoint (PR opened, CI green,
 merged), not on self-report.
 
-## Deliberate boundaries (not yet crossed)
+## Deliberate boundaries
 
-- **Reviewers are read-only.** They inspect a diff and emit a verdict; they run
-  no PR-supplied build/test steps. Giving a reviewer execution rights over
-  untrusted upstream code on the gascity host is the exact risk container
-  isolation exists to contain — it's a separate, explicit decision, not implied
-  by this pack.
+- **Execution is posture-gated, never LLM-decided.** A reviewer runs code from a
+  PR **only** when the deterministic `pr-prescan.sh` ceiling is `trusted`, and even
+  then only one in-scope check via `run-scoped-check.sh` (which re-derives the
+  ceiling and refuses if it dropped). `limited`/`restricted`/`block` PRs run
+  nothing unattended — a `limited` check runs only after a **human** slings the
+  `pr-review-dynamic` lane, and that lane re-checks the same deterministic floor. A
+  prompt-injected reviewer cannot widen what runs. (Per-worktree sandboxed
+  containers — the next isolation tier — remain deferred; today execution is
+  contained to this paude container, with egress governed by the proxy.)
 - **feature-dev is a single lane** (`max_active_sessions = 1`) by design: one
   writer, one write worktree, no writer-vs-writer races.
 
@@ -332,6 +438,13 @@ merged), not on self-report.
 
 - **Customize the reviewer checklist** in `prompt.template.md` with the
   follow-up questions you always end up asking — that's the real reviewer spec.
+- **Broaden dynamic-check coverage**: the CPU venv currently targets the hermetic,
+  mock-tokenizer parser/engine unit tests. Widening to `tests/reasoning` /
+  `tests/tool_parsers` (which download tokenizers) means pre-warming an HF cache;
+  `vllm-testenv.sh --compile` adds real CPU kernels for tests that need them.
+- **Per-worktree sandboxed containers**: the next isolation tier for running
+  untrusted PR code (deferred) — today execution is contained to this paude
+  container with egress governed by the proxy.
 - **Quorum**: add a second reviewer step + a synthesis step that `needs` both,
   modeled on core's `mol-review-quorum`. `pr-review.v1` is a subset of that
   formula's `review-quorum.lane.v1`, so the synthesis step consumes these lanes

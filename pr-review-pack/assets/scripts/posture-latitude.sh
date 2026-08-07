@@ -14,23 +14,27 @@
 #           allowlist -> ONLY HF config JSON + safetensors headers
 #   EXEC  : deny      -> never run any changed/untrusted code
 #           allow     -> may run in-scope unit tests on changed code
-#   GATE  : none      -> proceed, no human needed
-#           suggest   -> proceed (no approval needed) but surface the check you
-#                        WOULD run as a preview dynamic_request; do NOT run it
+#   GATE  : none      -> no human gate; run the in-scope check iff EXEC=allow
+#                        (trusted), else just review the text (restricted)
 #           human     -> surface a scoped approval request; do NOT run it yourself
+#                        (a human runs it via the pr-review-dynamic lane)
 #           blocked   -> do not review; route to a human
+#           suggest   -> RETIRED in Phase 2 (was the Phase-1 trusted preview token)
 #
-# PHASE 1: EXEC is 'deny' for EVERY posture (the reviewer is fully read-only).
-# Trusted uses GATE=suggest so it still surfaces the (safe, in-scope) command
-# Phase 2 will auto-run, as an optional manual run for the human.
-# PHASE 2 flips ONLY the trusted row to EXEC=allow GATE=none (see marked line):
-# trusted then auto-runs instead of suggesting. Nothing else changes.
+# PHASE 2 (LIVE): only the `trusted` row grants EXEC=allow — the reviewer may
+# auto-run ONE in-scope check on changed code, unattended, via run-scoped-check.sh
+# (which re-derives the deterministic ceiling and refuses if it dropped). Every
+# other posture stays EXEC=deny: an agent NEVER runs limited/restricted/block code
+# on its own. `limited` execution happens ONLY out-of-band, when a human slings the
+# `pr-review-dynamic` approval lane — that lane adds the human's EXEC token on top
+# of this same deterministic floor; it does NOT go through this table (which
+# correctly still says `deny` for what an agent may do unattended).
 set -euo pipefail
 
 POSTURE="${1:?usage: posture-latitude.sh <trusted|limited|restricted|block>}"
 
 case "$POSTURE" in
-    trusted)    echo 'FETCH=allowlist EXEC=deny GATE=suggest' ;;   # Phase 2: EXEC=allow GATE=none
+    trusted)    echo 'FETCH=allowlist EXEC=allow GATE=none' ;;    # Phase 2: reviewer auto-runs one in-scope check
     limited)    echo 'FETCH=metadata EXEC=deny GATE=human' ;;
     restricted) echo 'FETCH=none EXEC=deny GATE=none' ;;
     block)      echo 'FETCH=none EXEC=deny GATE=blocked' ;;

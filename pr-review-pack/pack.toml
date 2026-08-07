@@ -1,37 +1,59 @@
-# pr-review-pack — parallel PR review + a single feature-dev lane, with true
+# pr-review-pack — posture-gated PR review (triage → review, with trusted auto-run
+# + a human-approved dynamic-check lane) + a single feature-dev lane, with true
 # per-agent worktree isolation, built entirely from native gascity v1.4.0
 # mechanics (work_dir + pre_start), no phantom `isolation="worktree"` primitive.
 #
 # What it contributes (all discovered by directory convention — see gascity's
 # conventionDiscoveryDirNames: agents/, formulas/, orders/, commands/):
 #
-#   agents/reviewer/       read-only reviewer, pooled up to 2 slots
-#                          (reviewer-1, reviewer-2), each in its OWN worktree.
+#   agents/triage/         deterministic-first posture triage (1 slot): classify
+#                          each PR's trust posture ≤ the pr-prescan.sh ceiling.
+#   agents/reviewer/       posture-gated reviewer, pooled up to 2 slots
+#                          (reviewer-1, reviewer-2), each in its OWN worktree;
+#                          read-only EXCEPT it auto-runs ONE in-scope check when
+#                          the ceiling is `trusted` (via run-scoped-check.sh).
+#   agents/runner/         human-approved dynamic-check lane (1 slot): runs one
+#                          operator-approved check on a `limited` PR, gated the same.
 #   agents/feature-dev/    single write lane (1 slot: feature-dev), its own
 #                          worktree, real paude/<bead> branch, pushes to origin.
-#   formulas/pr-review.toml   per-run review task + structured verdict contract.
+#   formulas/pr-review.toml   triage → review task + pr-review.v1 verdict contract
+#                             (incl. dynamic_check result on trusted PRs).
+#   formulas/pr-review-dynamic.toml  human-slung approval lane: run one approved
+#                             check + pr-review-dynamic.v1 contract.
 #   formulas/feature-dev.toml per-run implement task + structured report contract.
 #   orders/fetch-origin.toml  read-only `git fetch --prune` on a cooldown to keep
 #                             origin refs warm (faster agent fetches).
 #   commands/materialize/  `gc pr-review-pack materialize <PR>` — check a PR out
 #                          into a DURABLE, human-owned worktree (outside .gc/, never
 #                          reaped) so a person can read/diff/run it after a review.
+#   assets/scripts/pr-prescan.sh      deterministic, injection-proof posture ceiling.
+#   assets/scripts/posture-latitude.sh pure posture → FETCH/EXEC/GATE table.
+#   assets/scripts/run-scoped-check.sh the deterministic EXEC gate: re-checks the
+#                             ceiling, enforces command form + scope, runs one check.
+#   assets/scripts/emit-verdict.sh    atomic finish: write output_json + close +
+#                             notify human in one step (notify is operator-configurable
+#                             via $GC_PR_NOTIFY_TO; default "human", empty disables).
 #   assets/scripts/worktree-setup.sh  pre_start hook: makes each slot's detached
 #                             worktree + .beads redirect; refuses to run in the
 #                             rig root (loud fail instead of silent stomp).
 #   assets/scripts/fetch-origin.sh    the fetch order's exec body.
 #
+# Project-agnostic: nothing here mentions vLLM. Running a PR's tests needs a
+# project-specific prepared venv, kept OUTSIDE the pack (for vLLM:
+# //tools/vllm/vllm-testenv.sh), wired to the rig via [[rigs.patches]] env
+# ($GC_PR_TEST_VENV / $GC_PREPARE_TEST_ENV); the gate only CONSUMES it.
+#
 # Isolation guarantee: a rig-scoped session with an empty work_dir resolves to
 # the rig root, so scaling reviewers past 1 would share one checkout. Each agent
 # sets work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"; pool expansion makes
-# {{.AgentBase}} distinct per slot (reviewer-1/reviewer-2/feature-dev), so every
-# slot gets a distinct worktree — the paude-container guarantee, natively.
+# {{.AgentBase}} distinct per slot (triage/reviewer-1/reviewer-2/runner/feature-dev),
+# so every slot gets a distinct worktree — the paude-container guarantee, natively.
 #
-# Referenced from a rig's `pack` in city.toml; both agents are rig-scoped
-# (scope="rig" in their agent.toml), so they expand once per rig they're
-# attached to (intended: vllm).
+# Attached via a rig's `includes` in city.toml (the Rig struct has NO `pack`
+# field); all agents are rig-scoped (scope="rig"), so they expand once per rig
+# they're attached to (intended: vllm).
 #
-# NOTE — no [[named_session]] blocks: both agents are POOL agents (they set
+# NOTE — no [[named_session]] blocks: all agents are POOL agents (they set
 # min/max_active_sessions), and gc lint forbids a named_session that targets a
 # pool-controlled agent. Pool agents are auto-discovered from agents/ and
 # expanded by the scope in their own agent.toml — exactly like hyperscale's
@@ -41,4 +63,4 @@
 [pack]
 name = "pr-review-pack"
 schema = 2
-description = "Parallel read-only PR reviewers + one feature-dev write lane, each isolated in its own git worktree (native work_dir + pre_start; no phantom worktree primitive)."
+description = "Posture-gated PR review (triage → review, trusted auto-run + human-approved dynamic-check lane) + one feature-dev write lane, each isolated in its own git worktree (native work_dir + pre_start; no phantom worktree primitive)."

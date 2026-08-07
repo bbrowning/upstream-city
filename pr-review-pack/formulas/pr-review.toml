@@ -7,11 +7,13 @@ proof pre-scan of the diff; then a read-only **review** step consumes that postu
 to bound its own network latitude and emits a durable, structured merge verdict.
 The verdict is the factory's output: a human consumes it and makes the merge call.
 
-Rollout is classification-first (Phase 1): the reviewer stays FULLY read-only —
-posture gates FETCH and reporting, and NO code is executed for any posture. The
-posture→execution latitude is designed but stays off until triage accuracy is
-proven on real PRs (Phase 2 flips `trusted` to auto-run in-scope tests and adds a
-human-slung `pr-review-dynamic` approval lane).
+Posture drives execution latitude (Phase 2, live): a `trusted` PR auto-runs ONE
+in-scope check on the changed code (via the deterministic run-scoped-check.sh gate,
+which re-derives the ceiling and refuses if it dropped); `limited`/`restricted`/
+`block` run nothing. A `limited` PR instead surfaces a scoped `dynamic_request` a
+human can approve out-of-band via the companion `pr-review-dynamic` formula (routed
+to the `runner` agent). Execution needs a prepared interpreter in
+`$GC_PR_TEST_VENV`; absent that, the check honestly reports `could_not_verify`.
 
 Both steps are routed by `gc.run_target` (overridable per run), so the standard
 `gc sling <rig>/reviewer pr-review --formula --var head_ref=N` UX is unchanged —
@@ -98,10 +100,13 @@ mechanics):**
 3. `eval "$({{.ConfigDir}}/assets/scripts/posture-latitude.sh "$effective_posture")"`
    and honor it: `FETCH` bounds external network (`allowlist` = only HF config
    JSON + safetensors headers; `metadata` = metadata only; `none` = no fetch);
-   `EXEC` is `deny` for every posture in Phase 1 — **do not run any changed code**;
-   `GATE=human` (`limited`) → populate `dynamic_request` instead of acting;
-   `GATE=blocked` (`block`) → do not review, `gc mail send <rig>/lead`, and emit a
-   `blocked` verdict.
+   `EXEC=allow` **only** for `trusted` → auto-run ONE in-scope check in prepared-env
+   form (`python -m pytest <test-node-id> -q`) via
+   `{{.ConfigDir}}/assets/scripts/run-scoped-check.sh --head {{head_ref}} --base {{base_ref}} --min-ceiling trusted -- <cmd>`,
+   and record its `scoped-check.v1` result as `dynamic_check`; `EXEC=deny` otherwise —
+   **do not run any changed code**; `GATE=human` (`limited`) → populate
+   `dynamic_request` (a human runs it via `pr-review-dynamic`); `GATE=blocked`
+   (`block`) → do not review, `gc mail send <rig>/lead`, and emit a `blocked` verdict.
 
 Read-only discipline (unchanged):
 - Do not modify any files, branches, comments, external systems, or other beads.
@@ -115,6 +120,8 @@ Read-only discipline (unchanged):
 
 Write this JSON object (schema `pr-review.v1`) to `gc.output_json`:
 
+- `head_ref`, `base_ref`: the refs you reviewed (so the verdict is self-describing;
+  `head_ref` also titles the human notification)
 - `verdict`: one of `approve`, `approve_with_nits`, `request_changes`, `blocked`
 - `posture`: the triage posture you received
 - `effective_posture`: `min(triage.posture, your re-derived ceiling)` — what you
@@ -131,9 +138,14 @@ Write this JSON object (schema `pr-review.v1`) to `gc.output_json`:
     - `file`: path
     - `line`: line or range (or null)
     - `suggested_fix`: concise, or null
-- `dynamic_request`: for `limited`, an object `{command, reason, fetches_nothing_new}`
-  describing the scoped command you WOULD run (informational in Phase 1; becomes
-  actionable via the Phase 2 approval sling); otherwise `null`
+- `dynamic_check`: for `trusted`, the `scoped-check.v1` object returned by
+  `run-scoped-check.sh` (the in-scope check you auto-ran: `outcome`, `rc`,
+  `env_used`, `output_tail`, `duration_s`, `git_clean_after`, `network_hint`,
+  `reason_if_skipped`, …); `null` for any other posture
+- `dynamic_request`: for `trusted`, an object `{command, reason}` naming the check you
+  ran (provenance for `dynamic_check`); for `limited`, the scoped command a human can
+  approve via `gc sling <rig>/runner pr-review-dynamic --var command='…'`; `null` for
+  `restricted`/`block`
 - `evidence`: commands run / files inspected that back the findings
 - `read_only_enforcement`: object with `baseline_command`, `after_command`,
   `clean` (boolean — true if you introduced no mutations), and `mutations_delta`
@@ -141,15 +153,13 @@ Write this JSON object (schema `pr-review.v1`) to `gc.output_json`:
 - `failure_class`: one of `none`, `transient`, `hard`
 - `failure_reason`: stable reason string, or "" when `none`
 
-On success, close the step with `gc.outcome=pass` and the JSON in
-`gc.output_json`. On a retryable infrastructure failure (provider down,
-rate-limited, repo unreachable) close with `gc.outcome=fail`,
-`gc.failure_class=transient`, and a stable `gc.failure_reason`. For non-retryable
-contract/input failures use `gc.failure_class=hard`.
-
-Finally, after the bead is closed, notify the human of the verdict per your
-reviewer method — a one-line `gc mail send human` with the run's dashboard link,
-so the verdict comes to their inbox instead of sitting in bead metadata.
+Finish the step with the single `emit-verdict.sh` command (see your reviewer
+method): it writes the JSON to `gc.output_json`, closes the bead, AND notifies the
+human — atomically, so the verdict always reaches the inbox and can never be a
+forgotten step. Use `--outcome pass` on success; `--outcome fail --failure-class
+transient` (or `hard`) with a stable `--failure-reason` on an infrastructure
+failure (provider down, rate-limited, repo unreachable). Do not run a separate
+`gc bd close` or `gc mail send`.
 """
 metadata = { "gc.run_target" = "{{review_target}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true" }
 

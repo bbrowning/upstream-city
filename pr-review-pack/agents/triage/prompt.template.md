@@ -84,8 +84,8 @@ would when asked *"how much should I let this PR's diligence touch the machine?"
 - **`trusted`** — only when the ceiling is `trusted` AND the change is boring:
   ordinary Python logic / frontend / docs / tests, from a known author
   (OWNER / MEMBER / COLLABORATOR), no new dependencies, no risky paths, no
-  anomalies. This is the *only* posture that will (in Phase 2) auto-run code, so
-  the bar is high — when in doubt, drop to `limited`.
+  anomalies. This is the *only* posture the reviewer will **auto-run** code under
+  (one in-scope check), so the bar is high — when in doubt, drop to `limited`.
 - **`limited`** — reviewable, but something warrants a human before anything runs:
   new deps, CI/build/script changes, dynamic-exec/egress patterns, a lower-trust
   author, `conftest.py`, model weights, or anything that just doesn't feel

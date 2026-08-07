@@ -1,4 +1,11 @@
-# Reviewer — read-only, single-lane PR reviewer.
+# Reviewer — posture-gated PR reviewer: read-only, PLUS one gated exception.
+#
+# On a `trusted` PR (deterministic ceiling == trusted) it may auto-run exactly ONE
+# in-scope check on the changed code, via assets/scripts/run-scoped-check.sh (which
+# re-derives the ceiling and refuses if it dropped). For every other posture it is
+# fully read-only. Execution needs a prepared interpreter in $GC_PR_TEST_VENV
+# (for vLLM, built by //tools/vllm/vllm-testenv.sh and wired via this rig's
+# [[rigs.patches]] env); absent that, the check reports could_not_verify.
 #
 # On-demand and rig-scoped: a session spins up when a `pr-review` formula step
 # (or a direct review bead) is routed to it, and idles out afterward.
@@ -10,7 +17,7 @@
 #                           output contract it must emit.
 
 scope = "rig"
-nudge = "You have a review assignment. Run `gc prime`, read your bead, review the diff read-only, and write your verdict to gc.output_json — then close the step."
+nudge = "You have a review assignment. Run `gc prime`, read your bead, review the diff, dispose by posture (on a trusted PR auto-run one in-scope check via run-scoped-check.sh), write your pr-review.v1 verdict to gc.output_json, then close the step and notify the human."
 idle_timeout = "30m"
 min_active_sessions = 0
 max_active_sessions = 2

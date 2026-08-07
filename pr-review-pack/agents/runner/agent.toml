@@ -1,0 +1,32 @@
+# Runner — the human-approved dynamic-check lane.
+#
+# The ONLY identity that runs code from a `limited` PR, and only after a human
+# slings the `pr-review-dynamic` formula with an explicit `--var command='…'`. It
+# does NOT judge the code, does NOT choose the command, and does NOT decide whether
+# running is allowed — assets/scripts/run-scoped-check.sh re-derives the
+# deterministic ceiling (`--min-ceiling limited`) and refuses if it dropped to
+# `restricted`/`block`. The human sling is the EXEC token; the script is the floor.
+#
+# Rig-scoped, single slot, on-demand: a session spins up when a `pr-review-dynamic`
+# step is routed to it and idles out afterward. Execution needs a prepared
+# interpreter in $GC_PR_TEST_VENV (for vLLM, built by //tools/vllm/vllm-testenv.sh
+# and wired via this rig's [[rigs.patches]] env); absent that it reports
+# could_not_verify.
+#
+# Division of labor:
+#   - prompt.template.md          → the runner's standing METHOD.
+#   - formulas/pr-review-dynamic.toml → the per-run TASK (which PR + approved
+#                                    command) + the exact output contract.
+
+scope = "rig"
+nudge = "Approved dynamic-check assignment. Run `gc prime`, read your bead (it names the PR + the approved command), fetch+detach the PR head in your worktree, run the command via run-scoped-check.sh --min-ceiling limited, write pr-review-dynamic.v1 to gc.output_json, close, and notify the human."
+idle_timeout = "30m"
+min_active_sessions = 0
+max_active_sessions = 1
+
+# Per-slot detached worktree (same isolation as the reviewer; single slot ->
+# `runner`). pre_start only creates the worktree; the runner fetches the specific
+# PR head itself (it has the per-bead context that pre_start lacks). {{.ConfigDir}}
+# is THIS pack's root dir (do NOT use {{.CityRoot}} — exit 127 as a subdir pack).
+work_dir  = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
+pre_start = ["{{.ConfigDir}}/assets/scripts/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]
