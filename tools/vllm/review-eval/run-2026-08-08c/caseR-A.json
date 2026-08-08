@@ -1,0 +1,30 @@
+{
+  "verdict": "approve_with_nits",
+  "summary": "Small, correctly-scoped streaming fix: when a reasoning parser confirms reasoning-end via the engine (surfacing the trailing text only as content token ids, not as streamed content) and a text-based tool parser follows, the post-marker text (e.g. the leading '<' of '<tool_call>') was dropped, so a tool call batched together with '</think>' leaked into content instead of being parsed. The change recovers that text by decoding the content token ids when no content text is present, and adds a focused regression test that fails without it. The fix is guarded so the common text-based reasoning path is unaffected.",
+  "findings": [
+    {
+      "severity": "nit",
+      "file": "vllm/parser/abstract_parser.py",
+      "line": "859-863",
+      "detail": "The recovery block lives in the branch taken when the delegating parser is not fully engine-based. That branch is shared: it also runs for purely text-based reasoning parsers, whose reasoning delta already carries the post-marker text as content. The comment mentions only engine reasoning parsers, which may momentarily mislead a maintainer into thinking this code only runs for the engine case. The guard `if not current_text and current_token_ids` makes it a no-op for text parsers (they populate current_text), so behavior is correct; only the comment is narrower than the code path.",
+      "suggested_fix": "Broaden the comment to note the block is guarded and only fires when reasoning-end was confirmed without emitting the following text as content (i.e. an engine-confirmed end paired with a text-based tool parser), so it is a no-op for text-based reasoning parsers."
+    },
+    {
+      "severity": "nit",
+      "file": "vllm/parser/abstract_parser.py",
+      "line": "862-863",
+      "detail": "Recovery decodes the content-only subset of token ids (extract_content_ids of the delta) back to text. If a single token ever straddles the reasoning-end marker and the following content (boundary not token-aligned), the decoded substring could differ slightly from the true trailing text (leading-space or partial-glyph artifacts). This is inherent to token-granular content extraction and matches how the fully-engine-based path already reconstructs content, so it is not a new defect; noting it for awareness only. Not reproduced with a concrete failing input.",
+      "suggested_fix": null
+    }
+  ],
+  "actions_taken": [
+    "Read the diff: tests/parser/test_streaming.py (+ new _FakeEngineReasoningParser and test_parse_delta_engine_reasoning_tool_batched_boundary) and vllm/parser/abstract_parser.py (new recovery block in parse_delta reasoning-transition else branch, lines ~859-864).",
+    "Read surrounding source in vllm/parser/abstract_parser.py: parse_delta (793-919), StreamState.advance/commit (61-83), __init__ and _engine_based computation (112-141), DelegatingParser overrides extract_content_ids/_in_reasoning_phase/_in_tool_call_phase (713-738), _extract_tool_calls_streaming (636-711).",
+    "Confirmed self._engine_based = (reasoning None or reasoning.engine_based_streaming) AND (tool None or tool.engine_based_streaming); Hermes2ProToolParser inherits engine_based_streaming=False, so with the engine-based fake reasoning parser the test drives self._engine_based=False, exercising exactly the new else branch.",
+    "Traced the 3 batched deltas ('<think>hi', '</think><', 'tool_call>...') and confirmed the fix recovers '<' from the content token ids so Hermes2Pro sees '<tool_call>...'; without it delta_text would be empty and the leading '<' lost, matching the documented regression (tool call leaking into content).",
+    "Ran: python -m pytest tests/parser/test_streaming.py::test_parse_delta_engine_reasoning_tool_batched_boundary -q -p no:cacheprovider -> 1 passed.",
+    "Ran full file: python -m pytest tests/parser/test_streaming.py -q -p no:cacheprovider -> 14 passed, 2 failed (test_parse_delta_required_tool_choice_kimi_k2_ids and ..._after_history). Both use reasoning=False (no reasoning parser), so _in_reasoning_phase is False and the changed code path is never entered; the failures are in the kimi_k2 required-tool-choice id-counter path and are pre-existing / not caused by this diff.",
+    "Verified the new test asserts observable behavior (tool call name == get_weather, joined arguments parse to {'city':'Dallas'}, and 'tool_call' absent from content) rather than merely executing the path.",
+    "Checked added-line lengths against the 88-char limit; all within limit."
+  ]
+}

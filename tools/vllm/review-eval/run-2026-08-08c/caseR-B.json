@@ -1,0 +1,29 @@
+{
+  "verdict": "request_changes",
+  "summary": "The change fixes a real bug (the leading character of a tool call was dropped when an engine-based reasoning parser and a text-based tool parser saw `</think>` and the start of the tool call in one batched delta). However, it recovers the content by re-decoding token ids with `self.model_tokenizer.decode(...)`, which bypasses the streaming detokenizer's multi-token-character holdback and corrupts output when a multi-byte character straddles the boundary. The sole new test uses a hand-rolled fake reasoning parser, so it cannot catch this.",
+  "findings": [
+    {
+      "severity": "major",
+      "file": "vllm/parser/abstract_parser.py",
+      "line": "862-863",
+      "detail": "On the reasoning->tool transition delta, when the reasoning parser confirms end but emits no content, the code recovers the trailing text with `current_text = self.model_tokenizer.decode(current_token_ids)` where `current_token_ids = self.extract_content_ids(delta_token_ids)`. Re-decoding raw token ids ignores the incremental detokenizer's holdback for characters that span multiple tokens, so a multi-token character split across the batched boundary is decoded mid-sequence and produces a U+FFFD replacement char (mojibake), with the remainder lost. Reproduced through parse_delta with the Qwen/Qwen3-32B tokenizer: content `🧑‍🚀` (astronaut ZWJ emoji, ids [148738, 378, 235, 145836]) placed right after `</think>` with the transition delta ending after id 378 -> emitted content is `🧑�` instead of `🧑‍🚀`, and the tail is dropped. The parallel engine-based branch just above (self._engine_based) avoids this by flushing via `reasoning_parser.finish_streaming()` rather than re-decoding ids.",
+      "suggested_fix": "Do not re-decode token ids here. Derive the post-marker text from the already-detokenized `delta_text` (e.g. strip the reasoning end marker from it) or from the reasoning parser's own flush/detokenizer output, so multi-token-character holdback is respected; the reasoning parser in this branch is engine-based and exposes `finish_streaming()`."
+    },
+    {
+      "severity": "minor",
+      "file": "tests/parser/test_streaming.py",
+      "line": "474-521",
+      "detail": "The new regression test relies on `_FakeEngineReasoningParser`, a fabricated engine-style reasoning parser paired with the real Hermes2ProToolParser, and feeds each delta as `tokenizer.encode(d)` so a multi-token character never gets split. This never exercises the real engine reasoning parser's detokenizer/holdback timing, which is exactly where the decode in abstract_parser.py:862-863 goes wrong, so the test passes while the mojibake bug stands. A regression built on the shipping `Qwen3ParserReasoningAdapter` (vllm/parser/engine/registered_adapters.py) plus Hermes2ProToolParser would cover the true mixed engine-reasoning + text-tool flow, including a boundary that splits a multi-byte character.",
+      "suggested_fix": "Add a regression test using the real Qwen3 engine reasoning adapter + Hermes tool parser, and include a case where a multi-token/multi-byte character straddles the reasoning->tool delta boundary; assert the reconstructed content equals the original with no replacement chars."
+    }
+  ],
+  "actions_taken": [
+    "Read the diff and surrounding code in vllm/parser/abstract_parser.py (parse_delta transition logic, StreamState.advance/commit, _engine_based construction) and vllm/parser/engine/adapters.py (engine_based_streaming, finish_streaming, has_engine_confirmed_reasoning_end).",
+    "Confirmed the mixed config is real: Qwen3ParserReasoningAdapter (engine-based) exists (vllm/parser/engine/registered_adapters.py) and can be paired with a text-based tool parser like Hermes, hitting the new else-branch.",
+    "Ran the new test: PYTHONPYCACHEPREFIX=... .venv/bin/python -m pytest tests/parser/test_streaming.py::test_parse_delta_engine_reasoning_tool_batched_boundary -q -> 1 passed.",
+    "Probed the Qwen/Qwen3-32B tokenizer: decoding a mid-sequence prefix of the astronaut ZWJ emoji (ids [148738, 378, 235, 145836]) yields '🧑�' (U+FFFD), confirming the mojibake mechanism.",
+    "Drove parse_delta end-to-end with a boundary that splits that emoji across the transition delta -> content leaked as '🧑�' with the tail lost, confirming the bug reaches output.",
+    "Ran tests/parser/test_streaming.py (14 passed, 2 failed) - the 2 failures are test_parse_delta_required_tool_choice_kimi_k2_ids[/_after_history], which use reasoning=False + tool_choice=required + empty token ids and never reach the changed code; pre-existing and unrelated to this diff.",
+    "Ran tests/parser/engine and tests/parser/test_parse.py -> 3691 passed (no regressions from the change)."
+  ]
+}

@@ -11,12 +11,20 @@ openai-frontend}.md`. Old system to replace = `tools/vllm/review-knowledge/` cor
 `pr-review-pack/agents/reviewer/prompt.template.md` step-2 load + `commands/learn/` +
 `mine-review-comments.sh`. **Keep the security/posture layer untouched — it's out of scope.**
 
-OPEN after round 2: (a) caseR is a still-unresolved **shared gold miss** — the sharpened
-parser reflexes are untested; re-run caseR to confirm they now fire before trusting the
-gate. (b) **Domain-coverage decision (human):** stand up a `structured-output` /
-spec-decode persona? n=1 (caseG) so far — per the promotion rule, watch for recurrence
-first. (c) The gate wants "no unresolved misses"; caseR keeps it open → add more cases +
-re-run, don't cut over yet.
+Status after round 2 + caseR re-run (`run-2026-08-08c/`):
+- **caseR — RESOLVED.** The sharpened parser reflexes flipped it miss → **catch**
+  (`request_changes`, judge-verified mojibake repro), lean noise 0. Validated on this case
+  (caveat: opus variance, not a fully isolated A/B — see that RESULTS). Re-run periodically
+  to guard against regression.
+- **caseY (round 1) — reflex present, re-run PENDING.** Round 1's lean miss (shared base +
+  6 per-model `is_reasoning_end` overrides, only base parity-tested) was folded into
+  `parser.md` reflex #2 but never re-run. Do the same miss→catch validation we did for
+  caseR before trusting reflex #2.
+- **caseG — domain-coverage decision (human).** Out-of-domain (structured-output / spec
+  decode); both arms miss equally, so it's not a lean deficiency. Stand up a
+  `structured-output` persona only if the class recurs (n=1 today; promotion rule).
+- **Gate:** no remaining *lean* deficiency across the 6 cases, but two validation re-runs
+  (caseY) and more cases are wanted before Phase-2 cutover. Don't retire the corpus yet.
 
 ## Phase 1 — Build confidence (expand the eval)
 1. Pick 3–5 candidates from `candidates.md`. For each, FIRST verify @bbrowning or @yzong-rh

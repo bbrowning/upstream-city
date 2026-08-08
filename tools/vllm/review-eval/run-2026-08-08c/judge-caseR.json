@@ -1,0 +1,14 @@
+{
+  "case": "caseR",
+  "gold_catch": { "review1": "catch", "review2": "partial" },
+  "signal":        { "review1": 2, "review2": 1 },
+  "noise":         { "review1": 0, "review2": 2 },
+  "groundedness":  { "review1": 5, "review2": 3 },
+  "false_positives": {
+    "review1": [],
+    "review2": ["Nit 2 claims the token-boundary decode artifact 'is not a new defect' because it 'matches how the fully-engine-based path already reconstructs content' — false: the engine branch (abstract_parser.py:846-850) flushes via reasoning_parser.finish_streaming()/flush_delta.content and does not re-decode raw ids, so it does NOT have this bug; only the new else branch's raw decode does."]
+  },
+  "more_useful_to_maintainer": "review1",
+  "rationale": "Review 1 makes the correct call (request_changes) and catches both gold prongs: the raw self.model_tokenizer.decode(current_token_ids) recovery is not multi-token-character safe, backed by a concrete reproduction I verified exactly (Qwen3-32B ids [148738,378,235,145836] for the astronaut ZWJ emoji, 2-token prefix decodes to '🧑' + U+FFFD), plus it demands a real Qwen3-adapter + Hermes test instead of the fabricated _FakeEngineReasoningParser, and correctly points to the engine branch's finish_streaming() as the right pattern. Review 2 approves_with_nits, treats the fix as correct, and only weakly gestures at the decode-boundary risk in a nit that it then dismisses as 'not a new defect' via a factually wrong claim that the engine path reconstructs content the same way — its other nit is a pure comment/style point. Review 1 wins decisively: it would block a real correctness regression Review 2 would let ship.",
+  "notes": "Both reviews genuinely ran tests (new test passes; both report 14 passed / 2 pre-existing kimi_k2 failures unrelated to the diff — consistent with the code path). Only Review 1 ran a cross-tokenizer reproduction of the mojibake, which I independently verified in the checkout with the venv Python; its ids and mojibake output matched precisely. Review 2 read the code carefully but reached the wrong conclusion on the load-bearing defect."
+}
