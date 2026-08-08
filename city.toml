@@ -21,8 +21,9 @@ prefix = "vllm"
 default_branch = "main"
 includes = ["pr-review-pack", "hard-bug-pack"]   # in-city folders (PR review + two-opinion hard-bug)
 
-  # Lane B of hard-bug-pack is provider-agnostic. To use a real second vendor later,
-  # uncomment (and add a [providers.codex] block + creds); formulas/prompts unchanged.
+  # Lane B of hard-bug-pack is provider-agnostic and the formula no longer pins its
+  # model, so a real second vendor is a true one-liner: uncomment this patch (and add
+  # a [providers.codex] block + creds); formulas/prompts unchanged.
   # [[rigs.patches]]
   # agent = "hb-worker-b"
   # provider = "codex"
@@ -57,12 +58,19 @@ includes = ["pr-review-pack", "hard-bug-pack"]   # in-city folders (PR review + 
   # needs to run vllm reuses the warm uv cache + the blessed CPU-only recipe
   # (tools/vllm/vllm-testenv.sh, ~seconds warm) instead of a full torch install from
   # scratch. (vLLM-specific env, kept out of the generic pack.)
+  #
+  # Per-worker model: uncomment option_defaults.model to control each lane's model
+  # (valid claude: opus|sonnet|haiku|fable-5|opus-4-7|sonnet-5|sonnet-4-6). NB:
+  # rig-patch option_defaults are NOT validated at `gc reload` — a typo here is caught
+  # at launch (logged, falls back to default), not at reload.
   [[rigs.patches]]
   agent = "hb-worker-a"
+  # option_defaults = { model = "opus" }
   env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh" }
 
   [[rigs.patches]]
   agent = "hb-worker-b"
+  # option_defaults = { model = "sonnet" }
   env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh" }
 
 [[rigs]]

@@ -24,6 +24,10 @@ required = true
 description = "Branch point and merge target for the fix branch."
 default = "origin/main"
 
+[vars.branch_prefix]
+description = "Prefix for the fix branch; the branch is <branch_prefix><bug_bead>. Empty (the default) means the branch is just the bug-bead id. Override with --var branch_prefix=paude/ to namespace it."
+default = ""
+
 [vars.implementer_target]
 description = "Agent target that implements (the stronger lane). Required."
 required = true
@@ -46,14 +50,14 @@ default = "true"
 
 [[steps]]
 id = "implement"
-title = "Implement the converged fix on paude/{{bug_bead}} and push"
+title = "Implement the converged fix on {{branch_prefix}}{{bug_bead}} and push"
 description = """
 Implement the converged fix for arc `{{bug_bead}}`, working ONLY in your own
 worktree. Read the agreed root cause and fix plan from `{{bug_bead}}`'s
 hard-bug-state.v1 and the fix-phase lane outputs. Branch off `{{base}}`:
-`git switch -c paude/{{bug_bead}} {{base}}`. Make the smallest change that fully
+`git switch -c {{branch_prefix}}{{bug_bead}} {{base}}`. Make the smallest change that fully
 fixes the ROOT CAUSE; add the planned tests; RUN them (and existing suites covering
-the area); fix anything they reveal; commit; `git push -u origin paude/{{bug_bead}}`.
+the area); fix anything they reveal; commit; `git push -u origin {{branch_prefix}}{{bug_bead}}`.
 Do NOT close the arc bead.
 
 Emit `hard-bug-implement.v1` to gc.output_json, then finish:

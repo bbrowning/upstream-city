@@ -3,8 +3,10 @@ One convergence round of the hard-bug protocol.
 
 Fans out two independent worker lanes to diagnose (phase=root_cause) or reconsider
 (phase=fix) a bug, then routes a reconciliation step to the coordinator, gated on
-BOTH lanes (mol-review-quorum shape). Lane IDs / providers / models / targets are
-formula vars, so a second vendor drops in by changing lane_b_* — no formula edit.
+BOTH lanes (mol-review-quorum shape). Lane IDs / providers / targets are formula
+vars, and each lane's model defaults to the agent's city.toml option_defaults, so a
+second vendor drops in via a city.toml rig patch (provider + option_defaults) — no
+formula edit.
 
 The OUTER loop across rounds and phases is deliberately NOT here: a compile-time DAG
 cannot express the subjective, cross-round/cross-phase loop-back. The coordinator
@@ -55,8 +57,8 @@ default = "hb-worker-a"
 description = "Provider hint for lane A (dashboard/provenance only; runtime provider comes from the agent config)."
 default = "claude"
 [vars.lane_a_model]
-description = "Model target for lane A (per-step override via opt_model)."
-default = "opus"
+description = "Per-run model override for lane A (emitted as opt_model). Empty (the default) defers to the agent's city.toml option_defaults (provider/agent/rig-patch), so the model is set there, not here."
+default = ""
 
 [vars.lane_b_id]
 description = "Durable identity for lane B."
@@ -68,8 +70,8 @@ default = "hb-worker-b"
 description = "Provider hint for lane B."
 default = "claude"
 [vars.lane_b_model]
-description = "Model target for lane B."
-default = "sonnet"
+description = "Per-run model override for lane B (emitted as opt_model). Empty (the default) defers to the agent's city.toml option_defaults."
+default = ""
 
 [vars.coordinator_target]
 description = "Agent target for the reconcile step."
@@ -178,8 +180,8 @@ when root cause aligns — record agreed_root_cause).
 Then act on the outer loop per your protocol, using THESE run vars:
   bug_bead={{bug_bead}} phase={{phase}} round={{round}} max_rounds={{max_rounds}}
   enable_loop={{enable_loop}} base_ref={{base_ref}}
-  lane_a: id={{lane_a_id}} target={{lane_a_target}} provider={{lane_a_provider}} model={{lane_a_model}}
-  lane_b: id={{lane_b_id}} target={{lane_b_target}} provider={{lane_b_provider}} model={{lane_b_model}}
+  lane_a: id={{lane_a_id}} target={{lane_a_target}} provider={{lane_a_provider}} model={{lane_a_model}} (empty = agent's option_defaults)
+  lane_b: id={{lane_b_id}} target={{lane_b_target}} provider={{lane_b_provider}} model={{lane_b_model}} (empty = agent's option_defaults)
   coordinator_target={{coordinator_target}}
 
 - enable_loop=false (Stage 1): after emitting the reconcile verdict, mail the human a

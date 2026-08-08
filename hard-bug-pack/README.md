@@ -43,8 +43,8 @@ diagnose(root_cause) → converge-root-cause → converge-fix
 
 | Path | What |
 |---|---|
-| `agents/hb-worker-a/` | lane A (claude/opus): diagnose / reconsider / implement / cross-review; own worktree |
-| `agents/hb-worker-b/` | lane B (claude/sonnet today); shares worker-a's prompt; **one-line swap to codex** |
+| `agents/hb-worker-a/` | lane A: diagnose / reconsider / implement / cross-review; own worktree (model from city.toml `option_defaults`) |
+| `agents/hb-worker-b/` | lane B; shares worker-a's prompt; model from city.toml `option_defaults`; **one-line swap to codex** |
 | `agents/hb-coordinator/` | protocol driver: reconcile, judge convergence, relay, cap, escalate |
 | `formulas/hard-bug-round.toml` | one round: two lanes + coordinator reconcile |
 | `formulas/hard-bug-finalize.toml` | implement → cross-review → finalize |
@@ -119,9 +119,11 @@ Under the hood, `start` is just this (drop the wrapper if you want full control)
 gc sling vllm/hb-coordinator hard-bug-round --formula \
   --var bug_bead=vllm-XXX --var phase=root_cause --var round=1 \
   --var max_rounds=3 --var enable_loop=false \
-  --var lane_a_target=vllm/hb-worker-a --var lane_a_model=opus \
-  --var lane_b_target=vllm/hb-worker-b --var lane_b_model=sonnet \
+  --var lane_a_target=vllm/hb-worker-a \
+  --var lane_b_target=vllm/hb-worker-b \
   --var coordinator_target=vllm/hb-coordinator --json
+  # Each lane's model comes from its city.toml option_defaults (see "Choosing the
+  # worker model" below); add --var lane_a_model=<m> only to pin a model this run.
 ```
 
 **Stage 2 — bounded convergence loop.** Add `--loop` (`enable_loop=true`); the
@@ -133,11 +135,36 @@ opinions, advancing root_cause → fix), capping at `--max-rounds`, escalating v
 slings `hard-bug-finalize` with the stronger lane as implementer and the other as
 cross-reviewer; concur → arc `status=done`; reject → re-enter fix or escalate.
 
-## Add a real second vendor later (one line)
+## Choosing the worker model
 
-Lane B is provider-agnostic. When a `codex` CLI + OpenAI creds are available,
-add a `[providers.codex]` block and a rig patch — nothing in the formulas or
-prompts changes:
+Each lane's model comes from the agent's `city.toml` `option_defaults` — the formula
+no longer pins it. Set it wherever you set other agent config:
+
+- **Cross-vendor (different providers).** Set the model at the provider level. This
+  is validated at config load, so a typo fails `gc reload`:
+  ```toml
+  [providers.claude]
+  option_defaults = { model = "opus" }     # lane A (claude)
+  ```
+- **Same provider, different model per worker.** Use a rig patch on the worker.
+  Valid claude values: `opus | sonnet | haiku | fable-5 | opus-4-7 | sonnet-5 |
+  sonnet-4-6`. Note: rig-patch `option_defaults` are **not** validated at
+  `gc reload` — a typo here is caught at *launch* (logged; the worker falls back to
+  its default), not at reload.
+  ```toml
+  [[rigs.patches]]
+  agent = "hb-worker-b"
+  option_defaults = { model = "sonnet" }
+  ```
+
+To pin a model for a single run instead, pass `--lane-a-model` / `--lane-b-model` to
+`start` (or `--var lane_a_model=…` on a raw sling).
+
+## Add a real second vendor later (truly one line)
+
+Lane B is provider-agnostic, and the formula no longer pins its model — so a second
+vendor is just a rig patch (add a `[providers.codex]` block + creds first). Nothing
+in the formulas or prompts changes:
 
 ```toml
 # city.toml

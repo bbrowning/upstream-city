@@ -16,7 +16,7 @@ GC="${GC_BIN:-gc}"
 CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
 
 BEAD="" ; RIG="" ; LOOP="false" ; MAXR="3" ; BASEREF="origin/main"
-LANE_A_MODEL="opus" ; LANE_B_MODEL="sonnet" ; LANE_A_TARGET="" ; LANE_B_TARGET=""
+LANE_A_MODEL="" ; LANE_B_MODEL="" ; LANE_A_TARGET="" ; LANE_B_TARGET=""
 DRYRUN="no"
 
 usage() {
@@ -30,8 +30,8 @@ hard-bug-round to <rig>/hb-coordinator with the <rig>/worker-* lane targets fill
   --loop              drive the full convergence loop (default OFF = Stage-1 report-only)
   --max-rounds N      per-phase iteration cap (default 3)
   --base-ref REF      baseline ref the lanes read against (default origin/main)
-  --lane-a-model M    model for lane A (default opus)
-  --lane-b-model M    model for lane B (default sonnet)
+  --lane-a-model M    pin lane A's model this run (default: unset -> city.toml option_defaults)
+  --lane-b-model M    pin lane B's model this run (default: unset -> city.toml option_defaults)
   --lane-a-target T   override lane A target (default <rig>/hb-worker-a)
   --lane-b-target T   override lane B target (default <rig>/hb-worker-b)
   --dry-run           print the gc sling command without running it (skips live checks)
@@ -89,10 +89,15 @@ fi
 set -- "$COORD" hard-bug-round --formula \
     --var "bug_bead=$BEAD" --var "phase=root_cause" --var "round=1" \
     --var "max_rounds=$MAXR" --var "enable_loop=$LOOP" --var "base_ref=$BASEREF" \
-    --var "lane_a_target=$LANE_A_TARGET" --var "lane_a_model=$LANE_A_MODEL" \
-    --var "lane_b_target=$LANE_B_TARGET" --var "lane_b_model=$LANE_B_MODEL" \
-    --var "coordinator_target=$COORD" \
-    --title "hard-bug root-cause round 1: $BEAD" --json
+    --var "lane_a_target=$LANE_A_TARGET" \
+    --var "lane_b_target=$LANE_B_TARGET" \
+    --var "coordinator_target=$COORD"
+# Pin a lane's model only when explicitly set; empty defers to the agent's
+# city.toml option_defaults (provider/agent/rig-patch). Use `if` (not `&&`) so a
+# false test doesn't trip `set -e`.
+if [ -n "$LANE_A_MODEL" ]; then set -- "$@" --var "lane_a_model=$LANE_A_MODEL"; fi
+if [ -n "$LANE_B_MODEL" ]; then set -- "$@" --var "lane_b_model=$LANE_B_MODEL"; fi
+set -- "$@" --title "hard-bug root-cause round 1: $BEAD" --json
 
 if [ "$DRYRUN" = "yes" ]; then
     printf 'DRY RUN — would run (rig=%s, loop=%s):\n  %s --rig %s sling' "$RIG" "$LOOP" "$GC" "$RIG"

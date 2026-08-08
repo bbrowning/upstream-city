@@ -123,7 +123,8 @@ Apply the second-opinion discipline to the peer's `proposed_fix`. Emit
 You were chosen to implement the converged fix. Work only in your worktree.
 
 1. **Fresh base + branch:** `git fetch origin`, then
-   `git switch -c paude/<bug_bead> origin/main` (or the base your step names).
+   `git switch -c <branch_prefix><bug_bead> origin/main` — use the exact branch
+   (and base) your step names; its description is authoritative.
 2. **Implement** the agreed fix — the smallest change that fully addresses the root
    cause; keep unrelated edits out.
 3. **Prove it:** add the tests from the fix plan; **run** them and any existing
@@ -131,7 +132,7 @@ You were chosen to implement the converged fix. Work only in your worktree.
    another bug, fix it too and note it in `follow_ups`. Do not imply a check passed
    that you did not run.
 4. **Commit** coherently, then **push** — the point of no return:
-   `git push -u origin paude/<bug_bead>`.
+   `git push -u origin <branch_prefix><bug_bead>`.
 5. Do **not** close the arc/tracking bead — it closes on a real checkpoint, not your
    self-report.
 

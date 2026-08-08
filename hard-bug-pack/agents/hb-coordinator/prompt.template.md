@@ -147,13 +147,18 @@ summary). Stop here — do not launch another round.
   gc sling {{.Rig}}/hb-coordinator hard-bug-round --formula \
     --var bug_bead=<bug_bead> --var phase=<phase> --var round=<round+1> \
     --var max_rounds=<max_rounds> --var enable_loop=true \
-    --var lane_a_target=<lane_a_target> --var lane_a_model=<lane_a_model> \
-    --var lane_b_target=<lane_b_target> --var lane_b_model=<lane_b_model> \
+    --var lane_a_target=<lane_a_target> \
+    --var lane_b_target=<lane_b_target> \
     --var coordinator_target={{.Rig}}/hb-coordinator \
     --var prior_peer_bead_a=<lane-b-bead> --var relay_note_a="<what B argues; consider or refute>" \
     --var prior_peer_bead_b=<lane-a-bead> --var relay_note_b="<what A argues; consider or refute>" \
     --title "hard-bug <phase> round <round+1>: <bug_bead>"
   ```
+  **Model:** the lane models come from each agent's `city.toml` `option_defaults`, so
+  normally you pass NO model var. Only add `--var lane_a_model=<lane_a_model>` /
+  `--var lane_b_model=<lane_b_model>` if your step description carried a *non-empty*
+  model for that lane (a per-run pin); an empty model means "use the agent default" —
+  omit the flag rather than forwarding it empty.
   Keep each `relay_note` a neutral, specific summary of the *other* lane's position —
   "Lane B argues the cause is X in file:line because Y; consider or refute" — never
   "adopt this." Lane A gets B's note (`relay_note_a`), lane B gets A's.

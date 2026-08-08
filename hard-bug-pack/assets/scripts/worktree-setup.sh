@@ -14,7 +14,7 @@
 # in another worktree, but detached worktrees have no such exclusivity. So N
 # slots can each sit at a different sha (or even the same one) with zero conflict.
 # Workers check out their target ref themselves; an implementer creates its own
-# `paude/<bead>` branch as its first step. pre_start only has to guarantee the
+# `<branch_prefix><bead>` branch as its first step. pre_start only has to guarantee the
 # *isolation*, not the job-specific checkout (it has no per-bead context anyway).
 #
 # WHY THE STAGING DANCE: gascity stages runtime files (notably
