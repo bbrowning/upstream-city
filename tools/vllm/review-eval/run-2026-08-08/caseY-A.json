@@ -1,0 +1,28 @@
+{
+  "verdict": "approve_with_nits",
+  "summary": "Additive, well-scoped hot-path optimization: replaces the inherited whole-sequence reasoning-end re-scan with a delta-scoped check across the parser-engine hierarchy. The delta-only overrides are equivalent to the full is_reasoning_end predicate under the scheduler's guarantee that the request is still reasoning before the step, which I verified by hand for the base engine and each subclass; no correctness defect found. Main gap: only the base engine is tested; the six subclass overrides carry bespoke logic and have no parity tests.",
+  "findings": [
+    {
+      "severity": "minor",
+      "file": "tests/parser/engine/test_parser_engine.py",
+      "line": "1695-1773",
+      "detail": "The new TestIsReasoningEndStreaming class only exercises the base ParserEngine (via _make_engine()). The diff also adds hand-written overrides to six subclasses (qwen3, kimi_k2, mistral, inkling, glm47_moe, gemma4), each with model-specific markers and non-trivial logic (e.g. qwen3's open <tool_call> vs already-closed </tool_call> handling within a multi-token step; mistral's [TOOL_CALLS] implicit end marker; kimi's tool-section marker), and none of them is tested. The correctness contract for these methods is that the delta-scoped answer must match the full is_reasoning_end answer at every step while reasoning is open; that parity is exactly what silently breaks if someone later edits a subclass's is_reasoning_end without updating its streaming twin. The excellent property test test_agrees_with_full_predicate_while_reasoning would catch such drift but is never run against the subclasses.",
+      "suggested_fix": "Parametrize test_agrees_with_full_predicate_while_reasoning over each concrete parser subclass (build each engine, drive representative reasoning/tool-call/thinking-disabled sequences token-by-token, and assert is_reasoning_end_streaming(prefix, [tok]) == is_reasoning_end(prefix) up to the first step that ends reasoning), so the streaming-vs-full parity is guarded per engine."
+    },
+    {
+      "severity": "nit",
+      "file": "vllm/parser/engine/parser_engine.py",
+      "line": "612-632",
+      "detail": "The engine-level is_reasoning_end_streaming methods type delta_ids as Sequence[int] and rely on it being reversible/indexable (base and inkling/kimi/mistral use reversed(delta_ids); qwen3 indexes delta_ids[i]/delta_ids[j]). Correctness on the live path depends entirely on ParserEngineReasoningAdapter.is_reasoning_end_streaming calling list(delta_ids) before forwarding (adapters.py:70-72); the scheduler passes an itertools.islice iterator in one branch (structured_output/__init__.py:429). If any future caller invokes an engine method directly with a bare iterator, reversed()/indexing raises TypeError. This is not a current bug (the adapter shields it), just a fragile contract.",
+      "suggested_fix": "Either keep the Sequence[int] annotation as the enforced contract and add a brief note that callers must materialize, or defensively coerce with list(delta_ids) at the top of the engine method as the adapter already does."
+    }
+  ],
+  "actions_taken": [
+    "Read the diff and inspected the changed files in the checkout: vllm/parser/engine/parser_engine.py (base is_reasoning_end + new is_reasoning_end_streaming), vllm/parser/engine/adapters.py (adapter forwarding), and the subclass overrides in vllm/parser/{qwen3,kimi_k2,mistral,inkling,glm47_moe,gemma4}.py.",
+    "Read the base contract in vllm/reasoning/abs_reasoning_parsers.py (default is_reasoning_end_streaming re-scans via is_reasoning_end) and the call sites in vllm/v1/structured_output/__init__.py (should_advance line 430, _find_reasoning_end_index line 458, line 313) to confirm the method is called per request per decode step while reasoning is open, and that delta_ids is materialized to a list at the adapter boundary.",
+    "Manually verified delta-scan vs full-predicate equivalence under the 'still reasoning before this step' precondition for the base engine and each subclass, including multi-token/spec-decode deltas for qwen3's tool_call/tool_call_end interplay and mistral's bot-token marker; found no divergence. Confirmed gemma4 deliberately retains the full scan and glm47_moe defers to the base when thinking is enabled.",
+    "Confirmed test config: _VOCAB maps <think>=200 (reasoning start), </think>=201 (reasoning end), matching the test literals.",
+    "Ran the new test class read-only: PYTHONPYCACHEPREFIX=<tmp> python -m pytest tests/parser/engine/test_parser_engine.py::TestIsReasoningEndStreaming -q -p no:cacheprovider -> 9 passed in 0.43s.",
+    "Verified the worktree remained clean after the test run (git status --porcelain empty), and confirmed vllm/parser/abstract_parser.py's DelegatingParser already forwards is_reasoning_end_streaming (pre-existing, not part of this diff)."
+  ]
+}

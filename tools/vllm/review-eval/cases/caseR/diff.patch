@@ -1,0 +1,113 @@
+diff --git a/tests/parser/test_streaming.py b/tests/parser/test_streaming.py
+index e6ec273b2..b3891dff4 100644
+--- a/tests/parser/test_streaming.py
++++ b/tests/parser/test_streaming.py
+@@ -469,3 +469,92 @@ def test_parse_delta_required_tool_choice_kimi_k2_ids_after_history(
+     _, _, tool_calls = collect_fields(results)
+     assert any(tc.id == "functions.get_current_weather:1" for tc in tool_calls)
+     assert all(tc.id in (None, "functions.get_current_weather:1") for tc in tool_calls)
++
++
++class _FakeEngineReasoningParser(BaseThinkingReasoningParser):
++    """Engine-style reasoning parser: confirms reasoning end via the engine and
++    does not surface the text following the end marker as streamed content (that
++    text is only recoverable from the content token ids). Mirrors the qwen3
++    engine adapter enough to exercise the reasoning->tool transition."""
++
++    engine_based_streaming = True
++
++    @property
++    def start_token(self) -> str:
++        return "<think>"
++
++    @property
++    def end_token(self) -> str:
++        return "</think>"
++
++    def __init__(self, tokenizer, *args, **kwargs):
++        super().__init__(tokenizer, *args, **kwargs)
++        self._end_ids = tokenizer.encode("</think>", add_special_tokens=False)
++        self._confirmed = False
++
++    def _last_end(self, ids: list[int]) -> int:
++        n = len(self._end_ids)
++        for i in range(len(ids) - n, -1, -1):
++            if ids[i : i + n] == self._end_ids:
++                return i
++        return -1
++
++    def has_engine_confirmed_reasoning_end(self) -> bool:
++        return self._confirmed
++
++    def extract_content_ids(self, input_ids):
++        ids = list(input_ids)
++        i = self._last_end(ids)
++        return ids[i + len(self._end_ids) :] if i >= 0 else []
++
++    def extract_reasoning_streaming(
++        self,
++        previous_text,
++        current_text,
++        delta_text,
++        previous_token_ids,
++        current_token_ids,
++        delta_token_ids,
++    ):
++        if self._last_end(list(current_token_ids)) >= 0:
++            self._confirmed = True
++        return None
++
++
++def test_parse_delta_engine_reasoning_tool_batched_boundary(tokenizer, request_obj):
++    """When an engine-based reasoning parser and a text-based tool parser see
++    `</think>` and the start of `<tool_call>` in one batched delta, the tool call
++    must still be parsed (regression: the leading `<` used to be dropped, leaking
++    the whole call into content)."""
++
++    class TestParser(DelegatingParser):
++        reasoning_parser_cls = _FakeEngineReasoningParser
++        tool_parser_cls = Hermes2ProToolParser
++
++    parser = TestParser(tokenizer)
++    # `</think><` is intentionally batched into a single delta.
++    deltas = [
++        "<think>hi",
++        "</think><",
++        'tool_call>\n{"name": "get_weather", "arguments": {"city": "Dallas"}}\n'
++        "</tool_call>",
++    ]
++    results = [
++        parser.parse_delta(
++            d,
++            tokenizer.encode(d, add_special_tokens=False),
++            request_obj,
++            prompt_token_ids=None,
++            finished=False,
++        )
++        for d in deltas
++    ]
++    reasoning, content, tool_calls = collect_fields(results)
++
++    assert len(tool_calls) > 0
++    assert tool_calls[0].function.name == "get_weather"
++    tool_args = "".join(
++        tc.function.arguments for tc in tool_calls if tc.function.arguments
++    )
++    assert json.loads(tool_args) == {"city": "Dallas"}
++    assert "tool_call" not in content
+diff --git a/vllm/parser/abstract_parser.py b/vllm/parser/abstract_parser.py
+index 639aec0fa..c4464d5a7 100644
+--- a/vllm/parser/abstract_parser.py
++++ b/vllm/parser/abstract_parser.py
+@@ -856,6 +856,11 @@ class DelegatingParser(Parser):
+                         if delta_message and delta_message.content
+                         else ""
+                     )
++                    # Engine reasoning parsers may confirm reasoning end without
++                    # emitting the following text as content; recover it from the
++                    # content token ids so the tool parser sees it.
++                    if not current_text and current_token_ids:
++                        current_text = self.model_tokenizer.decode(current_token_ids)
+                     delta_text = current_text
+ 
+         # Tool call extraction

@@ -1,0 +1,11 @@
+{
+  "case": "caseY",
+  "gold_catch": { "review1": "na", "review2": "na" },
+  "signal": { "review1": 1, "review2": 0 },
+  "noise": { "review1": 1, "review2": 0 },
+  "groundedness": { "review1": 5, "review2": 4 },
+  "false_positives": { "review1": [], "review2": [] },
+  "more_useful_to_maintainer": "review1",
+  "rationale": "Both reviews correctly concluded the delta-scoped optimization is sound and enumerated the six ParserEngine subclasses with custom is_reasoning_end that need overrides (I confirmed all six got them and the three without correctly inherit). Review 1 additionally surfaced a real, actionable gap: only the base engine's is_reasoning_end_streaming is unit-tested, while the six bespoke subclass overrides have zero parity tests and can silently drift from their full predicates (verified via grep — nothing in tests/parser/engine exercises the subclass streaming paths). Review 2 is exceptionally thorough (manual per-override parity analysis, broader 3746-test engine run) and raised no false positives, but returned no actionable output and its 'thoroughly tested' claim glosses over exactly the untested subclass surface Review 1 caught. Review 1 wins for pairing an equally-correct approval with a concrete, grounded follow-up that closes a genuine drift risk.",
+  "notes": "No answer key for this case (gold_catch=na). Review 1's second finding is a correctly-grounded nit (engine methods use reversed()/indexing on delta_ids; scheduler passes an itertools.islice iterator at structured_output/__init__.py:429 that only the adapter's list() materializes) explicitly labeled not-a-current-bug — counted as low-value noise, not a false positive. Review 2 did run cross-model tests (claimed tests/parser/engine -> 3746 passed and the structured-output suite); I did not re-run the full 3746 but confirmed via grep that none of those tests actually exercise the new subclass is_reasoning_end_streaming overrides, so the broad pass does not close the gap Review 1 identified. I independently ran the new TestIsReasoningEndStreaming class (9 passed in 0.40s, matching Review 1) and confirmed the worktree stayed clean."
+}

@@ -1,0 +1,4 @@
+{"id":"caseZ","source":"vllm#51364","domains":["parser"],"base_sha":"b706fd1628b06c216a945176a9fedfa808324803","head_sha":"9dee6db1bbce603ab09a88c44470640e7d63e7d0","has_answer_key":false,
+ "changed_files":["tests/tool_parsers/test_glm47_moe_tool_parser.py","vllm/parser/glm47_moe.py"],
+ "blind_reconstruction":"Open PR at eval time; current head. Withhold PR# + comments.",
+ "known_signal":"optional <arg_value>: partial regex matches empty value -> truncation streams invalid JSON; fixtures unvalidated vs real model output."}

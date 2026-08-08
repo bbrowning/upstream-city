@@ -1,0 +1,28 @@
+{
+  "verdict": "approve_with_nits",
+  "summary": "Correct, well-motivated fix: passing the just-appended new_token_ids as the explicit reasoning-end delta window avoids the placeholder-derived window that breaks under async scheduling plus spec decode with rejected drafts, and draining the post-marker tail into deferred grammars prevents a duplicate opening token. The change is backward compatible (new_token_ids defaults to None, old placeholder path preserved) and the added unit tests pass and assert real behavior. Only minor documentation/test-coverage nits.",
+  "findings": [
+    {
+      "severity": "minor",
+      "file": "vllm/v1/structured_output/request.py",
+      "line": "27-31",
+      "detail": "The reasoning_end_token_index field comment states it is 'Only set when reasoning ends in a step whose tokens the scheduler advances immediately (structural tags + speculative decoding)'. This change now also assigns reasoning_end_token_index on the deferred (JSON/regex/choice/grammar) path in should_advance (structured_output/__init__.py line 451), not just the structural-tag path. The comment is now inaccurate and could mislead a maintainer into thinking the deferred path leaves the index unset. Behavior is still correct (a stale index from an earlier step yields num_reasoning<=0 in trim_reasoning_for_advance, so tokens pass through unchanged), but the field is not diffed here so the now-wrong comment is easy to miss.",
+      "suggested_fix": "Update the field comment to note it is set whenever reasoning ends mid-step for any backend (both the immediate structural-tag advance and the deferred post-marker drain), not only structural tags + speculative decoding."
+    },
+    {
+      "severity": "nit",
+      "file": "tests/v1/structured_output/test_reasoning_structured_output.py",
+      "line": "337-386",
+      "detail": "The new tests mock both the reasoner and grammar, so they verify the control flow (that accept_tokens receives exactly the post-marker tokens, that rejection is tolerated with a warning, that the structural-tag path trims correctly) but not the end-user-visible symptom the fix targets: a real deferred backend no longer emitting a duplicate opening token (e.g. '{{') when reasoning ends inside a spec-decode window. There is no integration-level coverage exercising a real reasoner + grammar under spec decode.",
+      "suggested_fix": "Consider adding one integration test (or documenting an eval run per AGENTS.md for model-affecting changes) that drives a real reasoning parser and grammar through a spec-decode step where reasoning ends mid-window, asserting the generated structured output is well-formed."
+    }
+  ],
+  "actions_taken": [
+    "Read the change: tests/v1/structured_output/test_reasoning_structured_output.py, vllm/v1/core/sched/scheduler.py (should_advance call site + _update_request_with_output), vllm/v1/structured_output/__init__.py (should_advance, _find_reasoning_end_index, trim_reasoning_for_advance, grammar_bitmask), vllm/v1/structured_output/request.py.",
+    "Verified all three should_advance call sites (scheduler.py:1646 passes new_token_ids; :1975 and :2004 rely on the reasoning_ended short-circuit) remain valid with the new optional parameter; no other callers break.",
+    "Traced the start = len(all_token_ids) - len(new_token_ids) invariant against _update_request_with_output, which appends exactly the (stop-trimmed) new_token_ids to all_token_ids before should_advance runs.",
+    "Confirmed no double-feed of post-marker tokens (deferred path drains and returns False; structural-tag path returns True and the scheduler feeds the trimmed tail) and that a stale reasoning_end_token_index is harmless on subsequent steps.",
+    "Checked is_reasoning_end_streaming implementations (basic_parsers.py, abs_reasoning_parsers.py, gptoss_reasoning_parser.py, deepseek_v3) to confirm _find_reasoning_end_index locates single- and multi-token markers via its reconstructed prefix, so the conservative last-index fallback is not hit by real parsers.",
+    "Ran tests: PYTHONPYCACHEPREFIX=$(mktemp -d) .venv/bin/python -m pytest tests/v1/structured_output/test_reasoning_structured_output.py -q -p no:cacheprovider -> 15 passed in 2.86s (all new and pre-existing tests)."
+  ]
+}

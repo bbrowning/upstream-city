@@ -1,0 +1,3 @@
+caseR: review1=A review2=B
+caseW: review1=B review2=A
+caseG: review1=A review2=B

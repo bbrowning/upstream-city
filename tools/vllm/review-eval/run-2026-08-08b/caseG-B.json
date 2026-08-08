@@ -1,0 +1,26 @@
+{
+  "verdict": "approve_with_nits",
+  "summary": "Correct, well-scoped fix: passing the exact just-appended token window into should_advance replaces the placeholder-derived delta math that mis-locates the reasoning-end marker under async scheduling + speculative decode, and the deferred-backend path now drains post-marker tokens into the grammar so the next step's bitmask reflects the advanced FSM state. The delta-window override, marker-index math, post-marker slicing, and trim_reasoning_for_advance are internally consistent, the structural-tag vs deferred paths are cleanly separated (no double-feed), and all 15 unit tests plus the related spec-decode suite pass. One minor consistency note about the two other callers of should_advance.",
+  "findings": [
+    {
+      "severity": "minor",
+      "file": "vllm/v1/core/sched/scheduler.py",
+      "line": "1975, 2004",
+      "detail": "should_advance still has two other callers (update_draft_token_ids and update_draft_token_ids_in_output) that do not pass new_token_ids, so they keep using the placeholder-derived delta window that this change documents as broken under async scheduling + spec decode. In practice this is low impact and self-correcting: update_from_output (which contains the fixed call at line 1646) runs before both draft-validation callers, so by the time they run, reasoning_ended is already persisted from the accurate window and should_advance short-circuits before re-running detection; when reasoning genuinely has not ended, the placeholder path correctly returns False regardless of window bounds. Worth a short comment or follow-up so these three call sites do not silently diverge as the detection window logic evolves.",
+      "suggested_fix": "Document (or thread new_token_ids into) the draft-validation call sites so the delta-window semantics stay uniform across all three should_advance callers, or add a note that these paths intentionally rely only on the already-persisted reasoning_ended state."
+    }
+  ],
+  "actions_taken": [
+    "Read the diff and the full modified should_advance / _find_reasoning_end_index / trim_reasoning_for_advance in vllm/v1/structured_output/__init__.py.",
+    "Read the scheduler call site (vllm/v1/core/sched/scheduler.py:1646) and _update_request_with_output (:1907) to confirm new_token_ids is a true suffix of all_token_ids at call time (stop-trimming keeps len(all_token_ids) - len(new_token_ids) exact), so start is computed correctly.",
+    "Traced the deferred vs structural-tag branches: deferred branch returns False and drains post_marker internally while the scheduler skips its advance block; structural-tag branch returns True and the scheduler drains via trim_reasoning_for_advance. Verified there is no double-feed of post-marker tokens across the reasoning-end step and the following step (trim yields num_reasoning<=0 there, returning the full window).",
+    "Verified the marker-index math against the tests: end_offset = end_index - start, post_marker = new_token_ids[end_offset+1:] matches expected [271, 5005] and [271].",
+    "Checked reasoning-parser is_reasoning_end_streaming implementations (basic_parsers, gptoss, minimax_m3, abs_reasoning_parsers) to confirm the method is a pure predicate; the mutable streaming state lives in extract_reasoning_streaming, so _find_reasoning_end_index's repeated per-token invocation is side-effect-free. For basic (Qwen3, the #43388 target) and gptoss multi-token markers, per-token re-detection resolves the exact marker index (window >= full pattern length), so the conservative len-1 fallback effectively never triggers for real parsers.",
+    "Inspected StructuredOutputRequest.grammar (returns None if the compile Future is unresolved); the drain is guarded by grammar is not None, so it is safely skipped in the (practically unreachable at this stage) not-yet-compiled case.",
+    "Confirmed engine-core ordering in vllm/v1/engine/core.py: update_from_output (fixed path) runs before update_draft_token_ids / update_draft_token_ids_in_output, which is why the residual placeholder-window usage in those callers is low-impact.",
+    "Ran PYTHONPYCACHEPREFIX=$(mktemp -d) .venv/bin/python -m pytest tests/v1/structured_output/test_reasoning_structured_output.py -q -p no:cacheprovider => 15 passed.",
+    "Ran the related integration-style suite tests/v1/spec_decode/test_mtp_structured_output.py (uses real xgrammar) => 16 passed.",
+    "Ran tests/v1/core/test_scheduler.py::test_abort_request_when_structured_output_fsm_cannot_advance (exercises the changed call site) => 1 passed.",
+    "Checked line length of new source lines (<=88); the only >88 lines in the file are pre-existing and carry noqa/type-ignore, so no style regression introduced."
+  ]
+}

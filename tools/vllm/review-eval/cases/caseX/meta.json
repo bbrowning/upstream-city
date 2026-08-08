@@ -1,0 +1,4 @@
+{"id":"caseX","source":"vllm#51391","domains":["parser"],"base_sha":"8d9b52f7c2514490bdadfd5eb0c931e58625df2e","head_sha":"214eed10dbc0587a5878b55dad695ffb2494f4ee","has_answer_key":true,
+ "changed_files":["tests/parser/engine/test_inkling.py","vllm/parser/abstract_parser.py","vllm/parser/engine/streaming_parser_engine.py"],
+ "blind_reconstruction":"ORIGINAL pre-review head (before force-push to c8946cd). Feed diff base..head; check out head; DO NOT expose PR#, review comments, or the merge/fix. Fix ref (c8946cd) must be unreferenced.",
+ "gold":"shared streaming-engine + DelegatingParser change with inkling-only tests; correct call = flag cross-model blast radius + demand coverage (PR was reworked to preserve MiniMax multi-terminal wrappers)."}

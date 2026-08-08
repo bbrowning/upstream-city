@@ -1,0 +1,4 @@
+{"id":"caseY","source":"vllm#51238","domains":["parser"],"base_sha":"821717118fc26667dd474b9b0ab81d29259dfc5c","head_sha":"af6a4ad0f678a30b16205fc1822e6a598c94de88","has_answer_key":false,
+ "changed_files":["tests/parser/engine/test_parser_engine.py","vllm/parser/engine/adapters.py","vllm/parser/engine/parser_engine.py","vllm/parser/gemma4.py","vllm/parser/glm47_moe.py","vllm/parser/inkling.py","vllm/parser/kimi_k2.py","vllm/parser/mistral.py","vllm/parser/qwen3.py"],
+ "blind_reconstruction":"Open PR at eval time; current head. Withhold PR# + comments.",
+ "known_signal":"base + 6 per-model is_reasoning_end overrides; only base is parity-tested (coverage gap)."}

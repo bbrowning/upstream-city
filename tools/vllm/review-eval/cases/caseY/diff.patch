@@ -1,0 +1,340 @@
+diff --git a/tests/parser/engine/test_parser_engine.py b/tests/parser/engine/test_parser_engine.py
+index d97aafe36..8b98845fd 100644
+--- a/tests/parser/engine/test_parser_engine.py
++++ b/tests/parser/engine/test_parser_engine.py
+@@ -8,6 +8,7 @@ DeltaMessage / ExtractedToolCallInformation protocol.
+ from __future__ import annotations
+ 
+ import json
++from collections.abc import Sequence
+ from types import SimpleNamespace
+ from unittest.mock import MagicMock
+ 
+@@ -1694,3 +1695,79 @@ class TestDropSpecialTokens:
+             e.value for e in events if e.type == EventType.REASONING_CHUNK
+         )
+         assert "<bos>" not in reasoning_text
++
++
++# ── TestIsReasoningEndStreaming ──────────────────────────────────────
++
++
++class _CountingSequence(Sequence):
++    """Sequence that records how many elements were read.
++
++    Used to assert the decode-step check stays proportional to the step rather
++    than the whole sequence, without timing anything.
++    """
++
++    def __init__(self, data: list[int]):
++        self._data = data
++        self.reads = 0
++
++    def __getitem__(self, index):
++        self.reads += 1
++        return self._data[index]
++
++    def __len__(self) -> int:
++        return len(self._data)
++
++
++class TestIsReasoningEndStreaming:
++    """The scheduler calls this once per request per decode step while a
++    request is still reasoning (see ``should_advance`` in
++    vllm/v1/structured_output/__init__.py), so its cost must depend on the
++    step, not on the accumulated context.
++    """
++
++    def test_does_not_scan_the_whole_sequence(self):
++        engine = _make_engine()
++        all_ids = _CountingSequence([200] + [72] * 5000)
++
++        assert not engine.is_reasoning_end_streaming(all_ids, [72])
++
++        assert all_ids.reads == 0, (
++            "the decode-step check must not walk the accumulated sequence"
++        )
++
++    def test_detects_end_marker_in_the_step(self):
++        engine = _make_engine()
++        assert engine.is_reasoning_end_streaming([200, 72, 201], [201])
++
++    def test_start_marker_in_the_step_keeps_reasoning_open(self):
++        engine = _make_engine()
++        assert not engine.is_reasoning_end_streaming([201, 72, 200], [200])
++
++    def test_empty_delta_falls_back_to_the_full_predicate(self):
++        engine = _make_engine()
++        assert engine.is_reasoning_end_streaming([200, 72, 201], []) is True
++        assert engine.is_reasoning_end_streaming([201, 72, 200], []) is False
++
++    @pytest.mark.parametrize(
++        "sequence",
++        [
++            [200, 72, 201],
++            [200, 72, 72, 201, 73],
++            [201, 200, 72],
++            [200, 201, 200],
++            [72, 73],
++        ],
++    )
++    def test_agrees_with_full_predicate_while_reasoning(self, sequence):
++        """Stepping one token at a time must match the full-sequence answer
++        for every step up to the first one that ends reasoning."""
++        engine = _make_engine()
++        for end in range(1, len(sequence) + 1):
++            prefix = sequence[:end]
++            full = engine.is_reasoning_end(prefix)
++            assert (
++                engine.is_reasoning_end_streaming(prefix, [sequence[end - 1]]) == full
++            )
++            if full:
++                break
+diff --git a/vllm/parser/engine/adapters.py b/vllm/parser/engine/adapters.py
+index b9c4e42b1..f0919e9e9 100644
+--- a/vllm/parser/engine/adapters.py
++++ b/vllm/parser/engine/adapters.py
+@@ -10,7 +10,7 @@ any changes to the serving layer itself.
+ 
+ from __future__ import annotations
+ 
+-from collections.abc import Iterator, Sequence
++from collections.abc import Iterable, Iterator, Sequence
+ from contextlib import contextmanager
+ from typing import TYPE_CHECKING
+ 
+@@ -60,6 +60,17 @@ class ParserEngineReasoningAdapter(ReasoningParser):
+     def is_reasoning_end(self, input_ids: Sequence[int]) -> bool:
+         return self._parser_engine.is_reasoning_end(list(input_ids))
+ 
++    def is_reasoning_end_streaming(
++        self, input_ids: Sequence[int], delta_ids: Iterable[int]
++    ) -> bool:
++        # Forward to the engine rather than falling through to
++        # ReasoningParser.is_reasoning_end_streaming, which re-scans the whole
++        # sequence via is_reasoning_end on every decode step. input_ids is not
++        # materialized here: the engine only needs it on the empty-delta path.
++        return self._parser_engine.is_reasoning_end_streaming(
++            input_ids, list(delta_ids)
++        )
++
+     def adjust_initial_state_from_prompt(self, prompt_token_ids: Sequence[int]) -> None:
+         self._parser_engine.adjust_initial_state_from_prompt(prompt_token_ids)
+ 
+diff --git a/vllm/parser/engine/parser_engine.py b/vllm/parser/engine/parser_engine.py
+index 048e714cb..03b8cc885 100644
+--- a/vllm/parser/engine/parser_engine.py
++++ b/vllm/parser/engine/parser_engine.py
+@@ -609,6 +609,28 @@ class ParserEngine(Parser):
+             return False
+         return self._reasoning_ended
+ 
++    def is_reasoning_end_streaming(
++        self, input_ids: Sequence[int], delta_ids: Sequence[int]
++    ) -> bool:
++        """Reasoning-end check scoped to a single decode step.
++
++        The scheduler calls this once per structured-output request per decode
++        step while the request is still inside its reasoning block, so only the
++        tokens produced this step can change the verdict. The inherited default
++        re-scans the whole sequence, which makes the scheduler O(context) per
++        request per step.
++        """
++        end_id = self._reasoning_end_token_id
++        if end_id is None or not delta_ids:
++            return self.is_reasoning_end(list(input_ids))
++        start_id = self._reasoning_start_token_id
++        for token_id in reversed(delta_ids):
++            if token_id == end_id:
++                return True
++            if start_id is not None and token_id == start_id:
++                return False
++        return False
++
+     def extract_content_ids(self, input_ids: list[int]) -> list[int]:
+         end_id = self._reasoning_end_token_id
+         if end_id is not None:
+diff --git a/vllm/parser/gemma4.py b/vllm/parser/gemma4.py
+index 801bb190b..e5c084353 100644
+--- a/vllm/parser/gemma4.py
++++ b/vllm/parser/gemma4.py
+@@ -479,6 +479,16 @@ class Gemma4Parser(ParserEngine):
+                 return True
+         return True
+ 
++    def is_reasoning_end_streaming(
++        self, input_ids: Sequence[int], delta_ids: Sequence[int]
++    ) -> bool:
++        # Deliberately keeps the full-sequence scan. Unlike the other engines,
++        # this predicate defaults to True when the sequence holds no marker at
++        # all, and <|turn>/<tool_response> flip meaning with _thinking_enabled,
++        # so a delta-scoped answer cannot tell "no marker yet in this step" from
++        # "no marker anywhere" without carrying state across steps.
++        return self.is_reasoning_end(list(input_ids))
++
+     def _prompt_ends_in_open_reasoning(self, prompt_token_ids: Sequence[int]) -> bool:
+         """Whether the prompt tail is inside an open ``<|channel>`` block.
+ 
+diff --git a/vllm/parser/glm47_moe.py b/vllm/parser/glm47_moe.py
+index 8aa4feef2..e336fc0ba 100644
+--- a/vllm/parser/glm47_moe.py
++++ b/vllm/parser/glm47_moe.py
+@@ -14,6 +14,7 @@ from __future__ import annotations
+ 
+ import functools
+ import json
++from collections.abc import Sequence
+ from typing import TYPE_CHECKING
+ 
+ import regex as re
+@@ -211,6 +212,13 @@ class Glm47MoeParser(ParserEngine):
+             return True
+         return super().is_reasoning_end(input_ids)
+ 
++    def is_reasoning_end_streaming(
++        self, input_ids: Sequence[int], delta_ids: Sequence[int]
++    ) -> bool:
++        if not self.thinking_enabled:
++            return True
++        return super().is_reasoning_end_streaming(input_ids, delta_ids)
++
+     def extract_content_ids(self, input_ids: list[int]) -> list[int]:
+         if not self.thinking_enabled:
+             return input_ids
+diff --git a/vllm/parser/inkling.py b/vllm/parser/inkling.py
+index 994382539..37d123a20 100644
+--- a/vllm/parser/inkling.py
++++ b/vllm/parser/inkling.py
+@@ -349,6 +349,23 @@ class InklingParser(ParserEngine):
+                 return True
+         return False
+ 
++    def is_reasoning_end_streaming(
++        self, input_ids: Sequence[int], delta_ids: Sequence[int]
++    ) -> bool:
++        if not delta_ids:
++            return self.is_reasoning_end(list(input_ids))
++        vocab = self.vocab
++        thinking_id = vocab.get(CONTENT_THINKING)
++        text_id = vocab.get(CONTENT_TEXT)
++        model_id = vocab.get(MESSAGE_MODEL)
++        end_sampling_id = vocab.get(CONTENT_MODEL_END_SAMPLING)
++        for token_id in reversed(delta_ids):
++            if token_id in (thinking_id, model_id):
++                return False
++            if token_id in (text_id, end_sampling_id):
++                return True
++        return False
++
+     def count_reasoning_tokens(self, token_ids: Sequence[int]) -> int:
+         vocab = self.vocab
+         thinking_id = vocab.get(CONTENT_THINKING)
+diff --git a/vllm/parser/kimi_k2.py b/vllm/parser/kimi_k2.py
+index 03a0aa6ce..968f54ad1 100644
+--- a/vllm/parser/kimi_k2.py
++++ b/vllm/parser/kimi_k2.py
+@@ -254,6 +254,25 @@ class KimiK2Parser(ParserEngine):
+                 return True
+         return False
+ 
++    def is_reasoning_end_streaming(
++        self, input_ids: Sequence[int], delta_ids: Sequence[int]
++    ) -> bool:
++        if not self.thinking_enabled:
++            return True
++        if not delta_ids:
++            return self.is_reasoning_end(list(input_ids))
++        start_id = self._start_token_id
++        end_id = self._end_token_id
++        tool_section_id = self._tool_section_start_token_id
++        for token_id in reversed(delta_ids):
++            if start_id is not None and token_id == start_id:
++                return False
++            if end_id is not None and token_id == end_id:
++                return True
++            if tool_section_id is not None and token_id == tool_section_id:
++                return True
++        return False
++
+     def extract_content_ids(self, input_ids: list[int]) -> list[int]:
+         if not self.thinking_enabled:
+             return input_ids
+diff --git a/vllm/parser/mistral.py b/vllm/parser/mistral.py
+index edc701862..c97b13e5f 100644
+--- a/vllm/parser/mistral.py
++++ b/vllm/parser/mistral.py
+@@ -909,6 +909,26 @@ class MistralParser(ParserEngine):
+                     return True
+         return False
+ 
++    def is_reasoning_end_streaming(
++        self, input_ids: Sequence[int], delta_ids: Sequence[int]
++    ) -> bool:
++        if self._reasoning_encoding == "none":
++            return True
++        if not delta_ids:
++            return self.is_reasoning_end(list(input_ids))
++        end_id = self._reasoning_end_token_id
++        start_id = self._reasoning_start_token_id
++        bot_id = self.bot_token_id
++        for token_id in reversed(delta_ids):
++            if end_id is not None and token_id == end_id:
++                return True
++            # [TOOL_CALLS] acts as an implicit reasoning-end marker
++            if bot_id is not None and token_id == bot_id:
++                return True
++            if start_id is not None and token_id == start_id:
++                return False
++        return False
++
+     def extract_reasoning(
+         self,
+         model_output: str,
+diff --git a/vllm/parser/qwen3.py b/vllm/parser/qwen3.py
+index 0041a46ea..efbe78f1f 100644
+--- a/vllm/parser/qwen3.py
++++ b/vllm/parser/qwen3.py
+@@ -18,6 +18,7 @@ from __future__ import annotations
+ 
+ import functools
+ import json
++from collections.abc import Sequence
+ from typing import TYPE_CHECKING
+ 
+ import regex as re
+@@ -274,3 +275,35 @@ class Qwen3Parser(ParserEngine):
+                         continue
+                     return True
+         return False
++
++    def is_reasoning_end_streaming(
++        self, input_ids: Sequence[int], delta_ids: Sequence[int]
++    ) -> bool:
++        if not delta_ids:
++            return self.is_reasoning_end(list(input_ids))
++        end_id = self._reasoning_end_token_id
++        start_id = self._reasoning_start_token_id
++        tool_call_id = self._tool_call_token_id
++        tool_call_end_id = self._tool_call_end_token_id
++        for i in range(len(delta_ids) - 1, -1, -1):
++            token_id = delta_ids[i]
++            if end_id is not None and token_id == end_id:
++                return True
++            # An open <tool_call> ends reasoning; one already closed later in this
++            # step does not. Tokens after i within the step are all the sequence
++            # has past this point.
++            if (
++                tool_call_id is not None
++                and token_id == tool_call_id
++                and (
++                    tool_call_end_id is None
++                    or not any(
++                        delta_ids[j] == tool_call_end_id
++                        for j in range(i + 1, len(delta_ids))
++                    )
++                )
++            ):
++                return True
++            if start_id is not None and token_id == start_id:
++                return False
++        return False

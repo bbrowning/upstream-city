@@ -1,0 +1,21 @@
+{
+  "verdict": "approve_with_nits",
+  "summary": "Correct, well-scoped fix that makes the opening <arg_value> tag optional in the GLM-4.7 arg regexes, so a malformed tool call that drops the opening tag (value and closing tag intact) recovers instead of collapsing to {}. Well-formed parsing is preserved and both streaming and non-streaming paths are covered by new tests; all 17 tests in the file pass.",
+  "findings": [
+    {
+      "severity": "nit",
+      "file": "vllm/parser/glm47_moe.py",
+      "line": "49-58",
+      "detail": "Recovery path is slightly asymmetric on leading whitespace. When the opening <arg_value> tag is present, the \\s* stops at the tag and the value's leading whitespace is preserved (e.g. '<arg_value>  Beijing  </arg_value>' -> '  Beijing  '). When the opening tag is missing, \\s* now sits directly in front of the value and consumes its leading whitespace, so '<arg_key>k</arg_key>  x  </arg_value>' yields 'x  ' (leading spaces dropped) rather than '  x  '. Harmless for typical scalar args, but for a whitespace-significant value (e.g. an indented code/text argument) emitted without the opening tag, the recovered argument silently differs from what the model produced. This is intended/documented and tested (the newline test relies on it), so it is a nit, not a defect.",
+      "suggested_fix": "If leading-whitespace fidelity on the recovery path matters, anchor the optional tag so whitespace is only skipped when the tag is actually consumed, e.g. '</arg_key>(?:\\s*<arg_value>)?(?P<value>.*?)</arg_value>'. Otherwise leave as-is and treat the trimming as accepted behavior."
+    }
+  ],
+  "actions_taken": [
+    "Read the diff: vllm/parser/glm47_moe.py (made the opening <arg_value> optional in _ARG_RE and _PARTIAL_ARG_RE) and tests/tool_parsers/test_glm47_moe_tool_parser.py (added 3 non-streaming + 1 streaming recovery tests).",
+    "Traced regex behavior by hand for well-formed, missing-tag, newline, multi-arg, empty-value, and value-containing-'<' inputs; confirmed the greedy optional (?:<arg_value>)? consumes the tag when present (well-formed value + its leading whitespace preserved) and skips it when absent (malformed value recovered).",
+    "Checked arg_converter usage in vllm/parser/engine/parser_engine.py: streaming uses _compute_arg_delta (partial=True) guarded by _safe_arg_prefix + prefix-diff, and _flush_arg_converter/_build_extracted_result (partial=False) at tool end, so the partial regex now matching '<arg_key>k</arg_key>' with an empty value does not corrupt the final assembled arguments.",
+    "Grepped for other consumers of _ARG_RE/_PARTIAL_ARG_RE/_glm47_arg_converter; they are local to glm47_moe.py (other parsers have their own converters), so blast radius is confined to the GLM-4.7 parser.",
+    "Ran: python -m pytest tests/tool_parsers/test_glm47_moe_tool_parser.py -q (via the provided venv, isolated PYTHONPYCACHEPREFIX, no cacheprovider) -> 17 passed in ~7s, including the 4 new tests and the pre-existing well-formed/whitespace-preservation tests.",
+    "Confirmed read-only: git status --porcelain empty after review; HEAD still at 9dee6db1bbce603ab09a88c44470640e7d63e7d0."
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "verdict": "approve_with_nits",
+  "summary": "Making the opening <arg_value> tag optional in the GLM-4.7 arg regexes correctly recovers the documented missing-tag failure mode without affecting well-formed output; verified by the new tests and by manual analysis of the whitespace/multi-arg paths. Change is confined to glm47_moe.py (no cross-model blast radius). One minor streaming edge: the partial regex now matches with an empty value, so during streaming the key is emitted with an unterminated string one token earlier than before, which yields invalid JSON if a generation is truncated in that narrow window.",
+  "findings": [
+    {
+      "severity": "minor",
+      "file": "vllm/parser/glm47_moe.py",
+      "line": "54-58",
+      "detail": "_PARTIAL_ARG_RE now makes <arg_value> optional while (?P<value>.*)$ can match empty, so it matches as soon as <arg_key>city</arg_key> is seen (value=''). In _glm47_arg_converter's partial branch (line 69-73) this inserts {\"city\": \"\"}, and _compute_arg_delta (parser_engine.py:935) streams the unterminated `{\"city\": \"` via the streamable-string-keys path BEFORE any value arrives. Concrete failure: streaming get_weather with a `city` arg where generation is truncated (max_tokens / disconnect) after `</arg_key>` but before the value — assembled streamed arguments are `{\"city\": \"` (invalid JSON: unterminated string), whereas the pre-change regex produced `{}`. Verified empirically: new regex -> '{\"city\": \"'; old regex -> '{}'. This only widens an already-existing truncation window by one token (string values already stream unterminated once <arg_value> arrives), so impact is small.",
+      "suggested_fix": "Guard the partial-branch insertion on a non-empty value so recovery still fires once value content arrives but the empty pre-value state is not streamed, e.g. `if key and match.group(\"value\"):` in _glm47_arg_converter."
+    },
+    {
+      "severity": "nit",
+      "file": "tests/tool_parsers/test_glm47_moe_tool_parser.py",
+      "line": "166-200",
+      "detail": "The recovery fixtures assume GLM-4.7's failure mode is 'opening <arg_value> dropped, closing </arg_value> intact'. This is a fabricated sequence and (in this review) unverifiable against the real model's chat-template/output. Since the change alters parsed tool-call output, the repo's own contribution policy (AGENTS.md: 'Run model evals for model-affecting changes') calls for confirming the fixture matches actual GLM-4.7 output rather than only internal consistency.",
+      "suggested_fix": "Include a model-eval / real-output sample in the PR confirming the missing-opening-tag-only shape is what GLM-4.7 actually emits under load."
+    }
+  ],
+  "actions_taken": [
+    "Read the diff and the changed source vllm/parser/glm47_moe.py (regexes _ARG_RE line 49-53, _PARTIAL_ARG_RE line 54-58; converter _glm47_arg_converter line 61-75) and the test file tests/tool_parsers/test_glm47_moe_tool_parser.py.",
+    "Traced the engine data flow: streaming_parser_engine.py (tool_args_json=False emits tags as ARG_VALUE_CHUNK; TOOL_ARGS arg-tag transitions), incremental_lexer.py (confirmed prefix-buffering means the converter only ever sees complete tags during streaming, so a partially-arrived <arg_value> is never captured as value), and parser_engine.py _compute_arg_delta / _safe_arg_prefix / _flush_arg_converter for streaming delta assembly.",
+    "grep confirmed _ARG_RE/_PARTIAL_ARG_RE are used only in glm47_moe.py -> change is confined to GLM-4.7, no shared-engine cross-model regression.",
+    "Ran pytest tests/tool_parsers/test_glm47_moe_tool_parser.py -> 17 passed (incl. 4 new recovery tests).",
+    "Ran pytest tests/tool_parsers/test_glm4_moe_tool_parser.py tests/reasoning/test_glm4_moe_reasoning_parser.py -> 22 passed (sibling GLM parsers unaffected).",
+    "Ran pytest tests/parser/engine/ -> 3737 passed (shared engine unaffected).",
+    "Wrote a read-only experiment driving Glm47MoeModelToolParser streaming: truncation after </arg_key> produced '{\"city\": \"' (json.loads FAILS: unterminated string); full well-formed produced '{\"city\": \"Beijing\"}'. Re-ran the same experiment with the pre-diff regexes monkeypatched in and truncation produced '{}', confirming the minor regression."
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "verdict": "approve_with_nits",
+  "summary": "Correct, well-scoped bugfix: dropping str.strip() on MiniMax M2 parameter values preserves surrounding whitespace, which is argument data for this inline `<parameter name=...>value</parameter>` format. It aligns minimax with the glm47 converter (which already keeps values verbatim), is covered by tests that fail without the change, and does not touch shared engine/config so there is no cross-model blast radius. One nit: the sibling qwen3 converter still strips (same defect class).",
+  "findings": [
+    {
+      "severity": "nit",
+      "file": "vllm/parser/qwen3.py",
+      "line": "65, 74",
+      "detail": "The qwen3 arg converter still applies value.strip() to parameter values (lines 65 and 74), which is the same defect this diff fixes for minimax_m2 and which the new test's own docstring flags as the same class of bug. It is correctly out of scope for this PR, but worth tracking so it is not forgotten: a qwen3 string argument like \"    def foo():\\n\" would be corrupted the same way. This diff itself is fine; noting for follow-up.",
+      "suggested_fix": "In a separate change, drop the .strip() on the value in _qwen3_arg_converter (keep the name/key strip), matching this fix and the glm47/minimax verbatim behavior."
+    }
+  ],
+  "actions_taken": [
+    "Read the change: vllm/parser/minimax_m2.py (removed .strip() on match.group('value') at the complete-match loop ~line 74 and the partial branch ~line 88) and tests/tool_parsers/test_minimax_m2_tool_parser.py (new TestParameterWhitespace class).",
+    "Verified the documented format at the top of minimax_m2.py is inline (`<parameter name=\"city\">Seattle</parameter>`), so surrounding whitespace inside the value is genuine argument data, not formatting; the fix is grounded.",
+    "Compared sibling converters: vllm/parser/glm47_moe.py keeps values verbatim (lines 60, 68) confirming the change's stated precedent; vllm/parser/qwen3.py still strips values (lines 65, 74) -> nit above.",
+    "Traced streaming: vllm/parser/engine/parser_engine.py _compute_arg_delta / _flush_arg_converter / _safe_arg_prefix -- verbatim values keep the JSON prefix monotonic (startswith invariant) as tokens arrive; if anything, strip was the non-monotonic path.",
+    "Checked type coercion for verbatim (whitespace-bearing) scalars: vllm/tool_parsers/utils.py coerce_to_schema_type -- int()/float()/json.loads tolerate surrounding whitespace and boolean explicitly .strip()s, so preserving whitespace does not break coercion of typed args (the only non-stripping branch is 'null' matching, an unrealistic corner given inline scalar output).",
+    "Ran: PYTHONPYCACHEPREFIX=$(mktemp -d) .venv/bin/python -m pytest tests/tool_parsers/test_minimax_m2_tool_parser.py -q -p no:cacheprovider -> 24 passed (5 new whitespace tests, incl. streaming, plus 19 pre-existing regression tests). No existing test relied on the stripping behavior.",
+    "Confirmed the diff only touches vllm/parser/minimax_m2.py and its test file (no shared engine/config edits), so other engine-backed parsers are unaffected."
+  ]
+}

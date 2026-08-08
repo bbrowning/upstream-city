@@ -1,0 +1,11 @@
+{
+  "case": "caseW",
+  "gold_catch": { "review1": "catch", "review2": "miss" },
+  "signal":        { "review1": 1, "review2": 0 },
+  "noise":         { "review1": 0, "review2": 0 },
+  "groundedness":  { "review1": 5, "review2": 4 },
+  "false_positives": { "review1": [], "review2": [] },
+  "more_useful_to_maintainer": "review1",
+  "rationale": "Both correctly approve this whitespace-preservation fix and both actually ran the tests (verified: 24 passed). Review 1 makes the gold catch: it flags that the sibling qwen3 arg converter still applies value.strip() at lines 65/74 (verified correct against the code), names it the same defect class, gives a concrete corrupted-value example, and correctly scopes it as follow-up while confirming glm47 keeps values verbatim. Review 2 approves outright with zero findings and never raises the cross-model gap, so it misses the highest-signal call per the answer key despite its narrower analysis being accurate. Review 1 wins on the cross-model blast-radius reflex.",
+  "notes": "Both reviews genuinely ran pytest (independently reproduced: 24 passed). Review 1 also grepped/compared sibling converters and its qwen3 line citations (65,74) are accurate; its glm47-verbatim claim (60,68) checks out. Neither review named minicpm5xml, which also strips value text (lines 363/395/448) and is the other sibling the real PR extended the fix to."
+}

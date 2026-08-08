@@ -1,0 +1,11 @@
+{
+  "case": "caseG",
+  "gold_catch": { "review1": "miss", "review2": "miss" },
+  "signal":        { "review1": 1, "review2": 1 },
+  "noise":         { "review1": 1, "review2": 0 },
+  "groundedness":  { "review1": 4, "review2": 5 },
+  "false_positives": { "review1": [], "review2": [] },
+  "more_useful_to_maintainer": "review2",
+  "rationale": "Both reviews correctly understood and endorsed the #43388 delta-window fix, approved with nits, and made no false claims (all verified: the request.py field comment is now inaccurate, the two other should_advance callers at 1975/2004 do skip new_token_ids, and engine-core runs update_from_output before both draft callers). Neither surfaced the gold signal — the surprising grammar-state mutation inside the query-named should_advance() or whether the defer+drain machinery is even needed given rejection sampling already validates verified tokens — so both miss (expected: this case is out-of-domain for the personas). Review 2 wins narrowly: its single finding (the three callers now diverge on delta-window semantics) is a concrete, well-reasoned maintainability issue with verified impact analysis, whereas Review 1 pairs one real-but-minor comment-accuracy nit with a generic 'add integration coverage' suggestion, and Review 2 additionally ran the real-xgrammar mtp and scheduler suites.",
+  "notes": "Answer key flags this as out-of-domain (structured output + spec decode, no persona), so the shared gold miss is signal about the domain gap, not a clear reviewer failure. I independently re-ran the unit suite (15 passed) and verified the field comment, the 1975/2004 callers, and the engine-core update_from_output-before-draft ordering. Review 2 additionally ran cross-component tests (test_mtp_structured_output.py with real xgrammar, test_scheduler.py) beyond the unit file; Review 1 ran only the unit suite."
+}

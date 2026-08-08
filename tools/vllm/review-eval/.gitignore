@@ -1,0 +1,6 @@
+# Per-case detached worktrees + CPU venvs built for A/B runs (regenerable via
+# tools/vllm/vllm-testenv.sh; never commit — large + machine-specific).
+.wt/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/

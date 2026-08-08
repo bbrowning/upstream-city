@@ -1,0 +1,22 @@
+{
+  "verdict": "approve_with_nits",
+  "summary": "Correct, tightly-scoped fix: in the combined-parser reasoning pass (skip_tool_parsing) Inkling's shared block-end token was being forwarded as visible content when it closed a plain text/reasoning block, leaking the marker; the engine now distinguishes a block-end that belongs to a forwarded tool call (passthrough open -> forward for the tool pass) from an ordinary block-end (passthrough closed -> apply the normal transition, dropping the marker). Behavior change is confined to skip mode and to the two configs whose tool-end terminal is shared with a non-tool transition (inkling, gemma4); both verified to still parse correctly, and the marker carried on REASONING_END/TOOL_CALL_END event values is ignored by the event->delta conversion so it cannot leak.",
+  "findings": [
+    {
+      "severity": "nit",
+      "file": "tests/parser/engine/test_inkling.py",
+      "line": "349-370",
+      "detail": "The new streaming regression test TestStreaming::test_combined_parser_plain_text_drops_block_end only asserts content == 'plain answer'; unlike its non-streaming twin (lines 205-220) it does not assert that reasoning and tool_calls are absent. As written it would still pass if the streaming path leaked the block-end marker into reasoning or emitted a spurious tool call, so it under-covers the streaming path it is meant to guard.",
+      "suggested_fix": "Accumulate/assert reasoning and tool_calls too (e.g. assert no reasoning and no tool_calls across the deltas), mirroring the non-streaming test's three assertions."
+    }
+  ],
+  "actions_taken": [
+    "Read the diff and surrounding code: vllm/parser/engine/streaming_parser_engine.py (skip-mode branch in _on_terminal, new _tool_end_terminals set, _tool_call_passthrough_open flag reset in reset()), vllm/parser/abstract_parser.py (_extract_tool_calls no-tools branch), vllm/parser/inkling.py, vllm/parser/gemma4.py configs, vllm/parser/engine/parser_engine.py (event->delta conversion), vllm/parser/engine/adapters.py, and tests/parser/engine/test_inkling.py.",
+    "Confirmed via parser_engine.py that REASONING_END (lines 505-511, 732-733) and TOOL_CALL_END values are not appended to reasoning/content, so the marker text carried by the new apply_transition path does not leak.",
+    "Cross-model blast-radius check: introspected every engine ParserEngineConfig and found only inkling and gemma4 have a tool-end terminal that is also used in a non-tool-state transition (the only configs the skip-mode change alters); all others fall through unchanged.",
+    "Ran: python -m pytest tests/parser/engine/test_inkling.py -q -p no:cacheprovider -> 55 passed.",
+    "Ran the whole tests/parser/ suite -> 3987 passed, 39 failed; all 39 failures are tests/parser/test_harmony.py failing with openai_harmony 'error downloading or loading vocab file' (network fetch blocked in this air-gapped env); harmony.py is untouched by the diff, so these are pre-existing environment failures, not a regression.",
+    "Empirically drove the gemma4 combined parser (skip-mode reasoning pass) through ParserManager on '<|channel>thought\\nthink hard<channel|><|tool_call>call:get_weather{city:<|\"|>SF<|\"|>}<tool_call|>' -> reasoning='think hard', content=None, tool_calls=[get_weather {\"city\":\"SF\"}], no marker leak; confirms no cross-model regression.",
+    "Verified the _tool_call_passthrough_open flag lifecycle: reset() clears it, and initialize_streaming() only resets once per stream (guarded by _streaming_initialized), so it persists correctly across deltas; in skip mode the engine never enters a tool state, so the not-passthrough apply_transition branch only ever runs benign non-tool-state transitions (never emits a spurious TOOL_CALL_END)."
+  ]
+}

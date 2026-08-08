@@ -1,0 +1,11 @@
+{
+  "case": "caseR",
+  "gold_catch": { "review1": "miss", "review2": "miss" },
+  "signal": { "review1": 0, "review2": 0 },
+  "noise": { "review1": 0, "review2": 0 },
+  "groundedness": { "review1": 4, "review2": 4 },
+  "false_positives": { "review1": [], "review2": [] },
+  "more_useful_to_maintainer": "tie",
+  "rationale": "Both reviews approved with zero findings and both missed the gold catch: neither flagged that the new else-branch recovery `self.model_tokenizer.decode(current_token_ids)` is not multi-token-character safe (no holdback; unlike the sibling `if self._engine_based:` branch which flushes via reasoning_parser.finish_streaming()/flush_delta.content), and neither challenged the fabricated `_FakeEngineReasoningParser` as unrealistic coverage or demanded a real qwen3-reasoning+hermes-tool regression test. Their verification work is accurate and I confirmed their claims (new test passes; the 2 kimi_k2 failures are pre-existing and untouched by the diff). Tie because both reach the same wrong bottom line (approve where request_changes was warranted) with no actionable finding.",
+  "notes": "Review 2 did more genuine cross-model verification (ran combined engine reasoning+tool suites and full parser suites, identified which real parsers set engine_based_streaming=True) and even noted the test uses a fake reasoning parser with the real Hermes2Pro tool parser and real Qwen3 tokenizer -- but it framed the fake as adequate coverage rather than a gap, so it does not rise to partial. Review 1's test claims (14 passed / 2 failed, new test passes) independently verified as accurate. Neither review ran a real engine-based reasoning + real non-engine tool parser combination, which is the coverage the answer key requires."
+}

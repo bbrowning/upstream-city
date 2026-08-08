@@ -1,0 +1,114 @@
+diff --git a/tests/tool_parsers/test_glm47_moe_tool_parser.py b/tests/tool_parsers/test_glm47_moe_tool_parser.py
+index 224fea08d..13409d9c7 100644
+--- a/tests/tool_parsers/test_glm47_moe_tool_parser.py
++++ b/tests/tool_parsers/test_glm47_moe_tool_parser.py
+@@ -163,6 +163,42 @@ class TestGlm47ExtractToolCalls:
+         assert r.tools_called
+         assert json.loads(r.tool_calls[0].function.arguments) == {"city": "  Beijing  "}
+ 
++    def test_missing_opening_arg_value_tag(self, glm47_tool_parser, mock_request):
++        # GLM-4.7 sometimes drops the opening <arg_value> tag under load while
++        # the value and closing tag stay intact; the call is still recoverable
++        # and must not collapse to "{}" (issue #49248).
++        out = "<tool_call>get_weather<arg_key>city</arg_key>Beijing</arg_value></tool_call>"
++        r = glm47_tool_parser.extract_tool_calls(out, request=mock_request)
++        assert r.tools_called
++        assert json.loads(r.tool_calls[0].function.arguments) == {"city": "Beijing"}
++
++    def test_missing_opening_arg_value_tag_with_newline(
++        self, glm47_tool_parser, mock_request
++    ):
++        # The structural newline that would precede <arg_value> is not part of
++        # the value, so it is stripped; the closing tag still delimits the value.
++        out = "<tool_call>get_weather\n<arg_key>city</arg_key>\nBeijing</arg_value>\n</tool_call>"
++        r = glm47_tool_parser.extract_tool_calls(out, request=mock_request)
++        assert r.tools_called
++        assert json.loads(r.tool_calls[0].function.arguments) == {"city": "Beijing"}
++
++    def test_missing_opening_arg_value_tag_multiple_args(
++        self, glm47_tool_parser, mock_request
++    ):
++        # A malformed arg followed by a well-formed one both parse correctly.
++        out = (
++            "<tool_call>get_weather"
++            "<arg_key>city</arg_key>Beijing</arg_value>"
++            "<arg_key>date</arg_key><arg_value>2026-01-01</arg_value>"
++            "</tool_call>"
++        )
++        r = glm47_tool_parser.extract_tool_calls(out, request=mock_request)
++        assert r.tools_called
++        assert json.loads(r.tool_calls[0].function.arguments) == {
++            "city": "Beijing",
++            "date": "2026-01-01",
++        }
++
+     def test_content_before(self, glm47_tool_parser, mock_request):
+         out = "Checking.<tool_call>get_current_date</tool_call>"
+         r = glm47_tool_parser.extract_tool_calls(out, request=mock_request)
+@@ -266,3 +302,40 @@ class TestGlm47Streaming:
+         ]
+         args = json.loads("".join(arguments))
+         assert args["city"] == "Beijing"
++
++    def test_missing_opening_arg_value_tag(self, glm47_tool_parser, mock_request):
++        # Streaming counterpart of the malformed-tag recovery: the opening
++        # <arg_value> chunk never arrives, but the value still streams and the
++        # assembled arguments are valid JSON (issue #49248).
++        _reset(glm47_tool_parser)
++        chunks = [
++            "<tool_call>",
++            "get_weather\n",
++            "<arg_key>city</arg_key>",
++            "Beijing",
++            "</arg_value>",
++            "</tool_call>",
++        ]
++        current_text = ""
++        deltas = []
++        for chunk in chunks:
++            current_text += chunk
++            delta = glm47_tool_parser.extract_tool_calls_streaming(
++                previous_text="",
++                current_text=current_text,
++                delta_text=chunk,
++                previous_token_ids=[],
++                current_token_ids=[],
++                delta_token_ids=[],
++                request=mock_request,
++            )
++            if delta:
++                deltas.append(delta)
++        arguments = [
++            tool_call.function.arguments
++            for delta in deltas
++            for tool_call in (delta.tool_calls or [])
++            if tool_call.function and tool_call.function.arguments
++        ]
++        args = json.loads("".join(arguments))
++        assert args["city"] == "Beijing"
+diff --git a/vllm/parser/glm47_moe.py b/vllm/parser/glm47_moe.py
+index 8aa4feef2..595a502bf 100644
+--- a/vllm/parser/glm47_moe.py
++++ b/vllm/parser/glm47_moe.py
+@@ -41,14 +41,19 @@ ARG_KEY_END = "</arg_key>"
+ ARG_VALUE_START = "<arg_value>"
+ ARG_VALUE_END = "</arg_value>"
+ 
++# The opening ``<arg_value>`` tag is optional: GLM-4.7-family models
++# sporadically skip it under load (e.g. ``<arg_key>k</arg_key>value</arg_value>``)
++# while the value and closing tag stay intact. The closing ``</arg_value>``
++# still delimits the value, so well-formed output is unaffected while the
++# recoverable, malformed call no longer silently collapses to ``{}``.
+ _ARG_RE = re.compile(
+     r"<arg_key>(?P<key>.*?)</arg_key>\s*"
+-    r"<arg_value>(?P<value>.*?)</arg_value>",
++    r"(?:<arg_value>)?(?P<value>.*?)</arg_value>",
+     re.DOTALL,
+ )
+ _PARTIAL_ARG_RE = re.compile(
+     r"<arg_key>(?P<key>.*?)</arg_key>\s*"
+-    r"<arg_value>(?P<value>.*)$",
++    r"(?:<arg_value>)?(?P<value>.*)$",
+     re.DOTALL,
+ )
+ 

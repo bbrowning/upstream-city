@@ -1,0 +1,14 @@
+{
+  "case": "caseX",
+  "gold_catch": { "review1": "partial", "review2": "partial" },
+  "signal":        { "review1": 1, "review2": 0 },
+  "noise":         { "review1": 0, "review2": 1 },
+  "groundedness":  { "review1": 4, "review2": 3 },
+  "false_positives": {
+    "review1": [],
+    "review2": ["Treats the green existing engine suite (3741 passing) as proof of 'no cross-model regression', but the regression-catching tests do not exist at this commit, so passing existing tests cannot establish the shared-engine/DelegatingParser change is safe for other models"]
+  },
+  "more_useful_to_maintainer": "review1",
+  "rationale": "Both reviews correctly explained the fix and both recognized the change lives in the shared streaming engine / DelegatingParser, but neither demanded cross-model regression coverage, so both are partial on the gold catch (in reality the PR was reworked to preserve MiniMax multi-terminal wrappers and add ~330 lines of cross-model tests). Review 1 did a rigorous, independently-verifiable blast-radius analysis (correctly finding only inkling+gemma4's skip-mode behavior actually changes) and surfaced a real streaming-test coverage gap, though it under-weighted the abstract_parser.py all-engine-models content override and the single-boolean fragility for multi-terminal wrappers. Review 2 offered an elegant in-memory counterfactual revert and correct abstract_parser asymmetry reasoning but leaned on the invalid 'existing engine tests stay green => no regression' assurance and surfaced zero actionable findings. Review 1 wins: its checkable claims all verify true and it flags a concrete fix, whereas Review 2's central safety argument is exactly the fallacy the answer key warns against.",
+  "notes": "Both reviews genuinely ran tests (Review 1: tests/parser/ -> 3987 passed, 39 failed, all correctly attributed to blocked-network openai_harmony vocab downloads in this air-gapped env, not a regression; Review 2: tests/parser/engine/ -> 3741 passed plus an in-memory revert to prove the counterfactual). I independently verified via config introspection that Review 1's load-bearing claim is TRUE: only inkling and gemma4 have a tool-end terminal (carrying TOOL_CALL_END) that is also reachable from a non-tool state, so the new apply_transition drop-branch only alters those two; minimax/qwen3/deepseek_v32/deepseek_v4/nemotron_v3/kimi_k2/glm47_moe have tool-end terminals reachable only from tool states. The gold gap for both: neither demanded added cross-model regression coverage before merge; the fix ships inkling-only tests while touching shared paths used by every engine-backed model."
+}

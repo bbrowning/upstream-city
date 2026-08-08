@@ -1,0 +1,127 @@
+diff --git a/tests/parser/engine/test_inkling.py b/tests/parser/engine/test_inkling.py
+index 582783fd5..1782ab390 100644
+--- a/tests/parser/engine/test_inkling.py
++++ b/tests/parser/engine/test_inkling.py
+@@ -140,6 +140,15 @@ def _collect_reasoning(results) -> str:
+     return "".join(d.reasoning for d, _ in results if d and d.reasoning)
+ 
+ 
++def _combined_parser(mock_tokenizer):
++    parser_cls = ParserManager.get_parser(
++        tool_parser_name="inkling",
++        reasoning_parser_name="inkling",
++        enable_auto_tools=True,
++    )
++    return parser_cls(mock_tokenizer, [])
++
++
+ class TestArgConverter:
+     def test_complete_wrapper(self):
+         raw = '{"name":"get_weather","args":{"city":"SF"}}'
+@@ -193,6 +202,23 @@ class TestNonStreaming:
+         assert content == "hello world"
+         assert tools is None
+ 
++    @pytest.mark.parametrize("suffix", [END_MESSAGE, END_SAMPLING])
++    def test_combined_parser_plain_text_drops_block_end(
++        self, mock_tokenizer, mock_request, suffix
++    ):
++        mock_request.tools = [{"type": "function", "function": {"name": "f"}}]
++        parser = _combined_parser(mock_tokenizer)
++
++        reasoning, content, tools = parser.parse(
++            f"{TEXT_START}plain answer{suffix}",
++            mock_request,
++            enable_auto_tools=True,
++        )
++
++        assert reasoning is None
++        assert content == "plain answer"
++        assert tools is None
++
+     def test_reasoning_text_tool(self, parser, mock_request):
+         text = (
+             f"{THINK_START}I should check the weather.{END_MESSAGE}"
+@@ -320,6 +346,29 @@ class TestStreaming:
+         results = _stream_text_only(parser, mock_request, text, 9)
+         assert collect_content(results) == "hello"
+ 
++    @pytest.mark.parametrize("suffix", [END_MESSAGE, END_SAMPLING])
++    def test_combined_parser_plain_text_drops_block_end(
++        self, mock_tokenizer, mock_request, suffix
++    ):
++        mock_request.tools = [{"type": "function", "function": {"name": "f"}}]
++        parser = _combined_parser(mock_tokenizer)
++        prompt_token_ids = [_TML_VOCAB[END_MESSAGE], _TML_VOCAB[MSG_MODEL]]
++        tokens = _tokenize(f"{TEXT_START}plain answer{suffix}")
++        content = ""
++
++        for index, (token_id, text) in enumerate(tokens):
++            delta = parser.parse_delta(
++                text,
++                [token_id],
++                mock_request,
++                prompt_token_ids=prompt_token_ids if index == 0 else None,
++                finished=index == len(tokens) - 1,
++            )
++            if delta and delta.content:
++                content += delta.content
++
++        assert content == "plain answer"
++
+     def test_name_streams_before_args_complete(self, parser, mock_request):
+         # Feed only up to the name's closing quote — the name delta must
+         # already be emitted before any args arrive.
+diff --git a/vllm/parser/abstract_parser.py b/vllm/parser/abstract_parser.py
+index f7119d84e..377d0d398 100644
+--- a/vllm/parser/abstract_parser.py
++++ b/vllm/parser/abstract_parser.py
+@@ -504,6 +504,8 @@ class DelegatingParser(Parser):
+                     or (isinstance(content, str) and not content.strip())
+                 ):
+                     return [], None
++                if tool_parser.engine_based_streaming:
++                    content = tool_call_info.content
+                 return None, content
+ 
+         return tool_calls, content
+diff --git a/vllm/parser/engine/streaming_parser_engine.py b/vllm/parser/engine/streaming_parser_engine.py
+index f5c395f76..16a64059c 100644
+--- a/vllm/parser/engine/streaming_parser_engine.py
++++ b/vllm/parser/engine/streaming_parser_engine.py
+@@ -156,6 +156,11 @@ class StreamingParserEngine:
+             for (state, terminal), tr in config.transitions.items()
+             if tr.next_state in self._TOOL_STATES or state in self._TOOL_STATES
+         )
++        self._tool_end_terminals: frozenset[str] = frozenset(
++            terminal
++            for (_, terminal), tr in config.transitions.items()
++            if EventType.TOOL_CALL_END in tr.events
++        )
+ 
+         self.skip_tool_parsing = False
+         self.reset(initial_state=initial_state)
+@@ -186,6 +191,10 @@ class StreamingParserEngine:
+         self._scanner.reset()
+         self._lexer.reset()
+         self._message_header_buffer = ""
++        # In skip mode tool markup is forwarded without entering a tool state,
++        # so remember separately whether a block-end belongs to a forwarded
++        # tool call or to ordinary content/reasoning.
++        self._tool_call_passthrough_open = False
+         self._reset_args_state()
+ 
+     def feed(
+@@ -319,6 +328,12 @@ class StreamingParserEngine:
+             return self._emit_for_state(value)
+ 
+         if self.skip_tool_parsing and terminal in self._tool_terminals:
++            if EventType.TOOL_CALL_START in transition.events:
++                self._tool_call_passthrough_open = True
++            if terminal in self._tool_end_terminals:
++                if not self._tool_call_passthrough_open:
++                    return self._apply_transition(transition, value)
++                self._tool_call_passthrough_open = False
+             if self.state == ParserState.MESSAGE_HEADER:
+                 self.state = ParserState.CONTENT
+                 self._message_header_buffer = ""
