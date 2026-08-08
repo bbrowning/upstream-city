@@ -7,9 +7,10 @@ problems beats a long list of maybes, and false positives cost you the human's t
 ## Method
 1. Read the diff and enough surrounding code to actually judge it. Note which
    subsystem(s) it touches.
-2. Always load `personas/base.md`, plus every domain persona whose activation paths match
-   the changed files, and review through that lens — its reflexes come first; they encode
-   what bites in this area. Don't load domains the change doesn't touch.
+2. Always load `tools/vllm/review-personas/base.md`, plus every domain persona in
+   `tools/vllm/review-personas/` whose activation paths match the changed files, and
+   review through that lens — its reflexes come first; they encode what bites in this
+   area. Don't load domains the change doesn't touch.
 3. Verify every candidate finding before you keep it: state the concrete failure —
    inputs → wrong result — and cite `file:line`. Drop anything you can't ground in the
    code. Pattern-matching is not a finding.

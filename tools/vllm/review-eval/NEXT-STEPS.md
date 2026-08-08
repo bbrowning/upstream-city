@@ -52,7 +52,15 @@ re-validated, no unresolved lean deficiency. Decision: **cut over to personas no
 (caseG structured-output persona + more cases can happen later, in-production, via the
 flywheel — they are not cutover blockers.)
 
-## Phase 2 — Cut over (retire the old flywheel) — CLEARED TO EXECUTE
+## Phase 2 — Cut over (retire the old flywheel) — EXECUTED 2026-08-08
+**DONE (committed to `main`; Ben harvests + pushes; awaiting `gc reload` + E2E sling.)**
+Personas single-sourced at `tools/vllm/review-personas/` (moved from `review-eval/personas/`)
+and injected into the reviewer via `GC_PR_PERSONAS` in `city.toml`; `prompt.template.md`
+step-2 now loads `base` + personas whose `Activates on:` headers match changed paths
+(posture / worktree / emit-verdict / notify left byte-for-byte); the corpus + miner archived
+to `tools/vllm/_archive/`, the pack `learn` command git-rm'd. Steps 6–11 below are the plan,
+recorded as executed.
+
 6. Home the validated personas where the pack reads them. **Two design decisions from the
    eval work — honor both:**
    - **Single-source (avoid flywheel drift).** There must be exactly ONE canonical persona

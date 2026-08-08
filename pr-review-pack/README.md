@@ -147,7 +147,7 @@ pack.toml                             # manifest (schema 2); no [[named_session]
 agents/triage/agent.toml              # deterministic-first posture triage (1 slot)
 agents/triage/prompt.template.md      # triage METHOD: classify posture ≤ prescan ceiling
 agents/reviewer/agent.toml            # posture-gated reviewer, pooled up to 2 slots
-agents/reviewer/prompt.template.md    # reviewer METHOD: checklist, read-only + trusted auto-run
+agents/reviewer/prompt.template.md    # reviewer METHOD: persona-routed review, read-only + trusted auto-run
 agents/runner/agent.toml              # human-approved dynamic-check lane (1 slot)
 agents/runner/prompt.template.md      # runner METHOD: run one approved check, report honestly
 agents/feature-dev/agent.toml         # single write lane (1 slot)
@@ -158,7 +158,6 @@ formulas/feature-dev.toml             # per-run implement TASK + feature-dev.v1 
 orders/fetch-origin.toml              # read-only `git fetch --prune` on a cooldown (warm refs)
 commands/materialize/                 # `gc pr-review-pack materialize <PR>` — durable human checkout
 commands/summary/                     # `gc pr-review-pack summary <bead|PR>` — re-render a verdict readably
-commands/learn/                       # `gc pr-review-pack learn --area X --invariant "…"` — grow the knowledge flywheel
 assets/scripts/pr-prescan.sh          # deterministic, injection-proof posture ceiling
 assets/scripts/posture-latitude.sh    # pure posture → FETCH/EXEC/GATE table
 assets/scripts/run-scoped-check.sh    # the deterministic EXEC gate for dynamic checks
@@ -175,10 +174,10 @@ the `vllm` rig via `[[rigs.patches]]` env (`$GC_PR_TEST_VENV`) — see
 [Dynamic checks](#dynamic-checks-running-a-prs-tests). The generic gate
 (`run-scoped-check.sh`) only consumes `$GC_PR_TEST_VENV`; it never builds it.
 
-The same split applies to **domain knowledge**: the *mechanism* (the reviewer loads
-per-domain invariants a PR touches) lives in the pack; the vLLM *content* lives out
-of the pack at `//tools/vllm/review-knowledge/`, wired via `[[rigs.patches]]` env
-(`$GC_PR_KNOWLEDGE`). See [Domain knowledge: the review flywheel](#domain-knowledge-the-review-flywheel).
+The same split applies to the **review personas**: the *mechanism* (the reviewer loads
+`base` + the personas a PR's changed paths activate) lives in the pack; the vLLM *content*
+lives out of the pack at `//tools/vllm/review-personas/`, wired via `[[rigs.patches]]` env
+(`$GC_PR_PERSONAS`). See [Review personas](#review-personas).
 
 Agents, formulas, and orders are all discovered by **directory convention**
 (gascity's `conventionDiscoveryDirNames`), so the manifest carries **no
@@ -442,66 +441,40 @@ worktree**, implements, runs tests, and **pushes** (the durable output). It does
 arc/tracking bead** — that closes on a real checkpoint (PR opened, CI green,
 merged), not on self-report.
 
-## Domain knowledge: the review flywheel
+## Review personas
 
-The reviewer's quality comes less from a generic checklist than from **durable,
-path-specific invariants that compound over time**. Rather than one growing blob
-injected into every review (which bloats context and dilutes attention), knowledge
-is **partitioned per domain**, and each review loads **only the domains the PR
-touches**.
+The reviewer's quality comes less from a generic checklist than from a **sharp,
+path-specific lens** — the non-obvious things that actually bite in an area. Rather than
+one growing blob injected into every review (which bloats context and dilutes attention),
+that lens is **partitioned into personas**, and each review loads **only `base` + the
+personas the PR's changed paths activate**.
 
 **How it works**
 
-- The corpus lives at `$GC_PR_KNOWLEDGE` (`//tools/vllm/review-knowledge/`), one file
-  per domain — `general.md` (always applies) plus `parsers.md` (tool-call + reasoning +
-  shared Parser Engine) and `openai_frontend.md` — and a `_manifest.md` router.
-- The pack's `pr-prescan.sh` stays **project-agnostic**: it reports the changed
-  files (`facts.changed_files`) + generic security classes, and knows nothing about
-  vLLM domains. The domain→file mapping lives entirely in the project-specific
-  `_manifest.md` (a changed-path → domain router), so no vLLM assumption leaks into
-  the generic pack.
-- The reviewer (method step 2) matches the changed paths against `_manifest.md` and
-  loads **only** the matching `<domain>.md` (+ `general.md`). Bounded context; one
-  independent flywheel per domain, so no unrelated list ever accumulates. Files are
-  read fresh each run, so edits are **live on the next review — no `gc reload`**.
-  (Routing which knowledge to load is not a security decision — the deterministic
-  security ceiling stays wholly in `pr-prescan.sh`.)
+- The personas live at `$GC_PR_PERSONAS` (`//tools/vllm/review-personas/`): `base.md`
+  (cross-cutting reflexes, always loaded) plus domain personas (`parser.md`,
+  `openai-frontend.md`). Each is a terse "how you think" reflex list.
+- **Personas self-route — no separate manifest.** Each domain persona declares its
+  activation paths in an `**Activates on:**` header at the top; the reviewer loads it only
+  when a changed path matches (more than one can match). `base.md` always loads.
+- The pack's `pr-prescan.sh` stays **project-agnostic**: it reports the changed files
+  (`facts.changed_files`) + generic security classes and knows nothing about vLLM domains.
+  Persona activation is a plain path-prefix match the reviewer does against those changed
+  files — not a security decision, so the deterministic security ceiling stays wholly in
+  `pr-prescan.sh`.
+- The reviewer (method step 2) reads `base.md` + each persona whose header matches, and
+  reviews through that lens. Personas are read fresh each run, so **content edits are live
+  on the next review — no `gc reload`** (reload is only for the reviewer prompt or the
+  `$GC_PR_PERSONAS` env wiring itself).
 
-**Grow it (the harvest loop)** — when you correct a verdict, fold the lesson back:
-
-```bash
-gc pr-review-pack learn --area tool_parsers \
-  --invariant "streaming and non-streaming must yield identical tool_calls" \
-  --from-pr 45560 --author @bbrowning
-```
-
-It appends a fresh `[INV-TOOL-NNN]` bullet under that domain's "Learned / seeded"
-section (LLM-free, deterministic).
-
-**Seed it from history (one-shot bootstrap)** — mine invariants from real maintainer
-review comments on recently-merged PRs, keeping only CODEOWNER-authored comments for
-the touched path (bots dropped):
-
-```bash
-# 1. Fetch + filter (deterministic; ~1 API call per domain PR, path-filtered first):
-GC_PR_KNOWLEDGE=/pvc/workspace/tools/vllm/review-knowledge \
-  bash /pvc/workspace/tools/vllm/mine-review-comments.sh --since 90d
-#    -> $GC_PR_KNOWLEDGE/_seed/candidates-raw.jsonl   (--dry-run to preview PRs only)
-
-# 2. Distill per domain (LLM pass; spec at //tools/vllm/distill-prompt.md)
-#    -> $GC_PR_KNOWLEDGE/_seed/<domain>.candidates.md
-
-# 3. Curate + accept the ones you trust (delete rejects from the file first):
-gc pr-review-pack learn --from-candidates \
-  /pvc/workspace/tools/vllm/review-knowledge/_seed/tool_parsers.candidates.md
-```
-
-Nothing enters the live corpus until you accept it — you (a CODEOWNER) stay in the
-loop, and every entry keeps its `(PR #N, @author)` provenance.
-
-> **Next (Phase 2 — designed, not yet built):** split review into parallel
-> **correctness** + **domain** lanes with a deterministic synthesizer, so the domain
-> lane applies this corpus as its whole mandate. See [Growing up](#growing-up-later).
+**Grow it (the flywheel = edit the persona file)** — when a trusted maintainer catches
+something a review missed, fold it back as **one counterfactual reflex** in the right
+persona (`base.md` for cross-cutting, a domain persona otherwise), validated against a
+blind case. Personas carry only what a strong model does *not* already do on its own —
+prune as you add. The full workflow + quality bar live in
+`//tools/vllm/review-eval/RUNBOOK.md`, and the eval harness (`//tools/vllm/review-eval/`)
+regression-tests a persona edit before it ships. (This replaces the old
+mine → distill → `learn` invariant-corpus pipeline, now archived at `//tools/vllm/_archive/`.)
 
 ## Deliberate boundaries
 
@@ -519,8 +492,9 @@ loop, and every entry keeps its `(PR #N, @author)` provenance.
 
 ## Growing up (later)
 
-- **Customize the reviewer checklist** in `prompt.template.md` with the
-  follow-up questions you always end up asking — that's the real reviewer spec.
+- **Sharpen the personas** in `//tools/vllm/review-personas/` with the reflexes that keep
+  catching real issues — that's the real reviewer spec (validate via
+  `//tools/vllm/review-eval/RUNBOOK.md`).
 - **Broaden dynamic-check coverage**: the CPU venv currently targets the hermetic,
   mock-tokenizer parser/engine unit tests. Widening to `tests/reasoning` /
   `tests/tool_parsers` (which download tokenizers) means pre-warming an HF cache;

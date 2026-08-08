@@ -42,10 +42,11 @@ includes = ["pr-review-pack", "hard-bug-pack"]   # in-city folders (PR review + 
   # Dynamic checks: lazily build/reuse a CPU vLLM test venv (vLLM-specific, kept out
   # of the generic pack). GC_PREPARE_TEST_ENV is the builder the gate runs only when
   # a trusted check actually executes; UV_CACHE_DIR stays on btrfs for reflinks.
-  # GC_PR_KNOWLEDGE is the vLLM review-invariant corpus (also vLLM-specific, kept out
-  # of the generic pack); the reviewer reads only the domain files a PR touches from
-  # it (see tools/vllm/review-knowledge/_manifest.md). Injected as $GC_PR_KNOWLEDGE.
-  env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PR_KNOWLEDGE = "/pvc/workspace/tools/vllm/review-knowledge" }
+  # GC_PR_PERSONAS is the vLLM review persona set (also vLLM-specific, kept out of the
+  # generic pack); the reviewer always loads base.md and adds any persona whose
+  # "Activates on:" header matches a changed path (see tools/vllm/review-personas/).
+  # Injected as $GC_PR_PERSONAS.
+  env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PR_PERSONAS = "/pvc/workspace/tools/vllm/review-personas" }
 
   # Human-approved dynamic-check lane. Same env wiring as the reviewer; the gate
   # (run-scoped-check.sh --min-ceiling limited) still floors it on the fresh ceiling.

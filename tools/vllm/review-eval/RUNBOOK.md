@@ -1,6 +1,6 @@
 # RUNBOOK — changing a persona and proving it helps
 
-Read this **before editing any file in `personas/`**. Personas are the live review spec:
+Read this **before editing any file in `tools/vllm/review-personas/`**. Personas are the live review spec:
 a change to them changes every future review. This suite exists so a persona edit is
 *validated against a real, blind case* — not merged on a hunch. The mechanics of running
 (worktrees, CPU venv, isolated A/B, blind judge) are in `README.md`; this doc is the
@@ -76,17 +76,23 @@ Real cases come from merged/closed PRs where a trusted maintainer (`@bbrowning`,
   gold catch on **reasoning** when the catching test was added by the fix). Candidate PRs
   to mine are tracked in `candidates.md`.
 
-## The cutover gate (don't retire the old corpus early)
-Before Phase 2 (retiring `review-knowledge/` + the pack's corpus load — see `NEXT-STEPS.md`):
-lean must **match or beat** the current pack on signal & noise across the case set, at lower
-context, with **no unresolved shared gold misses**. One open shared miss keeps the gate
-closed — add cases and iterate personas, don't cut over.
+## The cutover gate — PASSED 2026-08-08 (cutover done)
+The gate for Phase 2 (retiring `review-knowledge/` + the pack's corpus load — see
+`NEXT-STEPS.md`) was: lean must **match or beat** the current pack on signal & noise
+across the case set, at lower context, with **no unresolved shared gold misses**. That
+gate passed (6 cases; both known lean misses converted to catches and re-validated), the
+pack was cut over to personas, and the old corpus is archived at
+`tools/vllm/_archive/review-knowledge/`. The go-forward loop is the flywheel above: a real
+miss → one persona reflex → re-run → confirm.
 
 ## Where everything lives
-- **Personas under test:** `personas/*.md`. `base.md` always loads; each domain persona
-  lists its activation-path globs at the top and loads only when a changed path matches.
-- **The two methods compared:** `brief-lean.md` (lean arm) vs the current pack
-  (`pr-review-pack/agents/reviewer/prompt.template.md` + `tools/vllm/review-knowledge/`).
+- **Personas (the live review spec):** `tools/vllm/review-personas/*.md` — the single
+  canonical home read by BOTH this harness and the production pack (injected there as
+  `$GC_PR_PERSONAS`). `base.md` always loads; each domain persona lists its
+  activation-path globs at the top and loads only when a changed path matches.
+- **The two methods compared (historical bake-off):** `brief-lean.md` + the personas
+  (lean arm, now live) vs the retired pre-cutover pack (the old reviewer prompt in git
+  history + the corpus now archived at `tools/vllm/_archive/review-knowledge/`).
 - **Cases:** `cases/<id>/{meta.json, diff.patch, answer-key.md?}`.
 - **Runs (the evidence):** `run-<date>/` — per-arm `caseX-{A,B}.json`, `judge-caseX.json`,
   `RESULTS.md`, and the private `blind-map.txt` (A=current, B=lean; which arm was shown to

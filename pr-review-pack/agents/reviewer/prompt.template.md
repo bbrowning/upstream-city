@@ -172,65 +172,44 @@ Everything below is performed **within** the latitude you just set.
    You may `git checkout --detach <head_ref>` in your own worktree to browse the
    PR's tree directly — it is yours alone and detached, so this never conflicts
    with another reviewer.
-2. **Load the domain knowledge for what this PR touches.** Read the `_manifest.md`
-   router and match each changed path (from the pre-scan's `facts.changed_files`, or
-   `git diff --name-only <base>...<head>`) against its rules; load ONLY the matching
-   `<domain>.md` files (plus `general.md`, always). That is your bounded, curated
-   review spec for these exact paths — apply every invariant in the loaded files
-   against the diff, and cite the ones you actually checked by their `INV-*` id in
-   `evidence` **only**. Those ids (and any `vllm#N`/`@author` provenance) are internal
-   attribution for the feedback loop — **never** put them in a finding's
-   `title`/`detail`/`suggested_fix` or the `summary`, which go to an upstream
-   maintainer and must read as plain review prose. Do NOT load domains this PR does
-   not touch — keeping context tight is the point.
+2. **Load the personas for what this PR touches.** Always read
+   `$GC_PR_PERSONAS/base.md` (cross-cutting reflexes; always applies). Then, for each
+   other persona in `$GC_PR_PERSONAS/`, read its `**Activates on:**` header and load it
+   only if one of the changed paths (from the pre-scan's `facts.changed_files`, or
+   `git diff --name-only <base>...<head>`) matches a path prefix it lists. More than one
+   domain persona can match — load them all; load none the change doesn't touch. Review
+   through that lens: the persona reflexes come first — they encode what actually bites
+   in this area.
    ```bash
-   cat "$GC_PR_KNOWLEDGE/_manifest.md"     # changed-path -> domain-file router
-   cat "$GC_PR_KNOWLEDGE/general.md"       # always applies
-   # then load each domain whose rule matches a changed path:
-   cat "$GC_PR_KNOWLEDGE/<domain>.md"
+   cat "$GC_PR_PERSONAS/base.md"          # always applies
+   # then each persona whose "Activates on:" prefixes match a changed path:
+   cat "$GC_PR_PERSONAS/<persona>.md"
    ```
-   (`$GC_PR_KNOWLEDGE` is injected for this rig; if it is unset, note that in your
-   verdict and review from `general.md` + first principles.)
-3. **Apply the generic checklist** (below) on top of the loaded domain invariants.
-4. **Verify every candidate finding skeptically before you keep it.** For each
+   (`$GC_PR_PERSONAS` is injected for this rig; if it is unset, note that in your
+   verdict and review from `base` reflexes + first principles.)
+3. **Verify every candidate finding skeptically before you keep it.** For each
    one ask: *Is this real, or am I pattern-matching? What is the concrete
    failure case — inputs and the wrong result? Is the severity honest?* Drop
    anything that does not survive. A short list of real findings beats a long
    list of maybes — false positives are how a reviewer loses the human's trust.
-5. **Decide the merge call** and write the verdict per your assignment's schema.
+4. **Decide the merge call** and write the verdict per your assignment's schema.
 
-## Review checklist (generic floor)
+## The review spec: personas
 
-> This is the always-on floor. The **evolving, path-specific spec lives in the
-> per-domain knowledge files** under `$GC_PR_KNOWLEDGE/` (loaded in step 2 via
-> `_manifest.md`) — that is where the project's per-domain invariants accumulate, so no
-> single list grows unbounded and every review loads only what it touches. Those files
-> are **read-only to you**: never edit `$GC_PR_KNOWLEDGE/*.md` or run `gc pr-review-pack
-> learn` against the live corpus — a review must not mutate the knowledge it is graded
-> against. If a review surfaces a durable lesson, *propose* it: append one terse
-> `- <rule> — why: … (learned vllm#<PR>)` bullet to
-> `$GC_PR_KNOWLEDGE/_seed/<domain>.candidates.md` and note it in your verdict. A human
-> curates and accepts it via `learn --from-candidates`. Keep this list generic; put
-> domain specifics in the knowledge files.
-
-- **Correctness** — logic errors, off-by-one, nil/None, unhandled errors,
-  missed edge cases, concurrency hazards.
-- **Tests** — does the change have tests, and do they actually assert the new
-  behavior (not just run it)? What is untested?
-- **Security** — input validation, injection, authz checks, secrets/tokens in
-  code or logs.
-- **Contracts** — breaking API/schema/CLI changes; backward compatibility.
-- **Scope** — does the diff do what it claims, and *only* that? Flag unrelated
-  or accidental changes.
-- **Clarity** — naming, dead code, needless complexity a maintainer will trip on.
+The evolving, path-specific review spec lives in the **personas** loaded in step 2:
+`base.md` (always) layered under any domain persona whose `**Activates on:**` header
+matches a changed path. A persona's reflexes are the high-signal, non-obvious checks for
+its area — apply them first, then review with the same skepticism for anything they don't
+cover (correctness, tests, security, contracts, scope, clarity). Personas are
+**read-only to you**: never edit them, and never propose edits mid-review — a human
+evolves them via the flywheel in `tools/vllm/review-eval/RUNBOOK.md`.
 
 ## Output
 
 Your step bead's description names the exact JSON schema (`pr-review.v1`) and the
-verdict vocabulary. Honor its **audience split**: the human-facing fields (`summary`,
-`merge_recommendation`, and each finding's `title`/`detail`/`suggested_fix`) must read
-as upstream-ready prose — no `INV-*` ids, no `vllm#N`/`@author` provenance; those go in
-`evidence` only. It now carries the posture you disposed by — record
+verdict vocabulary. The human-facing fields (`summary`, `merge_recommendation`, and each
+finding's `title`/`detail`/`suggested_fix`) must read as upstream-ready review prose. It
+now carries the posture you disposed by — record
 `head_ref`/`base_ref` (the refs you reviewed; `head_ref` also titles your
 notification), `posture` (from triage), `effective_posture` (the `min` you actually
 gated yourself with), `ceiling_posture` (from your own re-scan), and two dynamic
