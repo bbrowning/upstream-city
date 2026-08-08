@@ -46,14 +46,27 @@ Status after round 2 + caseR re-run (`run-2026-08-08c/`):
    persona (prune too). If a specific model keeps generating model-specific findings, spin
    up its persona (Harmony/gpt-oss is the likely first — cluster in `candidates.md`).
 
-**DECISION GATE:** lean matches/beats current on signal & noise across the expanded set, at
-lower context, with no unresolved misses → go to Phase 2. Otherwise iterate personas / add
-cases and re-run.
+**DECISION GATE — PASSED (Ben, 2026-08-08).** Lean matched/beat current across 6 cases at
+~4× less context, both known lean misses (caseR, caseY) were converted to catches and
+re-validated, no unresolved lean deficiency. Decision: **cut over to personas now.**
+(caseG structured-output persona + more cases can happen later, in-production, via the
+flywheel — they are not cutover blockers.)
 
-## Phase 2 — Cut over (retire the old flywheel), only if the gate passes
-6. Home the validated personas where the pack reads them: a persona dir + a tiny manifest
-   (changed-path glob → persona; `base` always). Reuse the `GC_PR_KNOWLEDGE` dir or add a
-   `GC_PR_PERSONAS` env in `city.toml`'s reviewer `[[rigs.patches]]`.
+## Phase 2 — Cut over (retire the old flywheel) — CLEARED TO EXECUTE
+6. Home the validated personas where the pack reads them. **Two design decisions from the
+   eval work — honor both:**
+   - **Single-source (avoid flywheel drift).** There must be exactly ONE canonical persona
+     dir that BOTH this eval harness and the production pack read — otherwise "edit the
+     persona file" forks into two copies. Move `review-eval/personas/` → a canonical home
+     (e.g. `tools/vllm/review-personas/`, sibling of `review-knowledge/`) and have the eval
+     harness read it from there (update `README.md`/`RUNBOOK.md`/`brief-lean.md` paths).
+     Point the pack at the same dir via a `GC_PR_PERSONAS` env in `city.toml`'s reviewer
+     `[[rigs.patches]]` (mirror how `GC_PR_KNOWLEDGE` is injected today).
+   - **Personas self-route — no separate manifest.** Each persona already declares its
+     activation-path globs in its header (`base.md` = always). The reviewer prompt should
+     load `base.md` + any persona whose header globs match a changed path — exactly how the
+     eval arms selected them. Do NOT rebuild a `_manifest.md`-style router; the headers
+     ARE the router.
 7. Rewrite `pr-review-pack/agents/reviewer/prompt.template.md`: replace the generic
    checklist + step-2 corpus-load with "load `base` + matching personas"; drop the
    `_seed`/candidate/human-write-gate prose. **Leave every posture / worktree / emit-verdict
