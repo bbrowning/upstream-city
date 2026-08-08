@@ -1,0 +1,21 @@
+{
+  "verdict": "approve_with_nits",
+  "summary": "Adds a delta-scoped is_reasoning_end_streaming to the parser engine and six model parsers, replacing the inherited O(context)-per-decode-step scan with an O(delta) check on the structured-output hot path. The engine base plus every override I could verify (qwen3, mistral, kimi_k2, inkling) match their full is_reasoning_end predicate under the scheduler's one-step-at-a-time invariant; glm47_moe delegates to the parity-preserving base and gemma4 deliberately keeps the full scan with a sound, documented rationale. The change is correct and reduces per-step cost; the only gap is test coverage of the overrides.",
+  "findings": [
+    {
+      "severity": "minor",
+      "file": "tests/parser/engine/test_parser_engine.py",
+      "line": "1695-1787",
+      "detail": "The only parity test (test_agrees_with_full_predicate_while_reasoning) exercises the base ParserEngine via _make_engine(); none of the six per-model overrides are tested. These overrides re-implement the reasoning-end scan with model-specific logic (qwen3's open/closed <tool_call> handling, mistral's [TOOL_CALLS] bot-token, kimi_k2's tool-section marker, inkling's thinking/text/model markers), and this is exactly where a streaming variant can silently drift from the full predicate. A drift would make should_advance() in vllm/v1/structured_output/__init__.py either start grammar-constraining while the model is still reasoning or never constrain after reasoning ends, and no test would catch it. I brute-forced all four overrides against their full predicate (all sequences up to length 5, stepped one token at a time) and found zero mismatches, so the code is correct today; the risk is regression on future edits with no guard.",
+      "suggested_fix": "Parametrize the full-vs-streaming parity test across real named-model parsers (at least qwen3, mistral, kimi_k2, inkling) so each override is checked step-by-step against its own is_reasoning_end, not just the base engine."
+    }
+  ],
+  "actions_taken": [
+    "Read the diff and the surrounding source: vllm/parser/engine/parser_engine.py (is_reasoning_end / is_reasoning_end_streaming), vllm/parser/engine/adapters.py, and the six parser overrides (gemma4, glm47_moe, inkling, kimi_k2, mistral, qwen3).",
+    "Traced the caller: vllm/v1/structured_output/__init__.py should_advance() (line 430), _find_reasoning_end_index() (line 458) and the bitmask loop (line 313), and the abstract default in vllm/reasoning/abs_reasoning_parsers.py, to establish the required contract (delta-scoped answer must equal the full predicate while the request is still reasoning).",
+    "Ran the new tests: pytest tests/parser/engine/test_parser_engine.py::TestIsReasoningEndStreaming -> 9 passed; full file -> passed.",
+    "Ran reasoning suites for the changed models: pytest tests/reasoning/test_qwen3_reasoning_parser.py tests/reasoning/test_kimi_k2_reasoning_parser.py tests/reasoning/test_gemma4_reasoning_parser.py tests/reasoning/test_glm4_moe_reasoning_parser.py -> 135 passed (no regressions).",
+    "Brute-forced parity (read-only) for qwen3, mistral, kimi_k2, inkling: every sequence up to length 5, stepping one token at a time and comparing is_reasoning_end_streaming(prefix,[tok]) to is_reasoning_end(prefix) -> 0 mismatches across 8855/2604/2604/8855 step-checks respectively.",
+    "Confirmed the _CountingSequence test proves the O(delta) property (input_ids never indexed: reads == 0) and that the adapter materializes only delta_ids (via list(delta_ids)), not the accumulated input_ids, on the non-empty-delta path."
+  ]
+}

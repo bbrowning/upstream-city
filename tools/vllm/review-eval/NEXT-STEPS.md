@@ -16,15 +16,19 @@ Status after round 2 + caseR re-run (`run-2026-08-08c/`):
   (`request_changes`, judge-verified mojibake repro), lean noise 0. Validated on this case
   (caveat: opus variance, not a fully isolated A/B — see that RESULTS). Re-run periodically
   to guard against regression.
-- **caseY (round 1) — reflex present, re-run PENDING.** Round 1's lean miss (shared base +
-  6 per-model `is_reasoning_end` overrides, only base parity-tested) was folded into
-  `parser.md` reflex #2 but never re-run. Do the same miss→catch validation we did for
-  caseR before trusting reflex #2.
+- **caseY — RESOLVED** (`run-2026-08-08d/`). Reflex #2 flipped it lean miss → **catch**
+  (Arm B now flags the 6 per-model override coverage gap + brute-forced parity, no longer
+  declaring it "thoroughly tested"). Current still catches it too; current edged this run
+  on groundedness (lean had a minor misattributed-suite blemish — reviewer discipline, not
+  a persona defect). Both round-1 (caseY) and round-2 (caseR) lean misses are now validated
+  catches.
 - **caseG — domain-coverage decision (human).** Out-of-domain (structured-output / spec
   decode); both arms miss equally, so it's not a lean deficiency. Stand up a
   `structured-output` persona only if the class recurs (n=1 today; promotion rule).
-- **Gate:** no remaining *lean* deficiency across the 6 cases, but two validation re-runs
-  (caseY) and more cases are wanted before Phase-2 cutover. Don't retire the corpus yet.
+- **Gate:** **no remaining unresolved lean miss across the 6 cases** — every known miss has
+  been converted to a catch and re-validated. Before Phase-2 cutover, still want: more
+  real-world cases for confidence, and the caseG domain decision. Don't retire the corpus
+  yet. Caveat: opus variance means case results are "validated," not isolated A/Bs.
 
 ## Phase 1 — Build confidence (expand the eval)
 1. Pick 3–5 candidates from `candidates.md`. For each, FIRST verify @bbrowning or @yzong-rh

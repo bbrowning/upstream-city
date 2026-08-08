@@ -1,0 +1,24 @@
+{
+  "verdict": "approve_with_nits",
+  "summary": "A careful, well-scoped performance optimization: it adds a delta-scoped is_reasoning_end_streaming to the shared parser engine, its reasoning adapter, and six model parsers so the structured-output scheduler's per-decode-step reasoning-end check becomes proportional to the step rather than the whole accumulated context. The core algorithm is correct and the subclass coverage is complete, but the six per-parser overrides (which hold the subtle model-specific logic) have no direct tests.",
+  "findings": [
+    {
+      "severity": "minor",
+      "file": "tests/parser/engine/test_parser_engine.py",
+      "line": "41-93",
+      "detail": "The new tests exercise only the base ParserEngine.is_reasoning_end_streaming (via _make_engine, which builds a generic combined config). None of the six per-parser overrides added in this PR are tested, yet those are where the real risk lives: qwen3's open-vs-closed <tool_call> handling (delta scanned in reverse with an inner scan for a later </tool_call> in the same step), mistral's [TOOL_CALLS] implicit reasoning-end, kimi_k2's tool-section marker, and inkling's thinking/text/model markers. A wrong delta-scoped verdict in any of these would flip the structured-output gate for tool-calling models, and unit tests would not catch it. Concretely: if, say, the mistral or qwen3 override omitted or misordered one marker check, the whole test suite would still pass green.",
+      "suggested_fix": "Parametrize the existing equivalence test (test_agrees_with_full_predicate_while_reasoning) across the real parser subclasses (Qwen3Parser, KimiK2Parser, MistralParser, InklingParser, Glm47MoeParser), asserting is_reasoning_end_streaming(prefix,[last]) == is_reasoning_end(prefix) step-by-step for sequences that include each model's tool-call / implicit-end markers, plus the empty-delta fallback."
+    }
+  ],
+  "actions_taken": [
+    "Read the full diff and the surrounding source at head: vllm/parser/engine/parser_engine.py (is_reasoning_end vs new is_reasoning_end_streaming), vllm/parser/engine/adapters.py, and the six parser overrides (gemma4.py, glm47_moe.py, inkling.py, kimi_k2.py, mistral.py, qwen3.py).",
+    "Read vllm/v1/structured_output/__init__.py to confirm the call contract: is_reasoning_end_streaming(all_token_ids, delta_ids) is invoked in should_advance only while reasoning is still open (returns early once reasoning_ended), and in _find_reasoning_end_index / grammar_bitmask via single-token deltas; the adapter materializes delta_ids to a list before forwarding.",
+    "Read vllm/reasoning/abs_reasoning_parsers.py to confirm the base default is_reasoning_end_streaming ignores delta and re-scans the whole sequence (O(context) per step) -- validating the PR's premise.",
+    "Verified per-parser correctness against each override's own full is_reasoning_end for realistic step inputs; all agree under the 'called each step while reasoning open' contract. gemma4 deliberately keeps the full scan (documented; no perf gain but no regression).",
+    "Checked completeness: enumerated every ParserEngine subclass; each with a custom is_reasoning_end (glm47_moe, inkling, gemma4, qwen3, mistral, kimi_k2) also adds a matching is_reasoning_end_streaming, and the three without a custom predicate (minimax_m2, deepseek_v32, deepseek_v4) inherit the consistent base streaming -- no silent divergence.",
+    "Confirmed the qwen3 boundary-index behavior in _find_reasoning_end_index (single-token replay treating the first <tool_call> as reasoning-end) is inherent to the pre-existing caller design, not introduced by this diff -- dropped it as a non-finding.",
+    "Confirmed Sequence is imported in every parser using it in the new signatures (added to qwen3.py and glm47_moe.py; already present in the others).",
+    "Searched tests/: only tests/parser/engine/test_parser_engine.py exercises is_reasoning_end_streaming for the engine parsers; the per-parser test files (test_qwen3_reasoning.py, mistral tests, test_inkling.py, test_gemma4_streaming_reasoning.py, etc.) do not.",
+    "Ran: PYTHONPYCACHEPREFIX=... .venv/bin/python -m pytest tests/parser/engine/test_parser_engine.py::TestIsReasoningEndStreaming -q -> 9 passed. Ran the full file -> 108 passed."
+  ]
+}
