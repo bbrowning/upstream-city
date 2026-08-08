@@ -3,6 +3,9 @@
 Purpose: compare review setups (current pack vs lean personas) and regression-test the
 **lean personas** as they evolve. Blind, reproducible, offline.
 
+> **Changing a persona?** Read `RUNBOOK.md` first — it's the workflow + quality bar for
+> validating a persona edit against a blind case (this README is the mechanics it builds on).
+
 ## Layout
 - `cases/<id>/` — `meta.json` (source PR, base/head SHAs, changed files, blind notes),
   `diff.patch` (the change under review), `answer-key.md` (only where we know the ground
