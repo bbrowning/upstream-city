@@ -73,14 +73,7 @@ engine** (`vllm/parser/engine/`). How you think — reflexes, highest-value firs
   reasoning" from "empty".
 - Structural/special tokens (EOS/BOS, wrapper terminals) must never leak into content or
   reasoning — in *either* the streaming or non-streaming path.
-- **Never decode raw token ids to text inside a parser.** The engine's detokenizer already
-  does multi-token-character holdback: it emits text only once a code point is complete and
-  withholds any tail that decodes ending in `U+FFFD` (an unfinished byte-fallback / multi-
-  token sequence), so a character whose bytes span several tokens isn't surfaced until its
-  final token arrives. A parser that runs its own `decode()` over a token-id slice bypasses
-  that holdback and splits such characters (emoji, many CJK, combining marks) into
-  `U+FFFD`/mojibake. A direct consequence: **the token-id and text streams a parser receives
-  are not always aligned** — the detokenizer may be holding text back while the
-  corresponding ids have already arrived — so an apparent "gap" between ids and text is
-  usually pending holdback, not lost content. Use the text the engine hands you (let it
-  flush on a later delta); reconstructing text from ids yourself is the bug.
+- **A parser must not decode token ids to text itself.** The engine detokenizer holds text
+  back until multi-token characters complete, so ids can arrive before their text — an
+  apparent id/text gap is pending holdback, not lost content, and re-decoding the ids to
+  fill it yields mojibake.
