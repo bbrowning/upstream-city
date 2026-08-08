@@ -73,9 +73,14 @@ engine** (`vllm/parser/engine/`). How you think — reflexes, highest-value firs
   reasoning" from "empty".
 - Structural/special tokens (EOS/BOS, wrapper terminals) must never leak into content or
   reasoning — in *either* the streaming or non-streaming path.
-- Recovering text at a reasoning→tool (or any parser) transition must go through the
-  parser's **incremental flush** (`finish_streaming()` / `flush_delta.content`), never a
-  raw `tokenizer.decode()` of a token-id slice — decoding without holdback splits
-  multi-token characters (emoji, many CJK, combining marks) into `U+FFFD`/mojibake. If one
-  branch of a transition flushes correctly (e.g. the engine-based branch) and a sibling
-  branch re-`decode()`s the ids, that asymmetry is the bug — mirror the flushing branch.
+- **Never decode raw token ids to text inside a parser.** The engine's detokenizer already
+  does multi-token-character holdback: it emits text only once a code point is complete and
+  withholds any tail that decodes ending in `U+FFFD` (an unfinished byte-fallback / multi-
+  token sequence), so a character whose bytes span several tokens isn't surfaced until its
+  final token arrives. A parser that runs its own `decode()` over a token-id slice bypasses
+  that holdback and splits such characters (emoji, many CJK, combining marks) into
+  `U+FFFD`/mojibake. A direct consequence: **the token-id and text streams a parser receives
+  are not always aligned** — the detokenizer may be holding text back while the
+  corresponding ids have already arrived — so an apparent "gap" between ids and text is
+  usually pending holdback, not lost content. Use the text the engine hands you (let it
+  flush on a later delta); reconstructing text from ids yourself is the bug.

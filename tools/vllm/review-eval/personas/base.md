@@ -28,11 +28,3 @@ Cross-cutting reflexes — the non-obvious vLLM-specific ones worth carrying eve
 6. **Competing in-flight fixes.** Check whether another open PR edits the same
    function/hunk/area a different way — piecemeal merges conflict and entrench divergent
    designs even when each PR is individually correct.
-
-7. **Query methods shouldn't mutate.** A predicate/query-named method (`should_*`, `is_*`,
-   `has_*`, `get_*`) that also mutates state — advances a grammar/FSM, writes a field,
-   performs I/O — is a surprising side-effect; callers reasonably assume it's pure, so the
-   mutation fires in contexts they didn't intend. Flag it and suggest separating the
-   decision from the action. Pair it with the necessity question: is the new state-machine
-   complexity even needed, or does an existing mechanism (e.g. rejection sampling already
-   validating verified tokens) already guarantee the invariant the code is defending?
