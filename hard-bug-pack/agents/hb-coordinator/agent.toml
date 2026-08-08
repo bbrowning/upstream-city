@@ -1,0 +1,26 @@
+# coordinator — the hard-bug protocol driver.
+#
+# It runs the OUTER loop that a formula DAG cannot express: after each round's two
+# lanes reconcile, it makes the subjective "aligned close enough?" call, relays each
+# lane's position to the other as a second opinion, advances the phase, launches the
+# next round (or the implement/cross-review finalize), enforces the per-phase cap,
+# and escalates to the human. All judgment lives in its prompt — never in Go.
+#
+# Single slot: one hard-bug run at a time in this build. Its step does its judgment,
+# slings the next step, writes durable arc state, then CLOSES — it does not stay
+# resident. The next reconcile/finalize step re-nudges a fresh session, and the arc
+# bead's hard-bug-state.v1 lets it resume exactly where it left off.
+#
+# It gets its own detached worktree so it can `git diff` the implementer's branch
+# during the finalize step.
+
+scope = "rig"
+nudge = "You are the hard-bug coordinator with a step on your hook. Run `gc prime`, read your step bead (reconcile or finalize) and the arc bead's gc.output_json (hard-bug-state.v1), re-derive the current phase/round, then act per your protocol."
+idle_timeout = "45m"
+min_active_sessions = 0
+max_active_sessions = 1
+provider = "claude"
+option_defaults = { model = "opus", effort = "high" }
+
+work_dir  = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
+pre_start = ["{{.ConfigDir}}/assets/scripts/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]

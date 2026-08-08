@@ -1,0 +1,118 @@
+description = """
+Finalize a converged hard-bug arc: the stronger lane implements the agreed fix on a
+real branch (writes tests, runs them, fixes, pushes), the OTHER lane cross-reviews
+the pushed diff AND its verification evidence, then the coordinator concludes.
+
+Slung by the coordinator once the fix phase converges. Which lane implements vs
+reviews is decided at runtime (implementer_target / reviewer_target) from the
+coordinator's stronger_lane call — so both roles are provider-agnostic.
+
+The coordinator's finalize step closes the arc as done on concurrence, or re-enters
+the fix phase / escalates on rejection. It never merges — a human/PR checkpoint does.
+"""
+formula = "hard-bug-finalize"
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[vars]
+[vars.bug_bead]
+description = "The bug/arc bead id (holds hard-bug-state.v1, incl. agreed_root_cause). Required."
+required = true
+
+[vars.base]
+description = "Branch point and merge target for the fix branch."
+default = "origin/main"
+
+[vars.implementer_target]
+description = "Agent target that implements (the stronger lane). Required."
+required = true
+
+[vars.reviewer_target]
+description = "Agent target that cross-reviews (the other lane). Required."
+required = true
+
+[vars.coordinator_target]
+description = "Agent target for the finalize step."
+default = "hb-coordinator"
+
+[vars.max_rounds]
+description = "Fix-phase cap the coordinator honors if it must re-open the fix."
+default = "3"
+
+[vars.enable_loop]
+description = "Passed through so a re-opened fix phase keeps driving the loop."
+default = "true"
+
+[[steps]]
+id = "implement"
+title = "Implement the converged fix on paude/{{bug_bead}} and push"
+description = """
+Implement the converged fix for arc `{{bug_bead}}`, working ONLY in your own
+worktree. Read the agreed root cause and fix plan from `{{bug_bead}}`'s
+hard-bug-state.v1 and the fix-phase lane outputs. Branch off `{{base}}`:
+`git switch -c paude/{{bug_bead}} {{base}}`. Make the smallest change that fully
+fixes the ROOT CAUSE; add the planned tests; RUN them (and existing suites covering
+the area); fix anything they reveal; commit; `git push -u origin paude/{{bug_bead}}`.
+Do NOT close the arc bead.
+
+Emit `hard-bug-implement.v1` to gc.output_json, then finish:
+  bash {{.ConfigDir}}/assets/scripts/emit-json.sh --bead <your-step-bead> \\
+    --json-file "$out" --schema hard-bug-implement.v1 --outcome pass
+Retryable infra failure (repo unreachable, push auth): --outcome fail --failure-class
+transient --failure-reason "…"; contract failure (rig-root worktree, under-specified):
+--failure-class hard.
+"""
+metadata = { "gc.run_target" = "{{implementer_target}}", "gc.output_json_schema" = "hard-bug-implement.v1", "gc.output_json_required" = "true" }
+
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"
+
+[[steps]]
+id = "cross-review"
+title = "Cross-review the fix and its verification evidence"
+needs = ["implement"]
+description = """
+You are the OTHER lane, cross-reviewing the fix for arc `{{bug_bead}}` — read-only.
+Read the implementer's `hard-bug-implement.v1` (walk your `needs` edge) for the
+branch it pushed, then review both the change and the evidence:
+`git fetch origin && git diff {{base}}...<branch>`. Judge (1) whether the diff
+actually fixes the agreed ROOT CAUSE with no scope creep or new defects
+(`concurs_with_fix`), and (2) whether the claimed tests exist and genuinely assert
+the corrected behavior — re-run them if feasible (`concurs_with_evidence`). Verdict:
+concur / request_changes / blocked.
+
+Emit `hard-bug-crossreview.v1` to gc.output_json, then finish:
+  bash {{.ConfigDir}}/assets/scripts/emit-json.sh --bead <your-step-bead> \\
+    --json-file "$out" --schema hard-bug-crossreview.v1 --outcome pass
+"""
+metadata = { "gc.run_target" = "{{reviewer_target}}", "gc.output_json_schema" = "hard-bug-crossreview.v1", "gc.output_json_required" = "true" }
+
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"
+
+[[steps]]
+id = "finalize"
+title = "Coordinator finalize: conclude or re-open"
+needs = ["cross-review"]
+description = """
+Conclude the hard-bug arc `{{bug_bead}}`. Read the cross-reviewer's
+`hard-bug-crossreview.v1` (walk your `needs` edge) and the implementer's
+`hard-bug-implement.v1` (see your finalize playbook):
+
+- Concur (verdict=concur AND concurs_with_fix AND concurs_with_evidence) → the arc is
+  DONE. Mail the human the branch, fix summary, and evidence; set arc status=done.
+  Do NOT merge.
+- Reject → if rounds.fix < {{max_rounds}}, re-enter the fix phase (sling hard-bug-round
+  phase=fix, relaying the cross-review findings); else escalate (hold=mayor + notify the
+  human).
+
+Emit `hard-bug-final.v1` via emit-json.sh and MERGE-update the arc status.
+"""
+metadata = { "gc.run_target" = "{{coordinator_target}}", "gc.output_json_schema" = "hard-bug-final.v1", "gc.output_json_required" = "true" }
+
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"

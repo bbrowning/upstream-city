@@ -1,0 +1,1 @@
+description = "Launch a hard-bug run: resolve the rig (--rig or inferred from the bead prefix) and sling hard-bug-round with <rig>/hb-coordinator + <rig>/worker-* targets filled in"

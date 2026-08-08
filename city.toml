@@ -19,7 +19,14 @@ default_branch = "main"
 name = "vllm"
 prefix = "vllm"
 default_branch = "main"
-includes = ["pr-review-pack"]   # in-city folder
+includes = ["pr-review-pack", "hard-bug-pack"]   # in-city folders (PR review + two-opinion hard-bug)
+
+  # Lane B of hard-bug-pack is provider-agnostic. To use a real second vendor later,
+  # uncomment (and add a [providers.codex] block + creds); formulas/prompts unchanged.
+  # [[rigs.patches]]
+  # agent = "hb-worker-b"
+  # provider = "codex"
+  # option_defaults = { model = "gpt-5-codex" }
 
   # Per-agent model/effort (my choice, not the pack's). Triage is backstopped by
   # the deterministic prescan + reviewer re-derivation, so it stays lean; the
@@ -44,6 +51,18 @@ includes = ["pr-review-pack"]   # in-city folder
   [[rigs.patches]]
   agent = "runner"
   option_defaults = { model = "opus", effort = "high" }
+  env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh" }
+
+  # Hard-bug lanes: same prepared CPU test-venv wiring as the reviewer, so a lane that
+  # needs to run vllm reuses the warm uv cache + the blessed CPU-only recipe
+  # (tools/vllm/vllm-testenv.sh, ~seconds warm) instead of a full torch install from
+  # scratch. (vLLM-specific env, kept out of the generic pack.)
+  [[rigs.patches]]
+  agent = "hb-worker-a"
+  env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh" }
+
+  [[rigs.patches]]
+  agent = "hb-worker-b"
   env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh" }
 
 [[rigs]]
