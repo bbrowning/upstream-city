@@ -129,6 +129,8 @@ reason_tags[], rationale, divergences[], next_action, failure_class, failure_rea
   else the transcript's per-message `effort`); `effort_resolved_source` records which.
 - `cc_session_id` = the Claude Code session the tokens came from (the stamp, or — in the
   window path — the sole session found). `cost.join` = `session` | `window` (see Token sourcing).
+- `pack_commit` = git HEAD at the decision's **first** capture (~run-time when projected
+  promptly); pinned across re-projections so idempotent re-runs don't churn the log.
 - `reason_tags` is an empty going-forward field (controlled vocab for *why* a side lost).
 
 ## Example queries

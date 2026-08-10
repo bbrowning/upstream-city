@@ -195,7 +195,14 @@ def merge_write(new_rows, path=DECISIONS):
     for r in new_rows:
         did = r["decision_id"]
         if did in by_id:
-            _preserve_cost(r, by_id[did])
+            old = by_id[did]
+            _preserve_cost(r, old)
+            # pack_commit records the pack version at the decision's FIRST capture
+            # (~run-time when projected promptly). Pin it across re-projections so an
+            # idempotent re-run (e.g. the arena-capture order every 30m) doesn't churn
+            # existing rows' pack_commit to whatever HEAD happens to be now.
+            if old.get("pack_commit"):
+                r["pack_commit"] = old["pack_commit"]
             updated += 1
         else:
             added += 1
