@@ -1,0 +1,111 @@
+# dev-pack — one engineering-workflow pack, three lanes over a shared spine.
+#
+# PR-review, hard-bug fix, and feature-dev are ONE workflow with different inputs:
+#   decompose -> verify claims -> converge -> (optionally) act -> check
+# over a per-rig knowledge corpus (personas, injected via $GC_PERSONAS). What
+# differs per lane is the entry artifact, the output schema, and a few dials — not
+# a separate machine. This pack hosts all three as sibling agents/, formulas/, and
+# commands/, discovered by directory convention (agents/ formulas/ orders/
+# commands/ template-fragments/), built entirely from native gascity v1.4.0
+# mechanics (work_dir + pre_start worktrees, template-fragments, env idiom) — no
+# phantom `isolation="worktree"` primitive.
+#
+# LANES
+#
+#   review  — a diff/PR -> a structured merge verdict. Posture-gated: a
+#             deterministic pre-scan sets a trust ceiling; triage classifies at or
+#             below it; the reviewer re-derives the ceiling and bounds its own
+#             fetch/execute latitude by it. Read-only EXCEPT one in-scope check it
+#             may auto-run on a `trusted` PR (via run-scoped-check.sh).
+#     agents/pr-triage/     deterministic-first posture triage (1 slot).
+#     agents/pr-reviewer/   posture-gated reviewer, pooled up to 2 slots
+#                           (pr-reviewer-1, pr-reviewer-2), each in its OWN worktree.
+#     agents/pr-runner/     human-approved dynamic-check lane (1 slot): runs one
+#                           operator-approved check on a `limited` PR, gated the same.
+#
+#   bug     — a symptom/bead -> root cause + fix. TWO independent worker lanes
+#             diagnose the same bug and act as each other's second opinion
+#             ("consider or refute — not a mandate") until root cause, then fix,
+#             converge (coordinator-judged); the stronger lane implements + tests,
+#             the other cross-reviews the diff AND its evidence.
+#     agents/bug-worker-a/  lane A: diagnose / reconsider / implement / cross-review,
+#                           single slot, its OWN detached worktree.
+#     agents/bug-worker-b/  lane B: identical method (shares worker-a's prompt),
+#                           different model. A real second vendor is a one-line
+#                           [[rigs.patches]] provider change (see city.toml).
+#     agents/bug-coordinator/ the protocol driver (1 slot): reads both lanes, makes
+#                           the subjective convergence call, relays second opinions,
+#                           enforces the per-phase cap, escalates to the human.
+#
+#   feature — an intent/bead -> an implementation + tests on a paude/<bead> branch,
+#             pushed to origin. The push is the durable output; opening/merging the
+#             PR is a separate, human- or checkpoint-gated step.
+#     agents/feature-dev/   single write lane (1 slot), its own worktree, real
+#                           branch, pushes to origin.
+#
+# FORMULAS (compile-time DAGs; lanes stay separate formulas that share the spine)
+#     formulas/pr-review.toml         triage -> review + pr-review.v1 verdict.
+#     formulas/pr-review-dynamic.toml human-slung approval lane: run one approved
+#                                     check + pr-review-dynamic.v1 contract.
+#     formulas/feature-dev.toml       per-run implement task + feature-dev.v1 report.
+#     formulas/hard-bug-round.toml    one convergence round: two lanes + a
+#                                     coordinator reconcile fan-in. Re-slung per round.
+#     formulas/hard-bug-finalize.toml implement -> cross-review -> finalize.
+#     orders/fetch-origin.toml        read-only `git fetch --prune` on a cooldown.
+#
+# COMMANDS (namespaced: `gc dev-pack <cmd>`)
+#     review <PR>       start a PR review (slings pr-review to <rig>/pr-reviewer).
+#     bug <bead>        start a two-opinion hard-bug run (resolves rig + targets).
+#     feature <bead>    start a feature implementation.
+#     materialize <PR>  check a PR out into a DURABLE, human-owned worktree (outside
+#                       .gc/, never reaped) so a person can read/diff/run it.
+#     summary <bead|PR> re-render a stored pr-review / dynamic-check verdict, LLM-free.
+#     status <bead>     render a hard-bug arc's durable state (phase/round/status).
+#
+# SHARED SPINE
+#     template-fragments/recovery-header  `gc prime` recovery note (every prompt).
+#     template-fragments/worktree-guard   "you are in your own worktree; abort in the
+#                                         rig root" guard (every prompt).
+#     template-fragments/persona-load     load base.md + the personas whose
+#                                         `Activates on:` matches the lane's entry
+#                                         (changed paths for review; subsystem-in-trace
+#                                         for diagnosis). Parameterized by lens:
+#                                         {{template "persona-load" "review"}} /
+#                                         {{template "persona-load" "diagnosis"}}.
+#     assets/scripts/emit-verdict.sh      review lane atomic finish (write output_json +
+#                                         close + notify $GC_PR_NOTIFY_TO).
+#     assets/scripts/emit-json.sh         schema-agnostic atomic finish (bug lane).
+#     assets/scripts/pr-prescan.sh        deterministic, injection-proof posture ceiling.
+#     assets/scripts/posture-latitude.sh  pure posture -> FETCH/EXEC/GATE table.
+#     assets/scripts/run-scoped-check.sh  the deterministic EXEC gate (re-derives the
+#                                         ceiling, enforces command form + scope).
+#     assets/scripts/render-verdict.sh    verdict -> human-readable summary.
+#     assets/scripts/fetch-origin.sh      the fetch order's exec body.
+#     //tools/shared/worktree-setup.sh    pre_start hook (SHARED spine — one copy at
+#                                         the city root, via {{.CityRoot}}): one
+#                                         detached worktree + .beads redirect per slot;
+#                                         refuses to run in the rig root (loud fail).
+#
+# Project-agnostic: nothing here mentions vLLM. The per-rig knowledge corpus
+# ($GC_PERSONAS) and the prepared test venv ($GC_PREPARE_TEST_ENV / $GC_PR_TEST_VENV)
+# live OUTSIDE the pack, wired to the rig via [[rigs.patches]] env; the pack only
+# CONSUMES them.
+#
+# Isolation guarantee: a rig-scoped session with an empty work_dir resolves to the
+# rig root, so every agent sets work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}";
+# pool expansion makes {{.AgentBase}} distinct per slot, so every slot gets a
+# distinct worktree — the paude-container guarantee, natively.
+#
+# Attached via a rig's `includes` in city.toml (the Rig struct has NO `pack` field);
+# all agents are rig-scoped (scope="rig"), so they expand once per rig they're
+# attached to (intended: vllm).
+#
+# NOTE — no [[named_session]] blocks: all agents are POOL agents (min/max_active_
+# sessions), auto-discovered from agents/ and expanded by the scope in their own
+# agent.toml; gc lint forbids a named_session that targets a pool-controlled agent.
+# min_active_sessions = 0 makes them on-demand (they materialize when work is slung).
+
+[pack]
+name = "dev-pack"
+schema = 2
+description = "One engineering-workflow pack, three lanes over a shared spine: posture-gated PR review (triage → review, trusted auto-run + human-approved dynamic-check lane), two-opinion hard-bug fix (diagnose → converge → implement → cross-review), and a feature-dev write lane — each isolated in its own git worktree (native work_dir + pre_start), sharing one persona corpus via $GC_PERSONAS."

@@ -10,8 +10,8 @@
 # fails "unable to detect version"), install the full CUDA test set (15GB), or get
 # false failures from vLLM's non-GPU teardown hook. This is the one blessed recipe
 # (verified against vLLM's docs/CI + live runs). It is deliberately vLLM-SPECIFIC
-# and self-contained so it can be reused from the pr-review runner AND from an
-# ordinary Claude Code / shell session. The generic pr-review-pack never calls this
+# and self-contained so it can be reused from the dev-pack pr-runner AND from an
+# ordinary Claude Code / shell session. The generic dev-pack never calls this
 # directly — it consumes the venv via $GC_PR_TEST_VENV.
 #
 # WHAT IT DOES (default, no compile):

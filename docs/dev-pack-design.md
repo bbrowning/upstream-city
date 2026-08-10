@@ -1,7 +1,12 @@
 # Dev-pack convergence — design + port plan
 
-Status: **design, not yet built.** Kickoff doc for the macro session that merges
-`pr-review-pack` + `hard-bug-pack` (+ the nascent `feature-dev` lane) into ONE pack.
+Status: **Phases 0–2 built (local commits; unpushed).** Kickoff doc for the macro
+session that merges `pr-review-pack` + `hard-bug-pack` (+ the nascent `feature-dev`
+lane) into ONE pack — now `dev-pack`. Phase 2 (lane consolidation) is done: one
+`dev-pack/` with lane-prefixed agents (`pr-*`/`bug-*`/`feature-dev`), verb-per-lane
+commands (`review`/`bug`/`feature` + `materialize`/`summary`/`status`), one
+`GC_PERSONAS`, and the single-sourced lens-parameterized `persona-load` fragment.
+Remaining: Phase 3 (N-dial) + Phase 4 (feature lane + governance).
 Primitives below are grounded against gascity **v1.4.0** source (`/pvc/workspace/rigs/gascity`,
 `cmd/gc/prompt.go`, `internal/config/*`) + the installed `gc`, not the docs (docs drift — see
 end). Re-verify against live source before implementing (see [[verify-gascity-against-live-source]]).
@@ -103,9 +108,16 @@ cruft. Counter-pressures, enforced not hoped:
 - **Phase 1 — knowledge unification.** `tools/vllm/review-personas` → `tools/vllm/personas`;
   single `GC_PERSONAS` via `[agent_defaults] env`; all lanes read it. `review-eval` → `eval`
   (keep families). Gate: reviewer + hard-bug still pass their cases.
-- **Phase 2 — lane consolidation.** Move pr-review agents/formulas (triage/reviewer/runner/
-  feature-dev) + hard-bug agents/formulas into the pack; **dedupe names**; one command namespace
-  `gc <pack> <lane> …`. Behavior identical. Gate: E2E each lane.
+- **Phase 2 — lane consolidation. [DONE — local commit, unpushed]** Merged both packs into
+  one `dev-pack/` (dir + `pack.toml` name); agents lane-prefixed for cross-pack clash-safety
+  (`pr-triage`/`pr-reviewer`/`pr-runner`, `bug-coordinator`/`bug-worker-a`/`bug-worker-b`,
+  `feature-dev`); only real collision was the two byte-identical fragments (collapsed to one).
+  Command UX is verb-per-lane under `gc dev-pack`: `review`/`bug`/`feature` (kick-off) +
+  `materialize`/`summary`/`status` (helpers); `start`→`bug`, added `review`+`feature` wrappers.
+  `persona-load` single-sourced as **one lens-parameterized fragment**
+  (`{{template "persona-load" "review"|"diagnosis"}}`) now that the merge gives one
+  `template-fragments/`. city.toml `includes=["dev-pack"]`; patch targets repointed. Gates:
+  `gc lint dev-pack` ok + `gc doctor`; Ben runs `gc reload` + review AND hard-bug E2E.
 - **Phase 3 — the N-dial.** Make the second opinion optional in the bug lane (N var; N=1 skips
   reconcile, keeps self-verify); generalize the coordinator to drive any lane's outer loop.
   Gate: prove an N=1 bug run and an N=2 bug run.
@@ -115,7 +127,8 @@ cruft. Counter-pressures, enforced not hoped:
 - **Retire** `pr-review-pack` + `hard-bug-pack` (archive) once the pack passes all lane E2Es.
 
 ## Open decisions (macro session)
-1. **Pack name** (dev-pack / eng-pack / work-pack?).
+1. **Pack name** — resolved: **`dev-pack`** (Phase 2; Ben may rename later — agents are
+   lane-prefixed, not pack-prefixed, so a rename won't churn agent names).
 2. **One generic coordinator + lane var, or per-lane coordinators?** (lean: one generic.)
 3. **Knowledge env name**: generic `GC_PERSONAS` (rig-scoped value) vs `GC_<RIG>_PERSONAS`.
    (lean: generic name, per-rig value via patch.)

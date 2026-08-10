@@ -1,0 +1,208 @@
+description = """
+One convergence round of the hard-bug protocol.
+
+Fans out two independent worker lanes to diagnose (phase=root_cause) or reconsider
+(phase=fix) a bug, then routes a reconciliation step to the coordinator, gated on
+BOTH lanes (mol-review-quorum shape). Lane IDs / providers / targets are formula
+vars, and each lane's model defaults to the agent's city.toml option_defaults, so a
+second vendor drops in via a city.toml rig patch (provider + option_defaults) — no
+formula edit.
+
+The OUTER loop across rounds and phases is deliberately NOT here: a compile-time DAG
+cannot express the subjective, cross-round/cross-phase loop-back. The coordinator
+drives it from its prompt by re-slinging this formula with each lane's prior bead
+relayed to the other as a second opinion.
+
+Round 1 leaves the relay vars empty (fresh, independent diagnosis). From round 2 the
+coordinator passes prior_peer_bead_* + relay_note_* so each lane weighs the other's
+prior position — as an opinion to consider or refute, never a mandate.
+"""
+formula = "hard-bug-round"
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[vars]
+[vars.bug_bead]
+description = "The bug/arc bead id under diagnosis (also holds the durable hard-bug-state.v1). Required."
+required = true
+
+[vars.base_ref]
+description = "Baseline ref the lanes read the code/diff against."
+default = "origin/main"
+
+[vars.phase]
+description = "root_cause (diagnose) or fix (converge the fix plan)."
+default = "root_cause"
+
+[vars.round]
+description = "1-based round number within this phase."
+default = "1"
+
+[vars.max_rounds]
+description = "Per-phase iteration cap; the coordinator escalates when a next round would exceed it."
+default = "3"
+
+[vars.enable_loop]
+description = "false = report-only (coordinator stops after the reconcile verdict, Stage 1); true = coordinator drives the outer loop (Stage 2+)."
+default = "false"
+
+[vars.lane_a_id]
+description = "Durable identity for lane A (survives slot churn)."
+default = "bug-worker-a"
+[vars.lane_a_target]
+description = "Agent target for lane A. Bare name resolves within the rig; override to rig-qualified (e.g. gascity/bug-worker-a) if bare resolution fails."
+default = "bug-worker-a"
+[vars.lane_a_provider]
+description = "Provider hint for lane A (dashboard/provenance only; runtime provider comes from the agent config)."
+default = "claude"
+[vars.lane_a_model]
+description = "Per-run model override for lane A (emitted as opt_model). Empty (the default) defers to the agent's city.toml option_defaults (provider/agent/rig-patch), so the model is set there, not here."
+default = ""
+
+[vars.lane_b_id]
+description = "Durable identity for lane B."
+default = "bug-worker-b"
+[vars.lane_b_target]
+description = "Agent target for lane B. To use a real second vendor, point this at a codex-backed agent config."
+default = "bug-worker-b"
+[vars.lane_b_provider]
+description = "Provider hint for lane B."
+default = "claude"
+[vars.lane_b_model]
+description = "Per-run model override for lane B (emitted as opt_model). Empty (the default) defers to the agent's city.toml option_defaults."
+default = ""
+
+[vars.coordinator_target]
+description = "Agent target for the reconcile step."
+default = "bug-coordinator"
+
+[vars.prior_peer_bead_a]
+description = "Lane B's prior output bead, relayed to lane A as a second opinion. Empty in round 1."
+default = ""
+[vars.relay_note_a]
+description = "Coordinator's short, neutral framing of lane B's position for lane A. Empty in round 1."
+default = ""
+[vars.prior_peer_bead_b]
+description = "Lane A's prior output bead, relayed to lane B. Empty in round 1."
+default = ""
+[vars.relay_note_b]
+description = "Coordinator's framing of lane A's position for lane B. Empty in round 1."
+default = ""
+
+[[steps]]
+id = "lane-a"
+title = "Lane {{lane_a_id}}: {{phase}} (round {{round}})"
+description = """
+You are lane `{{lane_a_id}}` in a two-lane hard-bug protocol, working ONLY in your
+own worktree. Bug/arc bead: `{{bug_bead}}` (`gc bd show {{bug_bead}} --json`); if it
+links an upstream GitHub issue (external ref / URL), fetch it too:
+`gh issue view <issue-url> --comments`.
+Baseline ref for reading code: `{{base_ref}}`. Phase: `{{phase}}`. Round: `{{round}}`.
+
+SECOND OPINION (consider or refute — NOT a mandate): if `{{prior_peer_bead_a}}` is
+non-empty, read the peer lane's prior output and weigh it against your own reasoning:
+`gc bd show {{prior_peer_bead_a}} --json | jq -r '.[0].metadata["gc.output_json"]'`.
+Coordinator's framing of the other lane's position: `{{relay_note_a}}`. You may adopt,
+refine, or reject it, but you must still reach the correct answer on the evidence —
+record your stance in `considered_second_opinion`.
+
+Task by phase (see your worker method for the full playbook):
+- root_cause: find the ROOT CAUSE and its mechanism (not a symptom); back it with
+  concrete evidence (files, lines, repro, traces); sketch a fix. Ground-truth the
+  keystones your diagnosis rests on — load-bearing facts (token ids, special/EOS
+  tokens, config defaults — fetch the tokenizer/config, don't infer) AND causal steps
+  in the mechanism; list them in `keystone_facts` and cap confidence at `medium` for
+  any you could not verify (hedge an unconfirmed mechanism, don't assert it boldly).
+- fix: the root cause is already agreed (read `agreed_root_cause` from `{{bug_bead}}`'s
+  hard-bug-state.v1); converge the concrete FIX — the change, tests_to_add, and
+  verification_plan.
+
+Emit `hard-bug-diagnosis.v1` to gc.output_json, then finish:
+  bash {{.ConfigDir}}/assets/scripts/emit-json.sh --bead <your-step-bead> \\
+    --json-file "$out" --schema hard-bug-diagnosis.v1 --outcome pass
+On a retryable infra failure: --outcome fail --failure-class transient --failure-reason "…".
+"""
+metadata = { "gc.run_target" = "{{lane_a_target}}", "gc.provider" = "{{lane_a_provider}}", "opt_model" = "{{lane_a_model}}", "gc.hard_bug_lane" = "{{lane_a_id}}", "gc.hard_bug_phase" = "{{phase}}", "gc.hard_bug_round" = "{{round}}", "gc.output_json_schema" = "hard-bug-diagnosis.v1", "gc.output_json_required" = "true" }
+
+[steps.retry]
+max_attempts = 2
+on_exhausted = "soft_fail"
+
+[[steps]]
+id = "lane-b"
+title = "Lane {{lane_b_id}}: {{phase}} (round {{round}})"
+description = """
+You are lane `{{lane_b_id}}` in a two-lane hard-bug protocol, working ONLY in your
+own worktree. Bug/arc bead: `{{bug_bead}}` (`gc bd show {{bug_bead}} --json`); if it
+links an upstream GitHub issue (external ref / URL), fetch it too:
+`gh issue view <issue-url> --comments`.
+Baseline ref for reading code: `{{base_ref}}`. Phase: `{{phase}}`. Round: `{{round}}`.
+
+SECOND OPINION (consider or refute — NOT a mandate): if `{{prior_peer_bead_b}}` is
+non-empty, read the peer lane's prior output and weigh it against your own reasoning:
+`gc bd show {{prior_peer_bead_b}} --json | jq -r '.[0].metadata["gc.output_json"]'`.
+Coordinator's framing of the other lane's position: `{{relay_note_b}}`. You may adopt,
+refine, or reject it, but you must still reach the correct answer on the evidence —
+record your stance in `considered_second_opinion`.
+
+Task by phase (see your worker method for the full playbook):
+- root_cause: find the ROOT CAUSE and its mechanism (not a symptom); back it with
+  concrete evidence (files, lines, repro, traces); sketch a fix. Ground-truth the
+  keystones your diagnosis rests on — load-bearing facts (token ids, special/EOS
+  tokens, config defaults — fetch the tokenizer/config, don't infer) AND causal steps
+  in the mechanism; list them in `keystone_facts` and cap confidence at `medium` for
+  any you could not verify (hedge an unconfirmed mechanism, don't assert it boldly).
+- fix: the root cause is already agreed (read `agreed_root_cause` from `{{bug_bead}}`'s
+  hard-bug-state.v1); converge the concrete FIX — the change, tests_to_add, and
+  verification_plan.
+
+Emit `hard-bug-diagnosis.v1` to gc.output_json, then finish:
+  bash {{.ConfigDir}}/assets/scripts/emit-json.sh --bead <your-step-bead> \\
+    --json-file "$out" --schema hard-bug-diagnosis.v1 --outcome pass
+On a retryable infra failure: --outcome fail --failure-class transient --failure-reason "…".
+"""
+metadata = { "gc.run_target" = "{{lane_b_target}}", "gc.provider" = "{{lane_b_provider}}", "opt_model" = "{{lane_b_model}}", "gc.hard_bug_lane" = "{{lane_b_id}}", "gc.hard_bug_phase" = "{{phase}}", "gc.hard_bug_round" = "{{round}}", "gc.output_json_schema" = "hard-bug-diagnosis.v1", "gc.output_json_required" = "true" }
+
+[steps.retry]
+max_attempts = 2
+on_exhausted = "soft_fail"
+
+[[steps]]
+id = "reconcile"
+title = "Coordinator reconciliation: {{phase}} round {{round}}"
+needs = ["lane-a", "lane-b"]
+description = """
+Reconcile phase `{{phase}}` round `{{round}}` of the hard-bug arc `{{bug_bead}}`.
+Read BOTH lanes' `gc.output_json` (walk your `needs` edge, or the shared
+gc.root_bead_id filtered to schema hard-bug-diagnosis.v1):
+`gc bd show <lane-bead> --json | jq -r '.[0].metadata["gc.output_json"]'`.
+
+Make the subjective "aligned close enough?" call yourself (see your coordinator
+protocol for the rubric): compare root_cause+mechanism (phase root_cause) or the
+proposed_fix (phase fix). Also decide `stronger_lane` and whether the lanes are
+`stuck`. Before declaring aligned, apply the unverified-keystone gate: agreement on a
+keystone both lanes marked `could_not_verify` is NOT convergence — bounce a directed
+verify round (see your protocol). Emit `hard-bug-reconcile.v1` via emit-json.sh, then MERGE-update
+`{{bug_bead}}`'s hard-bug-state.v1 (bump rounds.{{phase}}, set last_reconcile, and —
+when root cause aligns — record agreed_root_cause).
+
+Then act on the outer loop per your protocol, using THESE run vars:
+  bug_bead={{bug_bead}} phase={{phase}} round={{round}} max_rounds={{max_rounds}}
+  enable_loop={{enable_loop}} base_ref={{base_ref}}
+  lane_a: id={{lane_a_id}} target={{lane_a_target}} provider={{lane_a_provider}} model={{lane_a_model}} (empty = agent's option_defaults)
+  lane_b: id={{lane_b_id}} target={{lane_b_target}} provider={{lane_b_provider}} model={{lane_b_model}} (empty = agent's option_defaults)
+  coordinator_target={{coordinator_target}}
+
+- enable_loop=false (Stage 1): after emitting the reconcile verdict, mail the human a
+  summary and STOP — do not launch another round.
+- enable_loop=true: relay + launch round {{round}}+1 (passing each lane the other's
+  prior bead as a second opinion) / advance root_cause→fix / choose implementer and
+  sling hard-bug-finalize / escalate to the human when a next round would exceed
+  {{max_rounds}} or the lanes are stuck.
+"""
+metadata = { "gc.run_target" = "{{coordinator_target}}", "gc.hard_bug_phase" = "{{phase}}", "gc.hard_bug_round" = "{{round}}", "gc.output_json_schema" = "hard-bug-reconcile.v1", "gc.output_json_required" = "true" }
+
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"
