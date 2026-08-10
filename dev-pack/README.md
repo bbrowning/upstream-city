@@ -571,6 +571,32 @@ mine → distill → `learn` invariant-corpus pipeline, now archived at `//tools
 - **feature-dev is a single lane** (`max_active_sessions = 1`) by design: one
   writer, one write worktree, no writer-vs-writer races.
 
+## Known bugs (fix before the "Growing up" items below)
+
+- **[BUG · review lane · higher priority] The trusted auto-check can run against the
+  BASE tree, not the PR head.** A reviewer's worktree starts detached at the rig HEAD
+  (= base), so the PR's changed files don't exist until it fetches + checks out the
+  head — but nothing enforces that before the check runs: the checkout is framed as
+  optional / "to browse" (`agents/pr-reviewer/prompt.template.md` step 1), `git diff
+  base...head` needs no checkout (so the reviewer never notices the tree is at base),
+  the EXEC=allow auto-run block requires neither the checkout nor `--expect-head-sha`,
+  and the gate only *assumes* the caller checked out (`assets/scripts/run-scoped-check.sh:16-17`;
+  its head-SHA pin, GATE 4 `:143-147`, is optional). Result: pytest runs in the base
+  tree. A **new** test file is then absent → `rc=4`, which the gate mislabels as
+  `outcome:"fail"` (`:196-200` has no rc=4 case) — a spurious fail; a **modified** test
+  would silently run against old code and report a meaningless pass/fail (that one won't
+  self-correct). Observed on the PR #49227 E2E (bead `vllm-zmks`): the reviewer
+  self-corrected (re-`checkout --detach` head, re-ran) and the final verdict was valid —
+  but by model judgment, not by the deterministic gate.
+  **Fix (defense in depth):** (1) **gate** deterministically verifies the tree is at the
+  PR head — a target-path-exists check → honest `skipped "target-absent — checkout the PR
+  head"` instead of a bogus `fail`, plus resolve `--head` and compare to `git rev-parse
+  HEAD`, skip on mismatch (covers the modified-file case); (2) **prompt** promotes "fetch
+  + `git checkout --detach` the PR head" from optional to a required prerequisite of the
+  auto-run, and passes `--expect-head-sha` (activating GATE 4). Pre-existing (NOT a
+  Phase-2 regression — the merge only renamed things here); ~a dozen lines across the
+  gate + prompt; needs its own re-E2E.
+
 ## Growing up (later)
 
 - **Rig-carrying PR specifiers for `review` (+ `materialize`).** Today a bare PR
