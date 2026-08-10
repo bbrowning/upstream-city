@@ -108,11 +108,12 @@ The fix, in every agent's `agent.toml`:
 
 ```toml
 work_dir  = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
-pre_start = ["{{.ConfigDir}}/assets/scripts/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]
+pre_start = ["{{.CityRoot}}/tools/shared/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]
 ```
 
-(`{{.ConfigDir}}` resolves to **this pack's dir** — where the script actually
-lives once installed — not the city root; `{{.CityRoot}}` would `exit 127`.)
+(`worktree-setup.sh` is the **shared spine** script, single-sourced at the city
+root in `//tools/shared/`, so `{{.CityRoot}}` resolves right there. A script that
+lived *in* this pack would instead use `{{.ConfigDir}}` = the pack dir.)
 
 - A bounded pool (`max_active_sessions > 1`) statically expands to numbered
   slots `reviewer-1`, `reviewer-2` (`SupportsInstanceExpansion` +
@@ -163,7 +164,7 @@ assets/scripts/posture-latitude.sh    # pure posture → FETCH/EXEC/GATE table
 assets/scripts/run-scoped-check.sh    # the deterministic EXEC gate for dynamic checks
 assets/scripts/emit-verdict.sh        # atomic finish: write verdict + close + notify human
 assets/scripts/render-verdict.sh      # verdict JSON → human-readable summary (mail body + `summary` cmd)
-assets/scripts/worktree-setup.sh      # pre_start: make each slot's detached worktree
+# worktree-setup.sh now lives at //tools/shared/ (shared spine — see "How the isolation actually works")
 assets/scripts/fetch-origin.sh        # the fetch order's exec body
 ```
 

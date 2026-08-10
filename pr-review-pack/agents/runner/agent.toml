@@ -26,7 +26,8 @@ max_active_sessions = 1
 
 # Per-slot detached worktree (same isolation as the reviewer; single slot ->
 # `runner`). pre_start only creates the worktree; the runner fetches the specific
-# PR head itself (it has the per-bead context that pre_start lacks). {{.ConfigDir}}
-# is THIS pack's root dir (do NOT use {{.CityRoot}} — exit 127 as a subdir pack).
+# PR head itself (it has the per-bead context that pre_start lacks). The setup
+# script is the SHARED spine copy at the CITY ROOT (tools/shared/), so {{.CityRoot}}
+# is correct here — it lives at the city root, not in this pack.
 work_dir  = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
-pre_start = ["{{.ConfigDir}}/assets/scripts/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]
+pre_start = ["{{.CityRoot}}/tools/shared/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]

@@ -26,8 +26,9 @@
 #   formulas/hard-bug-finalize.toml  implement -> cross-review -> finalize.
 #   assets/scripts/emit-json.sh      schema-agnostic atomic finish: MERGE-write
 #                           gc.output_json + set outcome + CLOSE (+ opt notify).
-#   assets/scripts/worktree-setup.sh pre_start hook: one detached worktree per slot;
-#                           refuses to run in the rig root (loud fail, no stomp).
+#   //tools/shared/worktree-setup.sh pre_start hook (SHARED spine — one copy at the
+#                           city root, via {{.CityRoot}}): one detached worktree per
+#                           slot; refuses to run in the rig root (loud fail, no stomp).
 #   commands/status/        `gc hard-bug-pack status <arc-bead>` — LLM-free render
 #                           of the arc's hard-bug-state.v1 (phase/round/status).
 #

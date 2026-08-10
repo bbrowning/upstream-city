@@ -22,6 +22,6 @@ max_active_sessions = 1
 # min/scale override) does NOT expand into numbered instances, so this resolves
 # to one stable slot named "feature-dev" at .gc/worktrees/<rig>/feature-dev.
 work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
-# {{.ConfigDir}} = this pack's root (NOT the city root); matches the reviewer and
-# the shipping t3bridge example. Using {{.CityRoot}} would miss the script (127).
-pre_start = ["{{.ConfigDir}}/assets/scripts/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]
+# The setup script is the SHARED spine copy at the CITY ROOT (tools/shared/), so
+# {{.CityRoot}} is correct here — it lives at the city root, not in this pack.
+pre_start = ["{{.CityRoot}}/tools/shared/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]

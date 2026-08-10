@@ -36,7 +36,7 @@ max_active_sessions = 1
 # checkout, but we give it one uniformly). Detached, dedicated to this slot.
 work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
 
-# Reuse the SHARED, battle-tested setup script (do not fork it). {{.ConfigDir}}
-# resolves to this pack's root — NOT {{.CityRoot}} (that would be exit-127 when
-# the pack is installed as a city subdirectory). Matches the reviewer exactly.
-pre_start = ["{{.ConfigDir}}/assets/scripts/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]
+# Reuse the SHARED spine setup script (do not fork it): the canonical copy lives at
+# the CITY ROOT (tools/shared/), referenced via {{.CityRoot}} — correct precisely
+# because the script is at the city root, not in this pack. Matches every dev lane.
+pre_start = ["{{.CityRoot}}/tools/shared/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]

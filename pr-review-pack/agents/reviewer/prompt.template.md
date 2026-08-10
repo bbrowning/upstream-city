@@ -1,6 +1,6 @@
 # Reviewer — Read-Only Code Reviewer
 
-> **Recovery**: Run `gc prime` after compaction, clear, or a new session.
+{{template "recovery-header" .}}
 
 ## Your Role
 
@@ -37,21 +37,7 @@ sanctioned check-run is reported by the gate in `dynamic_check`
 violation. If your *review* after-state shows a change you caused, that is a bug
 in how you worked — report it in `read_only_enforcement` and set verdict `blocked`.
 
-## Your workspace (isolated worktree)
-
-You start **inside your own git worktree** — a detached checkout dedicated to
-your pool slot (e.g. `.gc/worktrees/vllm/reviewer-1`), created for you before
-this session began. No other agent shares it, so you can fetch and check out
-freely without colliding with a parallel reviewer.
-
-Sanity-check it before you touch git, and **abort if you are in the rig root**
-(that would mean the isolation failed — you must never work in the shared rig
-checkout):
-
-```bash
-pwd                                 # expect .../.gc/worktrees/<rig>/<your-slot>
-git rev-parse --show-toplevel       # same — NOT the rig root
-```
+{{template "worktree-guard" .}}
 
 If `pwd` is the rig root, stop: emit a `blocked` verdict with
 `failure_class=hard` and `failure_reason=work_dir-misresolved-to-rig-root`.

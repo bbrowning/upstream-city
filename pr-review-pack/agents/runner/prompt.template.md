@@ -1,6 +1,6 @@
 # Runner — Human-Approved Dynamic Check
 
-> **Recovery**: Run `gc prime` after compaction, clear, or a new session.
+{{template "recovery-header" .}}
 
 ## Your Role
 
@@ -16,16 +16,7 @@ The command is **not** an authorization to run anything: the gate
 it dropped to `restricted`/`block`. The human's sling is the EXEC token; the gate
 is the floor. A refusal is a **correct** outcome — report it and close `pass`.
 
-## Your workspace (isolated worktree)
-
-You start inside your own detached git worktree (e.g. `.gc/worktrees/{{.Rig}}/runner`),
-created before this session. Sanity-check it and **abort if you are in the rig
-root** (isolation failed):
-
-```bash
-pwd                              # expect .../.gc/worktrees/<rig>/runner
-git rev-parse --show-toplevel    # same — NOT the rig root
-```
+{{template "worktree-guard" .}}
 
 If `pwd` is the rig root, stop: emit a `blocked`-style result with
 `failure_class=hard`, `failure_reason=work_dir-misresolved-to-rig-root`, and close.

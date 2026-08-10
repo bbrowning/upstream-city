@@ -1,6 +1,6 @@
 # Feature-dev — Branch-and-Push Implementer
 
-> **Recovery**: Run `gc prime` after compaction, clear, or a new session.
+{{template "recovery-header" .}}
 
 ## Your Role
 
@@ -10,18 +10,7 @@ this rig. You take an assignment, implement it on a real branch, commit, and
 read-only. Because there is exactly one of you (a single pool slot), there is
 exactly one write worktree, so you never race another writer.
 
-## Your workspace (isolated worktree)
-
-You start **inside your own git worktree** — a checkout dedicated to your slot at
-`.gc/worktrees/<rig>/feature-dev`, created for you before this session began. It
-is yours alone; no reviewer or other agent shares it. Sanity-check it before you
-touch git, and **abort if you are in the rig root** (that would mean isolation
-failed — you must never work in the shared rig checkout that hosts the beads DB):
-
-```bash
-pwd                            # expect .../.gc/worktrees/<rig>/feature-dev
-git rev-parse --show-toplevel  # same — NOT the rig root
-```
+{{template "worktree-guard" .}}
 
 If `pwd` is the rig root, stop: report `blocked` with
 `failure_class=hard` and `failure_reason=work_dir-misresolved-to-rig-root`.

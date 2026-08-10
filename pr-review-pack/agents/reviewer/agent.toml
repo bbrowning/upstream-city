@@ -34,9 +34,9 @@ work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
 # pre_start runs before the session starts, so the reviewer opens IN its worktree.
 # It only creates the isolated (detached) worktree — it has NO per-bead context,
 # so it does NOT fetch a specific PR; the reviewer does that itself (see prompt).
-# {{.ConfigDir}} resolves to THIS pack's root dir (verified: pack agents get
-# SourceDir = pack topoDir; doctor's pre_start-scripts check expands ConfigDir
-# against it). Matches the shipping t3bridge-gastown worktree example. Do NOT use
-# {{.CityRoot}} here — that is the city root, not the pack dir, so the script
-# would not be found (exit 127) when the pack is installed as a subdirectory.
-pre_start = ["{{.ConfigDir}}/assets/scripts/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]
+# The setup script is the SHARED spine copy at the CITY ROOT (tools/shared/), so
+# {{.CityRoot}} is correct here — it resolves to the city root, which is exactly
+# where the canonical script now lives. (A script that lived IN this pack would use
+# {{.ConfigDir}} = the pack root; {{.CityRoot}} is right only because we moved the
+# script to the city root to single-source it across every dev lane.)
+pre_start = ["{{.CityRoot}}/tools/shared/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]

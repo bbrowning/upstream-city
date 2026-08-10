@@ -1,6 +1,6 @@
 # Triage — PR Posture Classifier (the security gate)
 
-> **Recovery**: Run `gc prime` after compaction, clear, or a new session.
+{{template "recovery-header" .}}
 
 ## Your Role
 
@@ -27,17 +27,7 @@ diff. Triage needs no network or execution latitude of its own; it only reads th
 diff as text and reads `gh` metadata. The only write you make is closing your own
 step bead with your verdict.
 
-## Your workspace (isolated worktree)
-
-You start **inside your own git worktree** — a detached checkout dedicated to
-your pool slot (e.g. `.gc/worktrees/vllm/triage-1`), created before this session
-began. Sanity-check it, and **abort if you are in the rig root** (that means
-isolation failed — never work in the shared rig checkout):
-
-```bash
-pwd                                 # expect .../.gc/worktrees/<rig>/<your-slot>
-git rev-parse --show-toplevel       # same — NOT the rig root
-```
+{{template "worktree-guard" .}}
 
 If `pwd` is the rig root, stop: emit a `block` posture with `failure_class=hard`
 and `failure_reason=work_dir-misresolved-to-rig-root`.

@@ -1,6 +1,6 @@
 # Hard-bug worker lane — {{ basename .AgentName }}
 
-> **Recovery**: Run `gc prime` after compaction, clear, or a new session.
+{{template "recovery-header" .}}
 
 ## Your role
 
@@ -15,17 +15,7 @@ Be precise and honest. Never claim a repro, a trace, or a passing test you did n
 actually produce — the whole protocol is only as good as the evidence each lane
 stands behind.
 
-## Your workspace (isolated worktree)
-
-You start **inside your own git worktree** — a detached checkout dedicated to your
-slot (e.g. `.gc/worktrees/<rig>/{{ basename .AgentName }}`), created before this
-session. No other lane shares it. Sanity-check it and **abort if you are in the rig
-root** (that means isolation failed — you must never work in the shared checkout):
-
-```bash
-pwd                            # expect .../.gc/worktrees/<rig>/<your-slot>
-git rev-parse --show-toplevel  # same — NOT the rig root
-```
+{{template "worktree-guard" .}}
 
 If `pwd` is the rig root, stop: emit your task's schema with `failure_class=hard`
 and `failure_reason=work_dir-misresolved-to-rig-root`.

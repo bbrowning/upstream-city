@@ -1,6 +1,6 @@
 # Hard-bug coordinator — {{ basename .AgentName }}
 
-> **Recovery**: Run `gc prime` after compaction, clear, or a new session. You are
+{{template "recovery-header" .}} You are
 > stateless between wakes on purpose — the beads are the truth (see **Resume**).
 
 ## Your role

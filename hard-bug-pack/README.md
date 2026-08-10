@@ -49,7 +49,7 @@ diagnose(root_cause) → converge-root-cause → converge-fix
 | `formulas/hard-bug-round.toml` | one round: two lanes + coordinator reconcile |
 | `formulas/hard-bug-finalize.toml` | implement → cross-review → finalize |
 | `assets/scripts/emit-json.sh` | atomic finish: MERGE-write `gc.output_json` + close (+ opt notify) |
-| `assets/scripts/worktree-setup.sh` | pre_start: one detached worktree per slot |
+| `//tools/shared/worktree-setup.sh` | pre_start (shared spine, city-root copy via `{{.CityRoot}}`): one detached worktree per slot |
 | `commands/start/` | `gc hard-bug-pack start <arc-bead>` — resolve rig + sling a run (no target-typing) |
 | `commands/status/` | `gc hard-bug-pack status <arc-bead>` — LLM-free state render |
 

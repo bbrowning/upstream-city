@@ -2,21 +2,21 @@
 # worktree-setup.sh — create an isolated, DETACHED git worktree for one pool
 # slot, so N agents on the same rig never share a checkout.
 #
-# Invoked from an agent's `pre_start` (runs before the session is created, so the
-# agent starts *inside* its own worktree):
+# SHARED SPINE SCRIPT. This is the single canonical copy for every dev-lane
+# pack (PR review, hard-bug, feature-dev). Agents reference it from pre_start
+# via the city-root path:
 #
-#   worktree-setup.sh <rig-root> <target-worktree-dir> <agent-base-name>
+#   pre_start = ["{{.CityRoot}}/tools/shared/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]
 #
 # The three args are template-expanded by gascity from the pre_start line:
 #   {{.RigRoot}}  {{.WorkDir}}  {{.AgentBase}}
 #
 # WHY DETACHED: git refuses to check out a *branch* that is already checked out
 # in another worktree, but detached worktrees have no such exclusivity. So N
-# review slots can each sit at a different PR sha (or even the same one) with
-# zero conflict. Reviewers check out the specific PR ref themselves; feature-dev
-# creates its own `paude/<bead>` branch as its first step. pre_start only has to
-# guarantee the *isolation*, not the job-specific checkout (it has no per-bead
-# context anyway).
+# slots can each sit at a different sha (or even the same one) with zero
+# conflict. A read-only lane checks out its target ref itself; a write lane
+# creates its own branch as its first step. pre_start only has to guarantee the
+# *isolation*, not the job-specific checkout (it has no per-bead context anyway).
 #
 # WHY THE STAGING DANCE: gascity stages runtime files (notably
 # `.gc/settings.json`) INTO the work_dir *before* pre_start runs, so the target
@@ -106,9 +106,9 @@ fi
 rmdir "$WT" 2>/dev/null || true
 
 # --- Create a detached worktree at the rig's current HEAD. ------------------
-# Objects are shared with the rig root, so only the working tree is written —
-# ~sub-second even for a repo the size of vLLM. The initial detach point barely
-# matters: the agent fetches + checks out its real target ref as step 1.
+# Objects are shared with the rig root, so only the working tree is written.
+# The initial detach point barely matters: the agent fetches + checks out its
+# real target ref as step 1.
 if ! GIT_LFS_SKIP_SMUDGE=1 git -C "$RIG_ROOT" worktree add --detach "$WT" HEAD; then
     echo "worktree-setup: failed to create detached worktree at $WT from $RIG_ROOT" >&2
     restore_stage

@@ -18,6 +18,7 @@ option_defaults = { model = "opus", effort = "high" }
 
 # --- Per-slot worktree isolation (see pr-review reviewer for the full rationale).
 # Without work_dir a rig-scoped session resolves to the rig root; with this each
-# single slot gets its own detached worktree. {{.ConfigDir}} = THIS pack's root.
+# single slot gets its own detached worktree. The setup script is the SHARED spine
+# copy at the CITY ROOT (tools/shared/), referenced via {{.CityRoot}}.
 work_dir  = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
-pre_start = ["{{.ConfigDir}}/assets/scripts/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]
+pre_start = ["{{.CityRoot}}/tools/shared/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]

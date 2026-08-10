@@ -23,4 +23,4 @@ provider = "claude"
 option_defaults = { model = "opus", effort = "high" }
 
 work_dir  = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
-pre_start = ["{{.ConfigDir}}/assets/scripts/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]
+pre_start = ["{{.CityRoot}}/tools/shared/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]

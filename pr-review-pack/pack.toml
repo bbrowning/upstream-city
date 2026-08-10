@@ -33,9 +33,10 @@
 #   assets/scripts/emit-verdict.sh    atomic finish: write output_json + close +
 #                             notify human in one step (notify is operator-configurable
 #                             via $GC_PR_NOTIFY_TO; default "human", empty disables).
-#   assets/scripts/worktree-setup.sh  pre_start hook: makes each slot's detached
-#                             worktree + .beads redirect; refuses to run in the
-#                             rig root (loud fail instead of silent stomp).
+#   //tools/shared/worktree-setup.sh  pre_start hook (SHARED spine — single copy at
+#                             the city root, referenced via {{.CityRoot}}): makes each
+#                             slot's detached worktree + .beads redirect; refuses to
+#                             run in the rig root (loud fail instead of silent stomp).
 #   assets/scripts/fetch-origin.sh    the fetch order's exec body.
 #
 # Project-agnostic: nothing here mentions vLLM. Running a PR's tests needs a
