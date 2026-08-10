@@ -35,10 +35,8 @@ rows. Don't naively pool them — slice by `blind` and `source`.
   transcript tokens. `project()` is the going-forward entry point; re-run anytime.
 - `eval_to_arena.py` — projects `tools/vllm/eval/run-*/` (review + diagnosis).
 - `arena_refresh.py` — **the single idempotent capture entry point**: runs every
-  projector under a lock, logs to `refresh.log`. Called by the Stop hook / manually /
-  `--loop`. Add new N≥2 sources to its `PROJECTORS` list.
-- `arena_stop_hook.sh` — Claude Code Stop hook; on a *coordinator* worktree session
-  ending it fires `arena_refresh.py` detached. Wired from `~/.claude/settings.json`.
+  projector under a lock, logs to `refresh.log`. Driven by the `arena-capture` gascity
+  order (below); also runnable manually / `--loop`. Add new N≥2 sources to `PROJECTORS`.
 - `test_arena.py` — hermetic tests for the token math (dedup, session-vs-window).
 
 Every projector merges into the same log by `decision_id`, preserves foreign rows
@@ -55,25 +53,21 @@ python3 tools/vllm/arena/test_arena.py          # token-math regression tests
 
 ## Auto-capture (going-forward) — no manual backfilling
 
-New N≥2 decisions land in the log automatically; the transcript token counts are
-captured well within Claude Code's transcript retention (`cleanupPeriodDays`, ~30d).
-Everything funnels through `arena_refresh.py` (idempotent), so the trigger is
-interchangeable — pick the host, not the logic.
+New N≥2 decisions land in the log automatically via **one path**: a gascity order runs
+`arena_refresh.py` on a cooldown. Everything funnels through that one idempotent script,
+so token counts are captured well within Claude Code's transcript retention
+(`cleanupPeriodDays`, ~30d).
 
-- **Primary: a gascity order** (`dev-pack/orders/arena-capture.toml` → `arena-capture.sh`
-  → `arena_refresh.py`). The controller — the one always-on process here — runs it via
-  `exec` on a `cooldown` (no LLM/agent/wisp), the durable cousin of cron; it survives
-  restarts. This is the `jsonl-export` order's pattern. Ben-gated: it's a pack file, so
-  `gc reload` to activate. A prompter variant is `trigger="event"` / `on="bead.closed"`
-  (guarded to reconcile beads, like `cascade-nudge-on-blocker-close`) — cooldown is used
-  since retention dwarfs any interval.
-- **Bridge / zero-edit (live now): a Claude Code Stop hook.** `arena_stop_hook.sh`, wired
-  in this container's `~/.claude/settings.json`, fires when a *coordinator* worktree
-  session ends and launches `arena_refresh.py` detached. It works before the order is
-  reloaded (no pack edit); once the order is confirmed live it's redundant and can be
-  removed (both are flock-safe if kept). gascity agents are normal Claude Code sessions
-  under the default config dir, so user hooks apply.
+- **The mechanism: a gascity order** — `dev-pack/orders/arena-capture.toml` →
+  `arena-capture.sh` → `arena_refresh.py`. The controller (the one always-on process
+  here) runs it via `exec` on a `cooldown` (no LLM/agent/wisp) — the durable cousin of
+  cron; it survives restarts. Same pattern as `jsonl-export`. It's a pack file, so
+  `gc reload` activates it (`gc order list` to confirm). A prompter variant is
+  `trigger="event"` / `on="bead.closed"` (guarded to reconcile beads, like
+  `cascade-nudge-on-blocker-close`); cooldown is used since retention dwarfs any interval.
 - **Manual / fallback:** `python3 arena_refresh.py` (or `--loop 6h`).
+
+(An earlier Claude Code Stop hook was removed in favor of this single order path.)
 
 ## Token sourcing is HARNESS-SPECIFIC (future-enhancement seam)
 
