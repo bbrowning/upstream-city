@@ -596,6 +596,22 @@ mine → distill → `learn` invariant-corpus pipeline, now archived at `//tools
   auto-run, and passes `--expect-head-sha` (activating GATE 4). Pre-existing (NOT a
   Phase-2 regression — the merge only renamed things here); ~a dozen lines across the
   gate + prompt; needs its own re-E2E.
+- **[UX gap · bug lane · medium] The hard-bug human notification is raw JSON, not a
+  rendered summary.** The review lane renders a prose subject+body via `render-verdict.sh`
+  (humans don't read JSON); the bug lane never got the equivalent. The coordinator's
+  Stage-1 notify goes through `emit-json.sh --notify` (`assets/scripts/emit-json.sh:64-69`),
+  whose body is `"Step <bead> closed: <outcome>\n\n" + <raw hard-bug-reconcile.v1 JSON>`.
+  The **subject** is already good ("hard-bug vllm-tixx root_cause r1: aligned=false
+  stronger=worker-a next=report_only") — only the **body** is unreadable. Note the design
+  drift: `emit-json.sh`'s comment says "the coordinator composes its own richer human mail"
+  (so `--notify` is meant as a terse pointer), but the coordinator prompt instead folds
+  `--notify` into the atomic close (so the mail can't be forgotten) — and that path dumps
+  the JSON. **Fix:** add a `render-hardbug.sh` (mirror `render-verdict.sh`) turning
+  `hard-bug-reconcile.v1` (and the diagnosis) into a prose body — the divergence, the
+  stronger lane + why, `next_action` + what the human should do — wired in without losing
+  the atomic-close guarantee (a generic `emit-json.sh --render <script>` hook to stay
+  schema-agnostic, or the coordinator composes the body and passes `-m`). Hit on every bug
+  run; good to fix alongside the base-vs-head review bug.
 
 ## Growing up (later)
 
