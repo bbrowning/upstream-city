@@ -25,6 +25,6 @@ Cross-cutting reflexes — the non-obvious vLLM-specific ones worth carrying eve
    path (repo AGENTS.md). Model-affecting changes (accuracy/output/serving) should carry
    eval or benchmark evidence, not only unit tests.
 
-6. **Competing in-flight fixes.** Check whether another open PR edits the same
+6. **Competing in-flight fixes.** Check whether another open or merged PR edits the same
    function/hunk/area a different way — piecemeal merges conflict and entrench divergent
    designs even when each PR is individually correct.

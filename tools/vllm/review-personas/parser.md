@@ -10,10 +10,10 @@ engine** (`vllm/parser/engine/`). How you think — reflexes, highest-value firs
    models. A change scoped to fix one model (e.g. inkling) routinely regresses others
    (e.g. minimax m2) through a shared default, transition, or drop rule. Never trust that
    the author's single-model test suffices: enumerate the other engine-backed parsers
-   (`vllm/parser/*.py` configs, `*_engine_*_parser.py` shims) and run their tests
-   (`tests/parser/engine/`, `tests/tool_parsers/`, `tests/reasoning/`). Also check whether
-   another (open or merged) PR is fixing the same thing a different way — competing fixes
-   are common in this area.
+   (`vllm/parser/*.py` configs, `*_engine_*_parser.py` shims) and, per posture, run their
+   tests (`tests/parser/engine/`, `tests/tool_parsers/`, `tests/reasoning/`) or reason
+   through the shared defaults/transitions they rely on. Competing fixes are especially
+   common here — apply base's competing-in-flight-fixes check across these parsers.
 
 2. **Shared base + per-model overrides need per-model tests.** When a base method or
    behavior is specialized per model (each parser overriding `is_reasoning_end`, a
