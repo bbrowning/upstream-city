@@ -81,17 +81,18 @@ method / why-absent):
   `sessionId`, `effort`, and `model`. Tokens are **deduped by `message.id`** (usage
   lines are logged 2–4× per message — don't sum raw lines). There are two join tiers
   (`cost.join` records which was used):
-  - **`session` (stable, preferred)** — when the lane bead carries a stamped
-    `gc.cc_session_id`, read exactly that session's file. Window-independent, immune to
-    sibling sessions accumulating in a reused worktree. → `cost_source:
+  - **`session` (stable, preferred)** — when the lane bead carries a `gc.cc_session_id`,
+    read exactly that session's file. Window-independent, immune to sibling sessions
+    accumulating in a reused worktree. → `cost_source:
     "claude-code/worktree-transcript#session"`.
   - **`window` (fallback)** — no stamp: scan all sessions in the worktree, keep records
     within the bead's `[created_at, closed_at]`. Fragile — a loose window (missing
     `closed_at` → +3h) or session reuse can bleed a sibling run's tokens.
     → `cost_source: "claude-code/worktree-transcript#window"`.
-  The stamp isn't emitted yet (gascity follow-up), so today's rows are `#window`; the
-  code prefers `#session` the moment gascity stamps it. `effort_resolved` (ground truth)
-  is likewise read from the transcript now and from the stamp later.
+  The worker self-stamps `gc.cc_session_id` at emit time (`emit-json.sh`, from
+  `$CLAUDE_CODE_SESSION_ID` — pack-only, no gascity change; needs `gc reload`). Rows
+  captured before that reload are `#window`; the code uses `#session` for every run
+  emitted after it. `effort_resolved` (ground truth) is read from the transcript.
 - **eval arms** are Agent-tool subagents, NOT gascity sessions. Their internal
   turns/usage are **not persisted** anywhere — only the parent keeps the spawn
   prompt and the final `tool_result` (no usage). → tokens null,
@@ -162,26 +163,19 @@ jq -c 'select(.aligned==false)' decisions.jsonl
 
 ## Going-forward gaps
 
-- **Stamp session_id/effort/model at dispatch (the launch-time-threading follow-up).**
-  This is the highest-value robustness fix — it makes the token join stable instead of a
-  timestamp-window guess. gascity does not currently know the CC session UUID (it tracks
-  its own `wo-*` session beads; the CC UUID appears nowhere in `.gc/`). The code side is
-  DONE and degrades gracefully: `arena_common.scan_transcript_usage()` prefers a stamped
-  key and falls back to the window; `backfill_bug_lane.py` reads these bead keys when set:
-  - `gc.cc_session_id` — the Claude Code session UUID → direct, window-independent join.
-  - `gc.effort` — resolved effort at dispatch → `effort_resolved`.
-  - `gc.model_resolved` — resolved model at dispatch → `model_resolved`.
-
-  **Ben edit (gascity core):** at dispatch, launch the agent with a known
-  `claude --session-id <uuid>` (or read the created transcript's filename back) and add
-  that uuid — plus the resolved effort/model — to the step/lane bead metadata. In the
-  formula this surfaces as e.g. `"gc.cc_session_id" = "{{.SessionId}}"` in each
-  `[[steps]]` `metadata` block of `dev-pack/formulas/hard-bug-round.toml` once gascity
-  exposes the var; then `gc reload`. No projector change needed — it's already read.
-- **Live emission (the cleanest end-state, Ben-gated).** Have the coordinator emit the
-  arena row (or trigger `arena_refresh.py`) at reconcile close — prompt, no polling. Today
-  capture rides the Stop hook (see "Auto-capture"). Review/feature lanes don't compare yet
-  (review quorum is dev-pack Phase 3); when they do, add their projector to
-  `arena_refresh.PROJECTORS` and the Stop-hook `*coordinator*` guard already covers them.
+- **Stable session-id token join — code DONE, needs `gc reload` to take effect.** The
+  highest-value robustness fix: makes the token join stable instead of a timestamp-window
+  guess. It's **pack-only, no gascity change** — the worker already knows its own Claude
+  Code session (`$CLAUDE_CODE_SESSION_ID`, which equals the transcript filename), so
+  `emit-json.sh` self-stamps `gc.cc_session_id` onto the lane bead when it closes the step.
+  `scan_transcript_usage()` prefers that key (reads exactly that session file) and falls
+  back to the window; `backfill_bug_lane.py` also reads optional `gc.effort` /
+  `gc.model_resolved` stamps, though both are already recovered from the transcript. Rows
+  emitted before the reload stay `#window`; everything after is `#session`.
+- **Live emission (a nicety, not needed).** The `arena-capture` cooldown order already
+  captures within retention; a `trigger="event"`/`on="bead.closed"` order (guarded to
+  reconcile beads) would make it prompt. Review/feature lanes don't compare yet (review
+  quorum is dev-pack Phase 3); when they do, add their projector to
+  `arena_refresh.PROJECTORS` (their `emit-*.sh` gets the same one-line self-stamp).
 - **Other-harness token adapters** — codex/opencode usage extraction (see Token sourcing).
 - **eval cost** — genuinely unrecoverable for existing runs (subagent usage not persisted).

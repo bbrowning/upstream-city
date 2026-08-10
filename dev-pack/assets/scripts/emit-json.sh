@@ -58,6 +58,12 @@ OUT=$(jq -c . "$JF") || die "json file is not valid JSON: $JF"
 # --- write metadata (MERGE — never --metadata '{…}', which wipes routing keys) ---
 "$GC" bd update "$BEAD" --set-metadata "gc.output_json=$OUT" --set-metadata "gc.outcome=$OUTCOME"
 [ -n "$SCHEMA" ] && "$GC" bd update "$BEAD" --set-metadata "gc.output_json_schema=$SCHEMA"
+# Stamp the Claude Code session id (== this session's transcript filename) so the
+# model-arena projector joins token counts to THIS exact session, window-independent.
+# The agent knows it via $CLAUDE_CODE_SESSION_ID — pack-only, no gascity change. Absent
+# (e.g. run outside a CC session) => skip, and the projector falls back to the window.
+[ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && \
+    "$GC" bd update "$BEAD" --set-metadata "gc.cc_session_id=$CLAUDE_CODE_SESSION_ID"
 if [ "$FCLASS" != "none" ]; then
     "$GC" bd update "$BEAD" --set-metadata "gc.failure_class=$FCLASS" --set-metadata "gc.failure_reason=$FREASON"
 fi

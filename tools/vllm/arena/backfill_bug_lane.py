@@ -8,10 +8,11 @@ pick (`stronger_lane` + `stronger_rationale`) is the judgment; the two lane bead
 supply each participant's model/provider; per-participant token counts come from
 the per-worker Claude Code transcripts (deduped by message.id).
 
-Tokens only, NO dollars (apply a rate table downstream). Effort is resolved from
-the pack config (city.toml + agent.toml) — an INTENT proxy, accurate when this
-runs promptly after the run; the durable fix is stamping effort into the bead at
-dispatch (a gascity follow-up). See README.md.
+Tokens only, NO dollars (apply a rate table downstream). `effort` is resolved from
+the pack config (city.toml + agent.toml) — an INTENT proxy; `effort_resolved` is
+ground truth from the transcript. The lane bead may also carry a `gc.cc_session_id`
+the worker self-stamped (emit-json.sh) → the projector then joins tokens to that exact
+session instead of the timestamp window. Pack-only, no gascity change. See README.md.
 
 Usage:  python3 backfill_bug_lane.py [--export path] [--out path]
 """
@@ -38,12 +39,12 @@ DEVPACK_AGENTS = os.path.join(REPO, "dev-pack", "agents")
 RECONCILE_SCHEMA = "hard-bug-reconcile.v1"
 DIAGNOSIS_SCHEMA = "hard-bug-diagnosis.v1"
 
-# Bead-metadata keys gascity would stamp at dispatch (launch-time threading). Absent
-# today -> the projector falls back to the agent x timestamp-window transcript scan.
-# See README "Going-forward gaps" + the gascity follow-up proposal.
-STAMP_SESSION = "gc.cc_session_id"   # Claude Code session UUID -> stable token join
-STAMP_EFFORT = "gc.effort"           # resolved effort at dispatch
-STAMP_MODEL = "gc.model_resolved"    # resolved model at dispatch
+# Bead-metadata keys the WORKER self-stamps at emit time (pack-only, via emit-json.sh
+# from $CLAUDE_CODE_SESSION_ID — NO gascity change). Absent -> the projector falls back
+# to the agent x timestamp-window transcript scan. See README "Token sourcing".
+STAMP_SESSION = "gc.cc_session_id"   # CC session UUID == transcript filename -> stable token join
+STAMP_EFFORT = "gc.effort"           # optional; effort is also recovered from the transcript
+STAMP_MODEL = "gc.model_resolved"    # optional; model is also recovered from the transcript
 
 
 def meta(b, k, default=None):

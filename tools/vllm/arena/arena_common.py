@@ -73,10 +73,11 @@ def scan_transcript_usage(agent, start=None, end=None, session_id=None):
 
     Token attribution has two tiers (see README "Token sourcing"):
 
-    * STABLE (preferred) — when `session_id` (a Claude Code session UUID stamped on
-      the bead at dispatch, the launch-time-threading gascity follow-up) is given,
-      read ONLY that session's transcript file. This is window-independent and immune
-      to sibling sessions accumulating in the same reused worktree. The [start,end]
+    * STABLE (preferred) — when `session_id` (a Claude Code session UUID the worker
+      self-stamped onto the bead at emit time via emit-json.sh, from
+      $CLAUDE_CODE_SESSION_ID; pack-only, no gascity change) is given, read ONLY that
+      session's transcript file. This is window-independent and immune to sibling
+      sessions accumulating in the same reused worktree. The [start,end]
       window, if provided, still scopes *within* the file so a session reused across
       several beads is attributed per-bead. Returns None if the stamped file is absent
       (purged/renamed) so the caller can fall back.
