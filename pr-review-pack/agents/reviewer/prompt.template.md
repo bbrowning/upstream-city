@@ -219,16 +219,25 @@ fields:
 - `dynamic_request`: for `trusted`, the command you ran (provenance for
   `dynamic_check`); for `limited`, the scoped command a human could approve via the
   `pr-review-dynamic` lane; `null` for `restricted`/`block`.
-Write that object to a file, then **finish the step with one command**.
-`emit-verdict.sh` writes it to `gc.output_json` (a metadata MERGE — never the
-destructive `--metadata '{…}'`), **closes** the bead, **and notifies** the human —
-atomically, so the notification can never be a forgotten trailing step:
+Write that object to a **unique** temp file via `mktemp` — never a fixed name
+(pooled slots share `/tmp`, so a fixed path collides with a concurrent reviewer),
+kept out of your worktree so it can't trip `read_only_enforcement`:
+
+```bash
+verdict_file="$(mktemp -t pr-review-verdict.XXXXXX)"
+# ... write your pr-review.v1 object (valid JSON) to "$verdict_file" ...
+```
+
+Then **finish the step with one command**. `emit-verdict.sh` writes it to
+`gc.output_json` (a metadata MERGE — never the destructive `--metadata '{…}'`),
+**closes** the bead, **and notifies** the human — atomically, so the notification
+can never be a forgotten trailing step:
 
 ```bash
 # Your own review bead id is in your gc context (gc prime / your assignment).
-# $verdict_file holds your pr-review.v1 object (valid JSON).
 bash {{.ConfigDir}}/assets/scripts/emit-verdict.sh --bead <your-review-bead> \
   --verdict-file "$verdict_file" --outcome pass
+rm -f "$verdict_file"
 ```
 
 That is the **whole** close ritual — do **not** also run `gc bd close` or a

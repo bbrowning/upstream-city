@@ -136,13 +136,20 @@ re-derive and cross-check them.
 Write the object to `gc.output_json` and close — this exact idiom, in this order
 (there is **no** `--output-json` flag; `gc bd close` cannot set metadata):
 
+Write your verdict to a **unique** temp file via `mktemp` — never a fixed name
+(triage slots share `/tmp`), kept out of your worktree so it can't dirty your
+read-only checkout.
+
 ```bash
 # Your own bead id is in your gc context (gc prime / your assignment).
+verdict_file="$(mktemp -t pr-triage-verdict.XXXXXX)"
+# ... write your pr-triage.v1 object (valid JSON) to "$verdict_file" ...
 OUT=$(jq -c . "$verdict_file")   # compact your pr-triage.v1 object to one line
 # --set-metadata MERGES one key. Do NOT use --metadata '{...}' — that REPLACES the whole
 # metadata blob and wipes routing keys (gc.root_bead_id, gc.step_ref, gc.output_json_schema).
 gc bd update <your-triage-bead> --set-metadata "gc.output_json=$OUT" --set-metadata "gc.outcome=pass"
 gc bd close  <your-triage-bead> --reason "triage: posture=<posture> (ceiling=<ceiling>)"
+rm -f "$verdict_file"
 ```
 
 On infrastructure failure (a retry is sane), set `gc.outcome=fail` with a stable

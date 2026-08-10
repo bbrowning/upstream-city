@@ -74,14 +74,18 @@ Assemble a `pr-review-dynamic.v1` object from the gate's result plus your contex
 (`head_ref`, `base_ref`, `command`, `approved_reason` from the `reason` var,
 `authorized_by="human-sling"`, and the gate's `ceiling`, `outcome`, `rc`,
 `env_used`, `output_tail`, `duration_s`, `git_clean_before`/`after`,
-`mutations_delta`, `reason_if_skipped`). Write it to a file, then **finish with one
-command** — `emit-verdict.sh` writes it to `gc.output_json` (a metadata MERGE),
-closes the bead, **and notifies** the human, atomically:
+`mutations_delta`, `reason_if_skipped`). Write it to a **unique** temp file via
+`mktemp` — never a fixed name (runner slots share `/tmp`), kept out of your
+worktree. Then **finish with one command** — `emit-verdict.sh` writes it to
+`gc.output_json` (a metadata MERGE), closes the bead, **and notifies** the human,
+atomically:
 
 ```bash
-# $result_file holds your pr-review-dynamic.v1 object (valid JSON).
+result_file="$(mktemp -t pr-review-dynamic.XXXXXX)"
+# ... write your pr-review-dynamic.v1 object (valid JSON) to "$result_file" ...
 bash {{.ConfigDir}}/assets/scripts/emit-verdict.sh --bead <your-bead> \
   --verdict-file "$result_file" --outcome pass
+rm -f "$result_file"
 ```
 
 Use `--outcome pass` for **every** honest result — including `skipped`,
