@@ -135,14 +135,17 @@ rm -f "$out"
 **Notify the human atomically — in this SAME close command — whenever the run is pausing
 for a human: when `next_action` is `report_only` or `escalate` (NOT on
 `relay_next_round`/`advance_phase`/`choose_implementer`, which continue on their own).
-Folding `--notify` + `--subject` into the close means the mail can never be a forgotten
-separate step. It goes to the HUMAN (`${GC_HARDBUG_NOTIFY_TO:-human}`) — never an LLM
-agent like the `lead`, who has no idea what to do with it:**
+Folding `--notify` + `--render` + `--subject` into the close means the mail can never be a
+forgotten separate step, and `--render` turns the verdict JSON into a prose body (the human
+reads the divergence + what to do next, not raw JSON). It goes to the HUMAN
+(`${GC_HARDBUG_NOTIFY_TO:-human}`) — never an LLM agent like the `lead`, who has no idea
+what to do with it:**
 
 ```bash
 bash {{.ConfigDir}}/assets/scripts/emit-json.sh --bead <your-reconcile-bead> \
   --json-file "$out" --schema hard-bug-reconcile.v1 --outcome pass \
   --notify "${GC_HARDBUG_NOTIFY_TO:-human}" \
+  --render {{.ConfigDir}}/assets/scripts/render-hardbug.sh \
   --subject "hard-bug <bug_bead> <phase> r<round>: aligned=<true|false> stronger=<lane> next=<next_action>"
 ```
 
@@ -257,10 +260,11 @@ status:(done|reopened|escalated), next_action, summary, failure_class, failure_r
 and close your step with `emit-json.sh --schema hard-bug-final.v1` (write it to a
 unique `mktemp` file, as in Reconcile). On a terminal
 outcome (`done` or `escalated`), fold `--notify "${GC_HARDBUG_NOTIFY_TO:-human}"
+--render {{.ConfigDir}}/assets/scripts/render-hardbug.sh
 --subject "hard-bug <bug_bead>: <done|escalated> — <branch/summary>"` into that same
-close so the human is notified atomically (never a separate `gc mail send`, never the
-`lead`). On `reopened` (re-entering the fix phase), do not notify. MERGE-update the arc
-`status` to match.
+close so the human is notified atomically with a prose body (never a separate `gc mail
+send`, never the `lead`). On `reopened` (re-entering the fix phase), do not notify.
+MERGE-update the arc `status` to match.
 
 ---
 

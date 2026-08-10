@@ -400,9 +400,11 @@ two ways, both gated by the deterministic `pr-prescan.sh` ceiling — never by t
 **The gate (`run-scoped-check.sh`) is where safety lives, deterministically:** it
 re-derives the ceiling and refuses below the floor, requires prepared-env command
 form (`python -m pytest …`, no `.venv/bin/python`, no shell metacharacters),
-bounds the target to test paths, pins the head sha (optional), enforces a timeout +
-output cap, and records `git status` before/after. A prompt-injected reviewer
-cannot widen any of this.
+bounds the target to test paths, **verifies the tree is at the PR head** (the target
+file must exist, and the head sha must match — via `--expect-head-sha` or a
+self-resolve of `--head` — so a check accidentally aimed at the base tree is skipped,
+not mis-failed), enforces a timeout + output cap, and records `git status`
+before/after. A prompt-injected reviewer cannot widen any of this.
 
 ### The test env (vLLM-specific, kept out of the generic pack)
 
@@ -573,6 +575,9 @@ mine → distill → `learn` invariant-corpus pipeline, now archived at `//tools
 
 ## Known bugs (fix before the "Growing up" items below)
 
+> All three below are **FIX APPLIED (pending re-E2E)** — the code changes are in; a
+> live `gc reload` + a review-lane and a bug-lane E2E confirm them (see each item).
+
 - **[BUG · review lane · higher priority] The trusted auto-check can run against the
   BASE tree, not the PR head.** A reviewer's worktree starts detached at the rig HEAD
   (= base), so the PR's changed files don't exist until it fetches + checks out the
@@ -596,6 +601,14 @@ mine → distill → `learn` invariant-corpus pipeline, now archived at `//tools
   auto-run, and passes `--expect-head-sha` (activating GATE 4). Pre-existing (NOT a
   Phase-2 regression — the merge only renamed things here); ~a dozen lines across the
   gate + prompt; needs its own re-E2E.
+  **Status: FIX APPLIED (pending re-E2E).** The gate now (a) skips `target-absent` when
+  an in-scope test file is missing in the worktree (the base-tree tell) and (b) verifies
+  HEAD via `--expect-head-sha` (caller pin) or, absent one, a self-resolve of `--head`;
+  `agents/pr-reviewer/prompt.template.md` promotes fetch + `git checkout --detach <head>`
+  to a **required** pre-run step and passes `--expect-head-sha`. Validated locally against
+  a base/head repo (new-file → skip target-absent; base tree → skip tree-not-at-head /
+  head-moved; at-head + matching sha → runs; bare PR number → self-check skips itself,
+  still runs). Pending a live re-E2E.
 - **[UX gap · bug lane · medium] The hard-bug human notification is raw JSON, not a
   rendered summary.** The review lane renders a prose subject+body via `render-verdict.sh`
   (humans don't read JSON); the bug lane never got the equivalent. The coordinator's
@@ -612,6 +625,26 @@ mine → distill → `learn` invariant-corpus pipeline, now archived at `//tools
   the atomic-close guarantee (a generic `emit-json.sh --render <script>` hook to stay
   schema-agnostic, or the coordinator composes the body and passes `-m`). Hit on every bug
   run; good to fix alongside the base-vs-head review bug.
+  **Status: FIX APPLIED (pending re-E2E).** Added `assets/scripts/render-hardbug.sh`
+  (renders `hard-bug-reconcile.v1` + `hard-bug-final.v1` to prose: the divergence, the
+  stronger lane + why, unverified keystones, and a `next_action`/`status`-derived "what
+  happens next"); `emit-json.sh` gained a schema-agnostic `--render <script>` hook (the
+  raw-JSON body stays the fallback, so the atomic close is preserved and a render bug can
+  never drop a notification); the coordinator prompt passes
+  `--render …/render-hardbug.sh` in both notify closes, and the header-comment drift is
+  corrected. Validated locally (reconcile/final/escalated bodies + the emit-json hook).
+  Pending a live re-E2E.
+
+- **[BUG · bug lane · trivial] `gc dev-pack status` printed `aligned=?` for a
+  `report_only`/non-aligned round.** Not a wrong jq *path* — the live
+  `commands/status/run.sh` already reads `.last_reconcile.aligned`, matching the
+  coordinator's `hard-bug-state.v1` schema. The real cause is jq's `//` operator:
+  `\(.last_reconcile.aligned // "?")` treats the boolean **`false`** as absent, so every
+  `aligned=false` round (the common Stage-1 outcome) rendered as `aligned=?`.
+  **Fix:** an explicit null check
+  (`if .last_reconcile.aligned == null then "?" else .last_reconcile.aligned end`) so
+  `false` / `true` / absent all render correctly. **Status: FIX APPLIED (pending re-E2E)**
+  — verified locally (false→`false`, true→`true`, missing→`?`).
 
 ## Growing up (later)
 

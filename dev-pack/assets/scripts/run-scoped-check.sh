@@ -13,11 +13,14 @@
 #       [--timeout SECS] [--output-cap BYTES] [--expect-head-sha SHA] \
 #       [--allow-path-prefix PREFIX] [--prescan PATH] -- python -m pytest <nodeid> ...
 #
-# Assumes CWD is the caller's own worktree, already checked out at the PR head
-# (the reviewer/runner fetches + `git checkout --detach` first). It resolves the
-# interpreter from $GC_PR_TEST_VENV (the prepared venv — for vLLM, built by
-# tools/vllm/vllm-testenv.sh and wired via the rig's [[rigs.patches]] env); this
-# script is PROJECT-AGNOSTIC and never mentions vLLM.
+# Runs in the caller's own worktree, which MUST be checked out at the PR head (the
+# reviewer/runner fetches + `git checkout --detach` first). This gate VERIFIES that
+# rather than trusting it — GATE 2 skips if an in-scope target file is absent (the
+# tell-tale of a tree still at base) and GATE 4 skips on a head-sha mismatch — so a
+# check accidentally aimed at the base tree is skipped, never mis-reported as a fail.
+# It resolves the interpreter from $GC_PR_TEST_VENV (the prepared venv — for vLLM,
+# built by tools/vllm/vllm-testenv.sh and wired via the rig's [[rigs.patches]] env);
+# this script is PROJECT-AGNOSTIC and never mentions vLLM.
 #
 # NETWORK: the run is NOT network-isolated — egress is governed externally (the
 # paude-proxy). Tests may attempt network; the caller (agent) classifies a
@@ -113,8 +116,13 @@ for tok in "${CMD[@]}"; do
     esac
 done
 
-# --- GATE 2: path scope (only run tests under the allowed prefix) -------------
+# --- GATE 2: path scope + target presence -------------------------------------
 # Consider tokens that look like test targets (contain '/', '::', or end in .py).
+# Each in-scope target must (a) sit under the allowed prefix AND (b) actually exist
+# in this worktree. (b) is a deterministic "the tree is at the PR head" check: a
+# reviewer that never checked out the head (tree still at base) is missing the PR's
+# NEW test file — skip honestly with "checkout the PR head" instead of letting pytest
+# exit rc=4 (file not found) and mislabeling it a test `fail` in the classifier below.
 if [ -n "$ALLOW_PREFIX" ]; then
     found_target=0
     for tok in "${CMD[@]}"; do
@@ -125,7 +133,10 @@ if [ -n "$ALLOW_PREFIX" ]; then
                 case "$tok" in
                     "$ALLOW_PREFIX"*) ;;                       # in scope
                     *) emit skipped reason_if_skipped "out-of-scope: target '$tok' is not under '$ALLOW_PREFIX'" ;;
-                esac ;;
+                esac
+                path="${tok%%::*}"                             # strip a pytest ::nodeid suffix
+                [ -e "$path" ] || emit skipped reason_if_skipped "target-absent — '$path' is not in this worktree; checkout the PR head first (fetch + git checkout --detach <head>)"
+                ;;
         esac
     done
     [ "$found_target" -eq 1 ] || emit skipped reason_if_skipped "out-of-scope: no test target under '$ALLOW_PREFIX' found in command"
@@ -140,10 +151,23 @@ if [ "$(rank "$CEILING")" -lt "$(rank "$MIN_CEILING")" ]; then
     emit skipped ceiling "$CEILING" reason_if_skipped "ceiling-below-required: fresh ceiling=$CEILING < required=$MIN_CEILING"
 fi
 
-# --- GATE 4: TOCTOU pin (guard a force-push between approval and run) ---------
+# --- GATE 4: tree-is-at-head pin ---------------------------------------------
+# Two complementary ways to confirm the tree we run in is the PR head, not base:
+#   (a) --expect-head-sha: the caller resolved the head sha (the reviewer/runner
+#       pass it) — authoritative; also guards a force-push between approval and run.
+#   (b) self-resolve --head: only when no pin was passed. If --head names a ref/sha
+#       we can resolve in this worktree, it must equal HEAD. A bare PR number that
+#       resolves to no local ref is left to GATE 2's target-presence check.
 CUR_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
-if [ -n "$EXPECT_SHA" ] && [ "$CUR_SHA" != "$EXPECT_SHA" ]; then
-    emit skipped ceiling "$CEILING" head_sha "$CUR_SHA" reason_if_skipped "head-moved: expected $EXPECT_SHA got $CUR_SHA"
+if [ -n "$EXPECT_SHA" ]; then
+    if [ "$CUR_SHA" != "$EXPECT_SHA" ]; then
+        emit skipped ceiling "$CEILING" head_sha "$CUR_SHA" reason_if_skipped "head-moved: expected $EXPECT_SHA got $CUR_SHA (checkout the PR head)"
+    fi
+else
+    HEAD_SHA=$(git rev-parse --verify --quiet "${HEAD}^{commit}" 2>/dev/null || echo "")
+    if [ -n "$HEAD_SHA" ] && [ -n "$CUR_SHA" ] && [ "$CUR_SHA" != "$HEAD_SHA" ]; then
+        emit skipped ceiling "$CEILING" head_sha "$CUR_SHA" reason_if_skipped "tree-not-at-head: HEAD=$CUR_SHA but --head '$HEAD' resolves to $HEAD_SHA — checkout the PR head first"
+    fi
 fi
 
 # --- Resolve a prepared interpreter (PROJECT-AGNOSTIC) ------------------------

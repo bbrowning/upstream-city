@@ -57,7 +57,7 @@ printf '%s' "$STATE" | jq -r '
     "  rounds:            root_cause=\(.rounds.root_cause // 0)  fix=\(.rounds.fix // 0)   (cap \(.max_rounds // "?"))",
     "  status:            \(.status // "?")",
     "  chosen implementer:\(.chosen_implementer // "-")",
-    "  last reconcile:    round \(.last_reconcile.round // "?")  aligned=\(.last_reconcile.aligned // "?")",
+    "  last reconcile:    round \(.last_reconcile.round // "?")  aligned=\(if .last_reconcile.aligned == null then "?" else .last_reconcile.aligned end)",
     (if .agreed_root_cause then "  agreed root cause: \(.agreed_root_cause)" else empty end),
     (if .convoy_id then "  convoy:            \(.convoy_id)" else empty end)
 '

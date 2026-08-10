@@ -105,17 +105,29 @@ eval "$(bash {{.ConfigDir}}/assets/scripts/posture-latitude.sh "$effective_postu
   script so the deterministic ceiling is re-derived and enforced:
   1. Finish the static review first and take your read-only `git status` baseline
      **before** running (so `read_only_enforcement` reflects only your review).
-  2. Pick the **smallest** check that actually exercises *this* change, in
+  2. **Check out the PR head — REQUIRED before the auto-run.** Your worktree starts
+     detached at the rig HEAD (= base), so `git diff base...head` reads the change
+     without ever moving the tree — but a *check* must execute against the PR's code,
+     not base. Fetch the head, detach onto it, and capture its sha to pin:
+     ```bash
+     git fetch origin                       # refresh refs
+     git fetch origin pull/<N>/head         # if head_ref is a PR number N
+     git checkout --detach FETCH_HEAD       # (or `git checkout --detach <head_ref>` for a branch/sha)
+     head_sha="$(git rev-parse HEAD)"       # pin it via --expect-head-sha below
+     ```
+  3. Pick the **smallest** check that actually exercises *this* change, in
      **prepared-env form**: `python -m pytest <repo-relative test node-id> -q`.
      NEVER write `.venv/bin/python …` or an absolute interpreter — the lane supplies
      the interpreter. Do not assert the command is runnable; that is the gate's call.
-  3. Run it (your bead's description carries `head_ref`/`base_ref`):
+  4. Run it (your bead's description carries `head_ref`/`base_ref`), pinning the head
+     sha so the gate refuses if the tree is not actually at head:
      ```bash
      bash {{.ConfigDir}}/assets/scripts/run-scoped-check.sh \
        --head <head_ref> --base <base_ref> --min-ceiling trusted \
+       --expect-head-sha "$head_sha" \
        -- python -m pytest <test-node-id> -q
      ```
-  4. Read the emitted `scoped-check.v1` JSON, record it verbatim as `dynamic_check`
+  5. Read the emitted `scoped-check.v1` JSON, record it verbatim as `dynamic_check`
      in your verdict, and set `dynamic_request` to the command you ran (provenance).
      Interpret the outcome **honestly**:
      - `pass` → note it; it strengthens an `approve`.
@@ -157,7 +169,9 @@ Everything below is performed **within** the latitude you just set.
    ```
    You may `git checkout --detach <head_ref>` in your own worktree to browse the
    PR's tree directly — it is yours alone and detached, so this never conflicts
-   with another reviewer.
+   with another reviewer. If you will auto-run a check (EXEC=allow / `trusted`),
+   this checkout is **required, not optional** — the check must run against the PR
+   head, not the base tree your worktree starts at (see **Posture disposition**).
 2. **Load the personas for what this PR touches.**
 {{template "persona-load" "review"}}
 3. **Verify every candidate finding skeptically before you keep it.** For each
