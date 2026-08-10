@@ -140,6 +140,32 @@ cruft. Counter-pressures, enforced not hoped:
   leanness lint gate. Gate: feature E2E + the corpus lint gate green.
 - **Retire** `pr-review-pack` + `hard-bug-pack` (archive) once the pack passes all lane E2Es.
 
+## Long-term — run retrospection / meta-review (formalize the improvement flywheel's input)
+
+As real work accrues, formalize the ad-hoc "fire a bead, watch it, tell me where it went wrong"
+pass (Ben does this by hand today) into a **consistent retrospective process** over completed
+runs of ANY lane (review / bug / feature / simplify). It reads a run's durable artifacts — the
+bead/molecule tree (`gc graph`), each step's `output_json` (verdicts / diagnoses), session
+transcripts + `gc trace`, the event-bus timeline, token/turn accounting, and mail — and emits a
+structured improvement report (`retro.v1`) in the three buckets Ben named:
+1. **Missing domain gotchas / reflexes** (rig-specific) → candidate persona reflexes that feed
+   the existing flywheel. Personas stay **human-write-only** — the retro PROPOSES, a human
+   commits (see Leanness governance + the human-gated-writes convention).
+2. **Token / efficiency waste** — where an agent fumbled, re-fetched, thrashed, or misread an
+   instruction because a prompt/method is slightly wrong → candidate **prompt/method fixes**
+   (fewest-tokens-to-outcome).
+3. **Gaps we missed** — a bug the review didn't catch, a wrong root cause caught late, a scope
+   miss → both a persona candidate AND (ideally) a new **eval regression case**, per "every
+   reflex is a regression case."
+
+Formalization options: a `gc dev-pack retro <bead|arc>` verb, and/or an **order** that fires on
+`workflow.finalized` to auto-run a retro on every completed run. This is the SOURCE side of the
+Leanness-governance loop (attribution + decay, prove-your-keep): it surfaces what to add from
+REAL runs — not just frozen eval cases — and, across many runs, surfaces reflexes that never
+fire (evict). A human triages the candidates into personas / prompt edits / eval cases. **Not
+there yet** — but it's what turns "these workflows work" into "these workflows keep getting
+better."
+
 ## Long-term — dogfood the pack on its own code (self-hosting)
 
 Once the lanes are solid, apply dev-pack's OWN review / bug / feature / simplify lanes to the
