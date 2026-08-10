@@ -140,6 +140,31 @@ cruft. Counter-pressures, enforced not hoped:
   leanness lint gate. Gate: feature E2E + the corpus lint gate green.
 - **Retire** `pr-review-pack` + `hard-bug-pack` (archive) once the pack passes all lane E2Es.
 
+## Long-term — dogfood the pack on its own code (self-hosting)
+
+Once the lanes are solid, apply dev-pack's OWN review / bug / feature / simplify lanes to the
+**pack code itself** — the strongest validation of the workflows (Ben: "dogfooding this stuff
+is going to help me really nail down these great workflows"). **Not there yet** (gated on the
+lanes being trustworthy), but the intended shape:
+
+1. **Extract the pack to its own git repo.** Today it's an in-city folder read in place on
+   every `gc reload`; self-hosting wants it versioned independently.
+2. **Register that repo as a rig and self-attach the pack to it** — a rig is just a repo
+   registered with the city, and a pack can be `includes`'d into the rig that *is* its own
+   repo, so the pack's own `pr-reviewer` / `bug-*` / `feature-dev` lanes then review, fix, and
+   extend the pack's repo. A virtuous loop.
+3. **Consume it in the live city as a versioned remote pack** (a remote `includes` / `[imports]`
+   ref — the same pin-a-ref model gascity itself uses; `compose.go` resolves remote pack refs +
+   versioned imports natively). Then **bumping the dev-pack ref to pick up newer pack changes is
+   a SEPARATE process from bumping the live gascity commit reference** — two independent update
+   streams (gascity upgrades vs dev-pack iteration), each pinned and bumped on its own cadence.
+
+Design-for watch-outs: the reviewer *version* doing the review may differ from the version under
+review — keep both explicit (review at HEAD with the released pack, or self-host at HEAD); a
+remote import adds a fetch/cache/version step vs today's read-in-place; and decide where the
+dev-pack rig's OWN knowledge corpus lives (personas/eval about *pack / gascity-config* code),
+since personas today are per-consumer-rig and outside the pack.
+
 ## Open decisions (macro session)
 1. **Pack name** — resolved: **`dev-pack`** (Phase 2; Ben may rename later — agents are
    lane-prefixed, not pack-prefixed, so a rename won't churn agent names).
