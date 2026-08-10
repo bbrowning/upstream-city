@@ -611,6 +611,17 @@ mine → distill → `learn` invariant-corpus pipeline, now archived at `//tools
   Keep the current bare-number + `--rig` path working; `--rig` stays the explicit
   override. Same parsing belongs in `commands/review/run.sh` and
   `commands/materialize/run.sh` (both take a rig-less PR today).
+- **Inline bug/feature description → auto-create the bead.** Today `bug` / `feature`
+  require a pre-existing bead id, so you must remember the `gc bd create` incantation
+  first. Let the verbs accept a free-text description and create the tracking bead
+  themselves: `gc dev-pack bug --rig vllm -m "the parser drops the last token when …"`
+  (same for `feature`), optionally `--external-ref gh-42403` / a GitHub issue URL so the
+  lane picks up the linked issue. Resolution: an arg that already matches a bead id
+  (`<rig>-…`) → use it and infer the rig from the prefix (current behavior); free text →
+  create in `--rig` (default `vllm`, like `review`/`materialize`, since a description
+  carries no rig) then sling. Prefer an explicit `-m/--message` (or `--new`) over guessing
+  bead-id-vs-description, to keep it unambiguous. Removes the "remember how to make a bug
+  bead" friction.
 - **Review local commits / working-tree changes, not just PRs.** Run a full review
   round while iterating locally — a pre-PR (even pre-push) pass on a feature or bug
   fix. The review lane's real entry artifact is a `base...head` diff; a PR is just
