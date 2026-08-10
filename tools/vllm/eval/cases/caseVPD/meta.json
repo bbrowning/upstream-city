@@ -16,7 +16,7 @@
       "vllm-vpd metadata gc.output_json (arc state / agreed_root_cause — the wrong+then-corrected narrative)",
       "lane beads vllm-1yo, vllm-r3t (worker-a), vllm-0tj, vllm-6p0 (worker-b)",
       "reconcile beads vllm-9q2 / vllm-vxv",
-      "this repo's tools/vllm/review-eval/run-*/ and .claude memories",
+      "this repo's tools/vllm/eval/run-*/ and .claude memories",
       "answer-key.md"
     ],
     "network": {

@@ -177,8 +177,8 @@ the `vllm` rig via `[[rigs.patches]]` env (`$GC_PR_TEST_VENV`) — see
 
 The same split applies to the **review personas**: the *mechanism* (the reviewer loads
 `base` + the personas a PR's changed paths activate) lives in the pack; the vLLM *content*
-lives out of the pack at `//tools/vllm/review-personas/`, wired via `[[rigs.patches]]` env
-(`$GC_PR_PERSONAS`). See [Review personas](#review-personas).
+lives out of the pack at `//tools/vllm/personas/`, wired via `[[rigs.patches]]` env
+(`$GC_PERSONAS`). See [Review personas](#review-personas).
 
 Agents, formulas, and orders are all discovered by **directory convention**
 (gascity's `conventionDiscoveryDirNames`), so the manifest carries **no
@@ -452,7 +452,7 @@ personas the PR's changed paths activate**.
 
 **How it works**
 
-- The personas live at `$GC_PR_PERSONAS` (`//tools/vllm/review-personas/`): `base.md`
+- The personas live at `$GC_PERSONAS` (`//tools/vllm/personas/`): `base.md`
   (cross-cutting reflexes, always loaded) plus domain personas (`parser.md`,
   `openai-frontend.md`). Each is a terse "how you think" reflex list.
 - **Personas self-route — no separate manifest.** Each domain persona declares its
@@ -466,14 +466,14 @@ personas the PR's changed paths activate**.
 - The reviewer (method step 2) reads `base.md` + each persona whose header matches, and
   reviews through that lens. Personas are read fresh each run, so **content edits are live
   on the next review — no `gc reload`** (reload is only for the reviewer prompt or the
-  `$GC_PR_PERSONAS` env wiring itself).
+  `$GC_PERSONAS` env wiring itself).
 
 **Grow it (the flywheel = edit the persona file)** — when a trusted maintainer catches
 something a review missed, fold it back as **one counterfactual reflex** in the right
 persona (`base.md` for cross-cutting, a domain persona otherwise), validated against a
 blind case. Personas carry only what a strong model does *not* already do on its own —
 prune as you add. The full workflow + quality bar live in
-`//tools/vllm/review-eval/RUNBOOK.md`, and the eval harness (`//tools/vllm/review-eval/`)
+`//tools/vllm/eval/RUNBOOK.md`, and the eval harness (`//tools/vllm/eval/`)
 regression-tests a persona edit before it ships. (This replaces the old
 mine → distill → `learn` invariant-corpus pipeline, now archived at `//tools/vllm/_archive/`.)
 
@@ -493,9 +493,9 @@ mine → distill → `learn` invariant-corpus pipeline, now archived at `//tools
 
 ## Growing up (later)
 
-- **Sharpen the personas** in `//tools/vllm/review-personas/` with the reflexes that keep
+- **Sharpen the personas** in `//tools/vllm/personas/` with the reflexes that keep
   catching real issues — that's the real reviewer spec (validate via
-  `//tools/vllm/review-eval/RUNBOOK.md`).
+  `//tools/vllm/eval/RUNBOOK.md`).
 - **Broaden dynamic-check coverage**: the CPU venv currently targets the hermetic,
   mock-tokenizer parser/engine unit tests. Widening to `tests/reasoning` /
   `tests/tool_parsers` (which download tokenizers) means pre-warming an HF cache;

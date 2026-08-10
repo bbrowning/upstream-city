@@ -1,4 +1,4 @@
-# review-eval — a growing eval suite for vLLM PR review
+# eval — a growing eval suite for vLLM PR review + hard-bug diagnosis
 
 Purpose: compare review setups (current pack vs lean personas) and regression-test the
 **lean personas** as they evolve. Blind, reproducible, offline.
@@ -10,9 +10,9 @@ Purpose: compare review setups (current pack vs lean personas) and regression-te
 - `cases/<id>/` — `meta.json` (source PR, base/head SHAs, changed files, blind notes),
   `diff.patch` (the change under review), `answer-key.md` (only where we know the ground
   truth).
-- `tools/vllm/review-personas/` — `base.md` (always loaded) + domain personas
+- `tools/vllm/personas/` — `base.md` (always loaded) + domain personas
   (`parser.md`, `openai-frontend.md`). The single canonical persona home, read by BOTH
-  this eval harness and the production pack (injected there as `$GC_PR_PERSONAS`). The
+  this eval harness and the production pack (injected there as `$GC_PERSONAS`). The
   lean setup under test — and, since the Phase-2 cutover, the live review spec.
 - `brief-lean.md` — the lean reviewer method.
 - `harness-rules.md` — shared read-only/blind/output-schema rules for every review arm.
@@ -21,7 +21,7 @@ Purpose: compare review setups (current pack vs lean personas) and regression-te
 - `candidates.md` — real-world PRs to reconstruct into new cases.
 
 ## Persona selection
-Always load `tools/vllm/review-personas/base.md`, plus every domain persona whose
+Always load `tools/vllm/personas/base.md`, plus every domain persona whose
 activation paths (top of each file) match the PR's changed files. Keep it lean; don't
 load domains the PR doesn't touch.
 
@@ -35,7 +35,7 @@ load domains the PR doesn't touch.
      neutralize gc/posture (treat `trusted`, write JSON to OUT), load corpus via
      `tools/vllm/_archive/review-knowledge/_manifest.md`. The live pack now uses the
      Arm-B personas, so the go-forward regression loop just runs Arm B against a case.
-   - **Arm B (lean, now live):** read `brief-lean.md` + `tools/vllm/review-personas/base.md` + matching domain persona.
+   - **Arm B (lean, now live):** read `brief-lean.md` + `tools/vllm/personas/base.md` + matching domain persona.
    Give both: the `diff.patch`, the worktree, base/head SHAs, the venv python. Both may run
    read-only pytest (`PYTHONPYCACHEPREFIX=$(mktemp -d) <py> -m pytest <ids> -q -p no:cacheprovider`).
 3. Judge: strip A/B identity, copy to `Review1`/`Review2` with a private randomized map,

@@ -159,19 +159,19 @@ Everything below is performed **within** the latitude you just set.
    PR's tree directly — it is yours alone and detached, so this never conflicts
    with another reviewer.
 2. **Load the personas for what this PR touches.** Always read
-   `$GC_PR_PERSONAS/base.md` (cross-cutting reflexes; always applies). Then, for each
-   other persona in `$GC_PR_PERSONAS/`, read its `**Activates on:**` header and load it
+   `$GC_PERSONAS/base.md` (cross-cutting reflexes; always applies). Then, for each
+   other persona in `$GC_PERSONAS/`, read its `**Activates on:**` header and load it
    only if one of the changed paths (from the pre-scan's `facts.changed_files`, or
    `git diff --name-only <base>...<head>`) matches a path prefix it lists. More than one
    domain persona can match — load them all; load none the change doesn't touch. Review
    through that lens: the persona reflexes come first — they encode what actually bites
    in this area.
    ```bash
-   cat "$GC_PR_PERSONAS/base.md"          # always applies
+   cat "$GC_PERSONAS/base.md"          # always applies
    # then each persona whose "Activates on:" prefixes match a changed path:
-   cat "$GC_PR_PERSONAS/<persona>.md"
+   cat "$GC_PERSONAS/<persona>.md"
    ```
-   (`$GC_PR_PERSONAS` is injected for this rig; if it is unset, note that in your
+   (`$GC_PERSONAS` is injected for this rig; if it is unset, note that in your
    verdict and review from `base` reflexes + first principles.)
 3. **Verify every candidate finding skeptically before you keep it.** For each
    one ask: *Is this real, or am I pattern-matching? What is the concrete
@@ -188,7 +188,7 @@ matches a changed path. A persona's reflexes are the high-signal, non-obvious ch
 its area — apply them first, then review with the same skepticism for anything they don't
 cover (correctness, tests, security, contracts, scope, clarity). Personas are
 **read-only to you**: never edit them, and never propose edits mid-review — a human
-evolves them via the flywheel in `tools/vllm/review-eval/RUNBOOK.md`.
+evolves them via the flywheel in `tools/vllm/eval/RUNBOOK.md`.
 
 ## Output
 

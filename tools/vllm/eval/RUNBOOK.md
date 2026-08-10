@@ -1,6 +1,6 @@
 # RUNBOOK — changing a persona and proving it helps
 
-Read this **before editing any file in `tools/vllm/review-personas/`**. Personas are the live review spec:
+Read this **before editing any file in `tools/vllm/personas/`**. Personas are the live review spec:
 a change to them changes every future review. This suite exists so a persona edit is
 *validated against a real, blind case* — not merged on a hunch. The mechanics of running
 (worktrees, CPU venv, isolated A/B, blind judge) are in `README.md`; this doc is the
@@ -29,7 +29,7 @@ one sharp reflex, not three soft ones. A persona that restates general best prac
 noise that costs context on every review.
 
 **Two consumers now — review AND hard-bug diagnosis.** The personas are injected into the PR
-reviewer (as `$GC_PR_PERSONAS`) *and* the hard-bug lanes (as `$GC_VLLM_PERSONAS`) — the same
+reviewer *and* the hard-bug lanes as one env (`$GC_PERSONAS`) — the same
 files. So: (1) validate a persona edit against **both** case families before it ships — a
 diagnosis-helping reflex must not add review noise, and vice-versa; (2) keep personas to
 **domain facts**; *method* ("prefer static analysis", "ground-truth cheap load-bearing facts
@@ -107,9 +107,9 @@ pack was cut over to personas, and the old corpus is archived at
 miss → one persona reflex → re-run → confirm.
 
 ## Where everything lives
-- **Personas (the live review spec):** `tools/vllm/review-personas/*.md` — the single
+- **Personas (the live review spec):** `tools/vllm/personas/*.md` — the single
   canonical home read by BOTH this harness and the production pack (injected there as
-  `$GC_PR_PERSONAS`). `base.md` always loads; each domain persona lists its
+  `$GC_PERSONAS`). `base.md` always loads; each domain persona lists its
   activation-path globs at the top and loads only when a changed path matches.
 - **The two methods compared (historical bake-off):** `brief-lean.md` + the personas
   (lean arm, now live) vs the retired pre-cutover pack (the old reviewer prompt in git

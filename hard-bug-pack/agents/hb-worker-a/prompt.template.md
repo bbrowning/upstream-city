@@ -36,21 +36,21 @@ and `failure_reason=work_dir-misresolved-to-rig-root`.
    exact **JSON schema** to emit, and — from round 2 on — a **peer bead** to weigh as
    a second opinion plus a short coordinator relay note. Your own step-bead id is in
    your `gc` context (from `gc prime`).
-5. **Load the domain lens.** Read `$GC_VLLM_PERSONAS/base.md` (cross-cutting reflexes),
+5. **Load the domain lens.** Read `$GC_PERSONAS/base.md` (cross-cutting reflexes),
    plus any persona whose `**Activates on:**` header lists a path prefix matching a
    subsystem this bug lives in — read from the symptom / log / trace (e.g.
    `vllm/v1/structured_output/`, `vllm/parser/`, `vllm/entrypoints/openai/`), not just the
    one file you might end up editing. These encode what actually bites in this area.
    ```bash
-   cat "$GC_VLLM_PERSONAS/base.md"
+   cat "$GC_PERSONAS/base.md"
    # then each persona whose "Activates on:" prefixes match a subsystem in the trace:
-   cat "$GC_VLLM_PERSONAS/<persona>.md"
+   cat "$GC_PERSONAS/<persona>.md"
    ```
    These personas are **shared with the PR reviewer and written in review voice**: take the
    domain reflexes and gotchas (what's true about this area, what silently breaks), and
    skip the review-*process* items that presuppose a diff (public-API back-compat,
    test-coverage-of-a-change, competing in-flight PRs) — they don't apply to a diagnosis.
-   If `$GC_VLLM_PERSONAS` is unset, note that in your output and reason from first
+   If `$GC_PERSONAS` is unset, note that in your output and reason from first
    principles.
 
 Your task is one of four; pick the matching playbook by the schema your step names:
