@@ -63,10 +63,19 @@ per-lane prompt fragment):**
 - **feature**: intent/spec → implementation + tests; autonomy = implement.
 
 **DIALS (orthogonal, per-run vars/patches) — the "make 2nd opinion optional" insight:**
-- **opinions N=1..k.** The reconcile/second-opinion machinery is gated on N≥2. **B (self-verify
-  keystones) applies at every N; C (correlated-convergence gate) only exists at N≥2.** At N=1
-  the coordinator degenerates to a self-check pass (or is skipped). This is the seam that makes
-  hard-bug a generic bug-fixer and lets review reuse the same engine.
+- **opinions N=1..k — a multi-model fan-out dial on EVERY lane (review, bug, simplify,
+  feature), not just bug (Ben's explicit ask).** Any lane may run N independent opinions and
+  **take the best**, or run solo (N=1); the operator controls, **per run, both N and WHICH
+  models/providers to bring in** (a runtime var list, not a fixed pairing — assuming the
+  harnesses/creds are set up). The opinions are **cross-model AND cross-vendor** (sonnet vs
+  opus, opus 4.8 vs 4.6, gpt-5.x vs kimi k3, …): lanes are already parameterized by
+  target/provider/model (mol-review-quorum shape), and a second vendor is a one-line
+  `[[rigs.patches]]` provider/option_defaults change — so N≥2 is N parallel lane runs + a
+  **synthesis/judge step that `needs` all and picks or merges the best** (the coordinator
+  generalizes into that judge). The reconcile/second-opinion machinery is gated on N≥2; **B
+  (self-verify keystones) applies at every N; C (correlated-convergence gate) only exists at
+  N≥2.** At N=1 the coordinator degenerates to a self-check pass (or is skipped). This is the
+  seam that makes hard-bug a generic N-opinion engine and lets review/simplify/feature reuse it.
 - **autonomy**: report-only → implement+push (already the `enable_loop`/finalize split).
 - **posture**: trusted → gated (the triage ladder; a bug/feature from an external issue opts in).
 
@@ -118,9 +127,14 @@ cruft. Counter-pressures, enforced not hoped:
   (`{{template "persona-load" "review"|"diagnosis"}}`) now that the merge gives one
   `template-fragments/`. city.toml `includes=["dev-pack"]`; patch targets repointed. Gates:
   `gc lint dev-pack` ok + `gc doctor`; Ben runs `gc reload` + review AND hard-bug E2E.
-- **Phase 3 — the N-dial.** Make the second opinion optional in the bug lane (N var; N=1 skips
-  reconcile, keeps self-verify); generalize the coordinator to drive any lane's outer loop.
-  Gate: prove an N=1 bug run and an N=2 bug run.
+- **Phase 3 — the N-dial (generalized to every lane).** Make N-opinion fan-out an orthogonal
+  per-run dial on review/bug/simplify/feature, not just bug: an `N` var + a runtime
+  model/provider list (operator picks **how many** opinions and **which** models — cross-model
+  and cross-vendor). N=1 skips reconcile but keeps self-verify (B); N≥2 fans out N lanes → a
+  **synthesis/judge step that `needs` all and takes the best**. Generalize the coordinator into
+  that judge/driver for any lane's outer loop; each lane adopts the dial as it matures (bug +
+  review first — review N≥2 is the mol-review-quorum quorum shape). Gate: prove an N=1 bug run,
+  an N=2 bug run, and an N=2 review run.
 - **Phase 4 — feature lane + governance.** Grow `feature-dev` into the full
   decompose→design→implement→test→cross-review over the spine; add the feature case family + the
   leanness lint gate. Gate: feature E2E + the corpus lint gate green.
