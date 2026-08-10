@@ -81,14 +81,21 @@ dismiss one without addressing its evidence.
    - **DO ground-truth the cheap facts your diagnosis rests on.** A *keystone* fact — a
      token id ↔ name, a special / EOS / BOS token, a chat-template marker, a config
      default, `vocab_size` — is a fact you **fetch, not infer**: the model's
-     `tokenizer_config.json` / `config.json` / `special_tokens_map.json` (HuggingFace,
-     via read-only `gh`/web), the constant or enum in the code, the upstream issue. Never
-     infer a token id's meaning from the wire format or a test fixture's placeholder ids.
-     `could_not_verify` is only for facts genuinely expensive to obtain (a live model
-     run) — **not** a two-fetch lookup. A keystone can also be a **causal link in your
-     mechanism** (the specific step by which the defect produces the symptom — e.g. "the
-     async / MTP path lets the post-boundary token escape the bitmask"): if you cannot
-     confirm that step from the code, it is unverified too, however plausible.
+     `tokenizer_config.json` / `config.json` / `special_tokens_map.json`, the constant or
+     enum in the code, the upstream issue. A model reference in the report (`vllm serve
+     <id>`, `from_pretrained("<id>")`, an hf.co URL) **is** its HuggingFace repo id — fetch
+     it: `curl -sSL https://huggingface.co/<id>/resolve/main/<file>` (follow the 307; `gh`
+     is GitHub-only, not HF). **Never call a model nonexistent or "fictional" from your own
+     knowledge** — reports routinely name checkpoints newer than your training cutoff, so an
+     unfamiliar id is expected, not invented; trust the report's coordinates and resolve by
+     fetching. Never infer a token id's meaning from the wire format or a test fixture's
+     placeholder ids. `could_not_verify` is for a fact you **tried** and were blocked on, or
+     one genuinely expensive to obtain (a live model run) — **not** a two-fetch lookup, and
+     **never** one you simply skipped: never report "could not fetch" for something you did
+     not fetch. A keystone can also be a **causal link in your mechanism** (the specific step
+     by which the defect produces the symptom — e.g. "the async / MTP path lets the
+     post-boundary token escape the bitmask"): if you cannot confirm that step from the code,
+     it is unverified too, however plausible.
    Do not edit code here. If a linked issue or PR proposes a fix, do **not** just defer to
    it — reach your OWN conclusion (you may check the PR, but treat it as one more opinion
    to verify).
