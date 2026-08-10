@@ -110,9 +110,10 @@ record your stance in `considered_second_opinion`.
 Task by phase (see your worker method for the full playbook):
 - root_cause: find the ROOT CAUSE and its mechanism (not a symptom); back it with
   concrete evidence (files, lines, repro, traces); sketch a fix. Ground-truth the
-  keystone facts your diagnosis rests on (token ids, special/EOS tokens, config
-  defaults — fetch the tokenizer/config, don't infer); list them in `keystone_facts`
-  and cap confidence at `medium` for any you could not verify.
+  keystones your diagnosis rests on — load-bearing facts (token ids, special/EOS
+  tokens, config defaults — fetch the tokenizer/config, don't infer) AND causal steps
+  in the mechanism; list them in `keystone_facts` and cap confidence at `medium` for
+  any you could not verify (hedge an unconfirmed mechanism, don't assert it boldly).
 - fix: the root cause is already agreed (read `agreed_root_cause` from `{{bug_bead}}`'s
   hard-bug-state.v1); converge the concrete FIX — the change, tests_to_add, and
   verification_plan.
@@ -148,9 +149,10 @@ record your stance in `considered_second_opinion`.
 Task by phase (see your worker method for the full playbook):
 - root_cause: find the ROOT CAUSE and its mechanism (not a symptom); back it with
   concrete evidence (files, lines, repro, traces); sketch a fix. Ground-truth the
-  keystone facts your diagnosis rests on (token ids, special/EOS tokens, config
-  defaults — fetch the tokenizer/config, don't infer); list them in `keystone_facts`
-  and cap confidence at `medium` for any you could not verify.
+  keystones your diagnosis rests on — load-bearing facts (token ids, special/EOS
+  tokens, config defaults — fetch the tokenizer/config, don't infer) AND causal steps
+  in the mechanism; list them in `keystone_facts` and cap confidence at `medium` for
+  any you could not verify (hedge an unconfirmed mechanism, don't assert it boldly).
 - fix: the root cause is already agreed (read `agreed_root_cause` from `{{bug_bead}}`'s
   hard-bug-state.v1); converge the concrete FIX — the change, tests_to_add, and
   verification_plan.

@@ -109,18 +109,25 @@ dismiss one without addressing its evidence.
      via read-only `gh`/web), the constant or enum in the code, the upstream issue. Never
      infer a token id's meaning from the wire format or a test fixture's placeholder ids.
      `could_not_verify` is only for facts genuinely expensive to obtain (a live model
-     run) — **not** a two-fetch lookup.
+     run) — **not** a two-fetch lookup. A keystone can also be a **causal link in your
+     mechanism** (the specific step by which the defect produces the symptom — e.g. "the
+     async / MTP path lets the post-boundary token escape the bitmask"): if you cannot
+     confirm that step from the code, it is unverified too, however plausible.
    Do not edit code here. If a linked issue or PR proposes a fix, do **not** just defer to
    it — reach your OWN conclusion (you may check the PR, but treat it as one more opinion
    to verify).
 2. **Find the ROOT CAUSE, not a symptom.** Trace the failure to the underlying defect
    and the *mechanism* by which it produces the symptom. Read enough surrounding code
    to be sure. A symptom masquerading as a cause is the most common way these lanes
-   diverge — be specific about the causal chain. **If your root cause turns on a keystone
-   fact, verify that fact before you emit.** An unverified keystone caps
-   `root_cause.confidence` at `medium` and must be listed in `keystone_facts` (see
-   **Output**) — a confident conclusion resting on a guess is exactly how aligned lanes
-   are both wrong.
+   diverge — be specific about the causal chain. **If your root cause turns on a keystone —
+   a load-bearing fact OR a causal step in the mechanism — verify it before you emit.** Any
+   unverified keystone caps `root_cause.confidence` at `medium` and must be listed in
+   `keystone_facts` (see **Output**): if it's cheap, fetch it; if it's genuinely expensive
+   (a live run), you may leave it `could_not_verify` — but then **hedge the mechanism
+   explicitly, do not assert it boldly** (say the diagnosis is contingent on that unconfirmed
+   step, and name the run that would settle it). A confident conclusion resting on a guess —
+   a mis-identified token OR an unproven "it must be the async path" — is exactly how aligned
+   lanes are both wrong.
 3. **Sketch a fix** (do not implement yet): what change, where, and why it addresses
    the cause (not just the symptom).
 4. Take a mutation baseline so you can prove you changed nothing:
@@ -216,10 +223,12 @@ run a separate `gc bd close`.
 
 **`hard-bug-diagnosis.v1`** — `lane_id`, `provider`, `model`, `phase`, `round`,
 `root_cause{statement, mechanism, confidence}`, `keystone_facts:[{fact, status
-(verified|could_not_verify), source}]` — the facts the root cause turns on and how you
-grounded each (e.g. `{fact:"token 200028 = <|begin_of_text|>", status:"verified",
-source:"tokenizer_config.json"}`); any `could_not_verify` keystone caps `confidence` at
-`medium` — `proposed_fix{summary, changes:[{file, what}], tests_to_add:[…],
+(verified|could_not_verify), source}]` — the facts **and load-bearing mechanism steps** the
+root cause turns on, and how you grounded each (e.g. `{fact:"token 200028 =
+<|begin_of_text|>", status:"verified", source:"tokenizer_config.json"}`; an unconfirmed
+causal step, e.g. `{fact:"async/MTP lets the post-boundary token escape the bitmask",
+status:"could_not_verify", source:"code path only — needs a live run"}`); any
+`could_not_verify` keystone caps `confidence` at `medium` — `proposed_fix{summary, changes:[{file, what}], tests_to_add:[…],
 verification_plan:[…]}`, `considered_second_opinion{peer_bead | null, stance
 (adopted|refined|rejected|none), why}`, `evidence:[{kind (file|line|repro|trace|test),
 ref, note}]`, `failure_class`, `failure_reason`.
