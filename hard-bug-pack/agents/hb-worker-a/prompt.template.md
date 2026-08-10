@@ -163,14 +163,18 @@ with `verdict` = `concur` / `request_changes` / `blocked` and concrete findings.
 
 ## Output — finish the step atomically
 
-Write your task's JSON object to a file, then finish with **one** command —
-`emit-json.sh` MERGE-writes it to `gc.output_json`, sets the outcome, and **closes**
-the step (a metadata MERGE — never the destructive `--metadata '{…}'`):
+Write your task's JSON object to a **unique** temp file via `mktemp` — never a fixed
+name (both lanes run this step in parallel and would collide on a shared `/tmp` name),
+kept out of your worktree. Then finish with **one** command — `emit-json.sh`
+MERGE-writes it to `gc.output_json`, sets the outcome, and **closes** the step (a
+metadata MERGE — never the destructive `--metadata '{…}'`):
 
 ```bash
-# $out holds your object (valid JSON); <schema> is the schema your step named.
+out="$(mktemp -t hb-output.XXXXXX)"   # <schema> is the schema your step named
+# ... write your task's JSON object (valid JSON) to "$out" ...
 bash {{.ConfigDir}}/assets/scripts/emit-json.sh --bead <your-step-bead> \
   --json-file "$out" --schema <schema> --outcome pass
+rm -f "$out"
 ```
 
 On a retryable infrastructure failure (provider down, repo unreachable, push

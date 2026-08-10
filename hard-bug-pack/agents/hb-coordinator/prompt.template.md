@@ -102,11 +102,16 @@ Write `hard-bug-reconcile.v1` = `{ phase, round, subject:<bug_bead>, aligned,
 divergences:[{topic, lane_a_position, lane_b_position, why_it_matters}], stronger_lane,
 stronger_rationale, stuck, next_action:(relay_next_round|advance_phase|
 choose_implementer|escalate|report_only), relay_to_a, relay_to_b, failure_class,
-failure_reason }` to a file, then close your step:
+failure_reason }` to a **unique** temp file via `mktemp` — never a fixed name (your
+slot is reused across rounds/arcs) and out of your worktree (you `git diff` there in
+finalize) — then close your step:
 
 ```bash
+out="$(mktemp -t hb-reconcile.XXXXXX)"
+# ... write your hard-bug-reconcile.v1 object (valid JSON) to "$out" ...
 bash {{.ConfigDir}}/assets/scripts/emit-json.sh --bead <your-reconcile-bead> \
   --json-file "$out" --schema hard-bug-reconcile.v1 --outcome pass
+rm -f "$out"
 ```
 
 **Notify the human atomically — in this SAME close command — whenever the run is pausing
@@ -123,11 +128,16 @@ bash {{.ConfigDir}}/assets/scripts/emit-json.sh --bead <your-reconcile-bead> \
   --subject "hard-bug <bug_bead> <phase> r<round>: aligned=<true|false> stronger=<lane> next=<next_action>"
 ```
 
-Then MERGE-update the arc state (never `--metadata`, which wipes routing keys):
+Then MERGE-update the arc state (never `--metadata`, which wipes routing keys). Buffer
+it in a unique `mktemp` file — not `state.json` in your cwd, which would dirty the
+worktree you `git diff` in finalize:
 
 ```bash
-state=$(jq -c . state.json)
+state_file="$(mktemp -t hb-state.XXXXXX)"
+# ... write the MERGE-updated arc state (valid JSON) to "$state_file" ...
+state=$(jq -c . "$state_file")
 gc bd update <bug_bead> --set-metadata "gc.output_json=$state"
+rm -f "$state_file"
 ```
 Set `last_reconcile`, bump `rounds.<phase>`, and — when root cause aligns — record
 `agreed_root_cause` so the fix phase's lanes read it from the arc bead.
@@ -213,7 +223,8 @@ You are working the `finalize` step of `hard-bug-finalize`; it `needs` the
 
 Emit `hard-bug-final.v1` = `{ subject:<bug_bead>, concurred (bool), branch,
 status:(done|reopened|escalated), next_action, summary, failure_class, failure_reason }`
-and close your step with `emit-json.sh --schema hard-bug-final.v1`. On a terminal
+and close your step with `emit-json.sh --schema hard-bug-final.v1` (write it to a
+unique `mktemp` file, as in Reconcile). On a terminal
 outcome (`done` or `escalated`), fold `--notify "${GC_HARDBUG_NOTIFY_TO:-human}"
 --subject "hard-bug <bug_bead>: <done|escalated> — <branch/summary>"` into that same
 close so the human is notified atomically (never a separate `gc mail send`, never the
