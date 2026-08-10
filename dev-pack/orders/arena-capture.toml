@@ -1,0 +1,22 @@
+# arena-capture — capture new model-arena decisions (model-vs-model judge picks +
+# per-participant transcript token counts) on a cooldown, so N>=2 runs land in
+# tools/vllm/arena/decisions.jsonl on their own — no manual backfilling.
+#
+# The controller runs this via exec (no LLM, no agent, no wisp): the durable,
+# always-on cousin of a cron poller. It survives restarts and needs no per-session
+# Stop hook. arena_refresh.py is idempotent + cost-preserving, and the transcript
+# token counts it recovers are captured well within Claude Code's ~30d retention, so
+# a modest interval is plenty (arena decisions are infrequent). exec body lives in
+# assets/scripts/arena-capture.sh (cf. fetch-origin.toml).
+#
+# A prompter alternative is an event trigger:
+#     trigger = "event"
+#     on = "bead.closed"
+# (guarded to reconcile-schema beads, like cascade-nudge-on-blocker-close). Cooldown
+# is chosen for simplicity — retention dwarfs any interval, so promptness is a nicety.
+[order]
+description = "Capture new model-arena decisions + transcript token counts (idempotent)"
+trigger = "cooldown"
+interval = "30m"
+exec = "$PACK_DIR/assets/scripts/arena-capture.sh"
+timeout = "300s"
