@@ -1,0 +1,96 @@
+{
+  "lane_id": "treat-sonnet",
+  "provider": "anthropic",
+  "model": "sonnet",
+  "phase": "root_cause",
+  "round": 1,
+  "root_cause": {
+    "statement": "The inkling-small model's BOS token (<|begin_of_text|>, id 200028) is being passed to xgrammar's structured-output FSM after reasoning ends, and the JSON grammar correctly rejects it because BOS is not valid JSON content.",
+    "mechanism": "When structured outputs are enabled with a reasoning model, trim_reasoning_for_advance() excludes reasoning tokens (up to the reasoning-end marker detected by is_reasoning_end_streaming) before advancing the grammar FSM. However, special structural tokens like BOS that appear after reasoning ends but are not valid grammar content are NOT filtered out. Token 200028 reaches grammar.accept_tokens(), the xgrammar matcher rejects it (correct behavior for JSON), and the scheduler terminates the request at line 1853.",
+    "confidence": "medium"
+  },
+  "keystone_facts": [
+    {
+      "fact": "Token 200028 is <|begin_of_text|> per tokenizer_config.json from thinkingmachines/Inkling-Small-NVFP4",
+      "status": "verified",
+      "source": "https://huggingface.co/thinkingmachines/Inkling-Small-NVFP4/raw/main/tokenizer_config.json"
+    },
+    {
+      "fact": "text_config.vocab_size is 201024, unpadded_vocab_size is 200058 (token 200028 is within both ranges)",
+      "status": "verified",
+      "source": "https://huggingface.co/thinkingmachines/Inkling-Small-NVFP4/raw/main/config.json"
+    },
+    {
+      "fact": "Inkling format uses <|content_thinking|> for reasoning blocks terminated by <|end_message|>; <|begin_of_text|> is not part of the documented output format",
+      "status": "verified",
+      "source": "vllm/parser/inkling.py lines 5-23"
+    },
+    {
+      "fact": "BOS token would never be accepted by a JSON grammar FSM (it's a structural marker, not JSON content)",
+      "status": "verified",
+      "source": "xgrammar grammar compilation semantics + vllm/v1/structured_output/backend_xgrammar.py"
+    }
+  ],
+  "proposed_fix": {
+    "summary": "Filter out special structural tokens (BOS, EOS, and model-specific block markers) from tokens passed to grammar.accept_tokens(), or exclude them from sampling when structured outputs are active.",
+    "changes": [
+      {
+        "file": "vllm/v1/structured_output/__init__.py",
+        "what": "In trim_reasoning_for_advance() or as a new filter step before accept_tokens(), exclude special structural tokens that are never valid grammar content. Check token against tokenizer.all_special_ids or a model-specific exclusion list."
+      },
+      {
+        "file": "vllm/parser/inkling.py",
+        "what": "Add BOS/structural tokens to an explicit exclusion set, or enhance is_reasoning_end_streaming() to treat BOS as a reasoning-boundary marker that should be trimmed."
+      },
+      {
+        "file": "vllm/v1/core/sched/scheduler.py",
+        "what": "Improve error logging at line 1847-1852: decode the rejected token IDs to show their text form and whether they are special tokens, making diagnosis clearer."
+      }
+    ],
+    "tests_to_add": [
+      "Regression test: inkling-small with structured JSON output and reasoning enabled. Verify that BOS and other structural tokens in the model's vocab do not cause grammar rejection.",
+      "Unit test for trim_reasoning_for_advance: ensure it filters special tokens that appear after reasoning ends.",
+      "Cross-model test: run the same structured-output + reasoning scenario across all engine-based parsers (qwen3, deepseek, minimax) to ensure BOS/structural token handling is consistent."
+    ],
+    "verification_plan": [
+      "Reproduce with vllm serve --model thinkingmachines/Inkling-Small-NVFP4 and a /v1/chat/completions request with response_format={type:json_object} and reasoning prompt.",
+      "After fix, verify that (1) the request completes successfully, (2) no BOS token appears in the final JSON output, (3) the grammar rejection error no longer occurs.",
+      "Check that the fix does not regress other inkling use cases (tool calling, non-structured reasoning, non-reasoning JSON)."
+    ]
+  },
+  "evidence": [
+    {
+      "kind": "line",
+      "ref": "vllm/v1/core/sched/scheduler.py:1844-1853",
+      "note": "Grammar rejection and termination triggered here; advance_token_ids contains [200028] which grammar.accept_tokens() rejected."
+    },
+    {
+      "kind": "line",
+      "ref": "vllm/v1/structured_output/__init__.py:462-486",
+      "note": "trim_reasoning_for_advance() only trims tokens up to reasoning_end_token_index; does not filter special structural tokens that appear after reasoning."
+    },
+    {
+      "kind": "line",
+      "ref": "vllm/parser/inkling.py:339-350",
+      "note": "is_reasoning_end() scans backwards for CONTENT_TEXT or CONTENT_MODEL_END_SAMPLING; does not account for BOS appearing after these markers."
+    },
+    {
+      "kind": "file",
+      "ref": "vllm/v1/structured_output/backend_xgrammar.py",
+      "note": "XgrammarGrammar.accept_tokens() delegates to xgrammar's matcher, which correctly rejects tokens not in the grammar (including BOS for JSON)."
+    },
+    {
+      "kind": "repro",
+      "ref": "Bug report line 2-11",
+      "note": "500 error with log showing 'grammar rejected tokens [200028]' for inkling-small + structured outputs."
+    }
+  ],
+  "follow_ups": [
+    "Investigate whether inkling-small is SUPPOSED to emit <|begin_of_text|> mid-generation, or if this is a model fine-tuning issue (check model card / training details).",
+    "Check if other models with rich special-token vocabularies (deepseek, qwen, minimax) have similar issues when BOS/padding tokens fall within the active vocab range.",
+    "Audit all engine-based parsers' is_reasoning_end_streaming() implementations: ensure they don't mis-detect structural tokens as reasoning-end markers when those tokens appear in unexpected positions.",
+    "Consider a global structural-token filter in StructuredOutputManager.should_advance() or the scheduler's grammar-advance path, rather than per-parser fixes."
+  ],
+  "failure_class": null,
+  "failure_reason": null
+}

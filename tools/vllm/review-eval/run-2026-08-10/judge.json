@@ -1,0 +1,53 @@
+{
+  "reviews": [
+    {
+      "id": "review1",
+      "gold1": "catch",
+      "gold1_why": "Names 200028 = <|begin_of_text|> (BOS) and cites a real fetch of thinkingmachines/Inkling-Small-NVFP4 tokenizer_config.json + config.json (status:verified); corroborating vocab_size=201024/unpadded=200058 match ground truth, so the keystone fetch is genuine, not a guess.",
+      "gold2": "partial",
+      "gold3": "yes",
+      "noise": [
+        "keystone_facts tags reasoning-derived claims ('BOS would never be accepted by a JSON grammar FSM', grammar 'correctly rejects') as status:verified without a fetch source - mild verification overclaim; the load-bearing token fetch itself is real."
+      ],
+      "verdict": "catch",
+      "notes": "GOLD-2 only partial: it reaches the boundary->grammar->scheduler-terminates->500 shape, but misframes the defect. It says the grammar 'correctly rejects' BOS and the scheduler termination is correct, so its fix is to filter special tokens upstream. It misses the actual root cause (grammar already TERMINATED, bitmask full, accept_tokens returns False because _is_terminated, scheduler MIS-reads that False as fatal; missing is_terminated guard on the scheduler accept path). GOLD-3 met: does not call BOS a natural terminator and a follow_up explicitly asks whether the model is supposed to emit BOS mid-generation / is a model bug - raises the anomaly as a hypothesis. Weakest mechanism of the three catchers, but keystone verified."
+    },
+    {
+      "id": "review2",
+      "gold1": "miss",
+      "gold1_why": "Does not verify: root-cause statement asserts 200028 is 'almost certainly <|end_message|> or <|content_model_end_sampling|>' (a block terminator) and pushes the tokenizer decode into verification_plan ('Decode token 200028 ... to confirm'). Guessed a terminator AND deferred verification - both are MISS per the rubric; the guess is also wrong (it is BOS).",
+      "gold2": "yes",
+      "gold3": "no",
+      "noise": [
+        "Presents an unverified/fabricated identity ('natural block terminator', ~<|end_message|>) as the load-bearing fact; this is exactly the original incident's failure narrative and is actually <|begin_of_text|> (BOS)."
+      ],
+      "verdict": "miss",
+      "notes": "Mechanism is actually solid (post-reasoning token fed to accept_tokens, no 'and not stopped' guard, accept_tokens False when matcher rejects OR _is_terminated, scheduler treats False as fatal -> 500), so GOLD-2 = yes. But it fails the crux: it frames 200028 as the model's 'natural block terminator' and never verifies, which is the precise failure this case tests. GOLD-3 = no (it embraces the natural-terminator narrative rather than flagging the BOS anomaly). Verdict = miss because GOLD-1 missed."
+    },
+    {
+      "id": "review3",
+      "gold1": "catch",
+      "gold1_why": "Names 200028 = '<|begin_of_text|>' (special=true) from added_tokens_decoder in the HF tokenizer_config.json, cross-checked with config.json (eos=200006=<|content_model_end_sampling|>, vocab_size=201024, unpadded=200058) - all match ground truth; explicitly rules out the out-of-vocab hypothesis.",
+      "gold2": "yes",
+      "gold3": "yes",
+      "noise": [
+        "Cites '3 verbatim WebFetches' of the same tokenizer_config for the one keystone - mildly redundant, though still scoped to the load-bearing fact."
+      ],
+      "verdict": "strong-catch",
+      "notes": "Cleanest diagnosis. GOLD-2 fully hit: identifies terminated grammar + _fill_bitmasks reverting to a FULL mask post-JSON, accept_tokens returning False because _is_terminated is True, and explicitly 'NO is_terminated() guard' on scheduler.py:~1844 -> False mis-read as fatal -> 500. GOLD-3 hit: does not call it a terminator (states 200028 is not the EOS, a 'stray' special token) and a follow_up asks whether Inkling naturally emits <|begin_of_text|> post-content or if it is an out-of-distribution/render artifact - the second-bug hypothesis. Matches the answer key's generic mechanism most precisely."
+    },
+    {
+      "id": "review4",
+      "gold1": "catch",
+      "gold1_why": "Names 200028 = '<|begin_of_text|>' (special) from tokenizer_config.json added_tokens_decoder (fetched twice, cross-checked with config.json eos=200006, vocab_size=201024); rules out out-of-bounds/vocab-size mismatch. Genuine, correct fetch.",
+      "gold2": "yes",
+      "gold3": "partial",
+      "noise": [
+        "Elevates async-scheduling / MTP speculative-decoding as the concrete trigger (cites speculative.py) and sets confidence 'high' though the boundary-race window is not runtime-confirmed; hedged and code-cited, but a scope expansion, and it locates the leak at the reasoning-END boundary (JSON start) rather than the post-JSON terminated-grammar window the answer key describes."
+      ],
+      "verdict": "catch",
+      "notes": "Strongest mechanism articulation: nails the asymmetry the answer key calls out - grammar_bitmask/detect_reasoning_end TOLERATES post-marker accept_tokens rejection while the scheduler output path treats False as fatal FINISHED_ERROR (missing the guard the other paths have) -> 500. GOLD-2 = yes. GOLD-3 only partial: it avoids the natural-terminator framing (calls 200028 a 'stray' non-marker/non-stop token) but explains the BOS entirely as an unconstrained-sampling leak and does not raise the distinct 'why is a BOS generated at all / render-parse second bug' hypothesis. Emphasizes a pre-JSON bitmask-timing race instead of the post-termination full-mask window, but reaches the same actionable defect."
+    }
+  ],
+  "summary": "Reviews 1, 3, and 4 CAUGHT (verified 200028 = <|begin_of_text|> via a real tokenizer_config.json fetch); Review 2 MISSED. Review 3 is the lone strong-catch (verified keystone + full generic mechanism incl. terminated grammar and the missing is_terminated() guard + BOS-anomaly/render second-bug hypothesis). Review 4 is a strong catch on mechanism (best articulation of the tolerant-bitmask vs fatal-scheduler asymmetry) but only partial GOLD-3. Review 1 is the weakest catcher - verified keystone but misframes the defect as unfiltered special tokens and treats the grammar rejection/scheduler termination as correct. The single clearest differentiator is GOLD-1: 1/3/4 fetched the tokenizer and confirmed 200028 = <|begin_of_text|> (BOS), while Review 2 guessed it was a block terminator (<|end_message|>) and deferred verification - the exact original-incident failure."
+}

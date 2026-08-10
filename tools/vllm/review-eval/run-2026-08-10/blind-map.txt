@@ -1,0 +1,4 @@
+review1=treat-sonnet
+review2=baseline-opus
+review3=bonly-opus
+review4=treat-opus

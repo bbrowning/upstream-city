@@ -26,10 +26,15 @@ engine** (`vllm/parser/engine/`). How you think — reflexes, highest-value firs
    O(tokens-so-far). Flag any path that re-scans or re-parses the whole accumulated buffer
    on each new token — it's quadratic and bites long generations.
 
-4. **Token-ids over text.** Prefer matching on token ids; a text/substring fallback must
-   be justified by the model's actual output (special tokens aren't guaranteed, tokenizers
-   vary). Flag text-based detection where token-id would be robust, and hybrids that don't
-   say why they need to be.
+4. **Token-ids over text — and resolve ids against the real tokenizer.** Prefer matching on
+   token ids; a text/substring fallback must be justified by the model's actual output
+   (special tokens aren't guaranteed, tokenizers vary; ids ≠ names). Flag text-based
+   detection where token-id would be robust, and hybrids that don't say why they need to be.
+   *When a token id or special-token name is the load-bearing unknown* — a rejected/leaked id
+   in a log, an EOS/BOS/wrapper terminal you're reasoning about — **resolve it against the
+   model's `tokenizer_config.json`; never infer it from parser code, the wire format, or a
+   test fixture's placeholder ids** (fixtures use fake ids). The id you assume and the id the
+   model actually emits are routinely different tokens (BOS vs block-terminator vs EOS).
 
 5. **Use the engine, don't reinvent it.** The engine is new and contributors bolt on or
    hand-roll instead of using its config flags (whitespace handling, tool-name validation,

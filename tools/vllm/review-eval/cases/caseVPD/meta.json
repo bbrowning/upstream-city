@@ -1,0 +1,40 @@
+{
+  "id": "caseVPD",
+  "family": "diagnosis",
+  "source": { "type": "hard-bug-arc", "bead": "vllm-vpd", "rig": "vllm" },
+  "commit": "41e7746b8",
+  "model": "inkling-small",
+  "hf_repo": "thinkingmachines/Inkling-Small-NVFP4",
+  "hf_repo_policy": "GIVEN to the lane in the primary arm (repo-discovery is a separate skill; a discovery miss must not fail the verification reflex test). An optional harder arm may withhold it to test discovery.",
+  "blind_reconstruction": {
+    "show": [
+      "bug-report.md (the arc bead description ONLY — symptom, log, core questions, env)",
+      "a detached vLLM worktree @ 41e7746b8",
+      "the CPU-only test venv (tools/vllm/vllm-testenv.sh)"
+    ],
+    "hide": [
+      "vllm-vpd metadata gc.output_json (arc state / agreed_root_cause — the wrong+then-corrected narrative)",
+      "lane beads vllm-1yo, vllm-r3t (worker-a), vllm-0tj, vllm-6p0 (worker-b)",
+      "reconcile beads vllm-9q2 / vllm-vxv",
+      "this repo's tools/vllm/review-eval/run-*/ and .claude memories",
+      "answer-key.md"
+    ],
+    "network": {
+      "allow": [
+        "huggingface.co model-repo files for the model under diagnosis: tokenizer_config.json, config.json, tokenizer.json, special_tokens_map.json",
+        "package/source documentation needed to read the code path"
+      ],
+      "forbid": [
+        "any lookup of THIS incident (the bug id, the PR/issue, anyone's diagnosis)",
+        "any vLLM commit past 41e7746b8; git fetch / walking forward",
+        "gc / bead-store access of any kind"
+      ]
+    }
+  },
+  "why_this_case": "Core question #1 literally asks what token 200028 is. The original run GUESSED a block terminator (<|end_message|>), both lanes tagged the mapping could_not_verify, and the coordinator marked aligned=high-confidence (correlated error). Ground truth: 200028 = <|begin_of_text|> (a BOS), which is anomalous post-JSON and hints at a second bug the guess masked.",
+  "frozen_original_lanes": {
+    "lane_a": "orig-lane-a.json (snapshot of vllm-1yo gc.output_json)",
+    "lane_b": "orig-lane-b.json (snapshot of vllm-0tj gc.output_json)"
+  },
+  "gold": "see answer-key.md"
+}

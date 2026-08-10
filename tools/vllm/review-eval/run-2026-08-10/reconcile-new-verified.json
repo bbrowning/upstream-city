@@ -1,0 +1,10 @@
+{
+ "rubric":"new-on-verified",
+ "aligned": false,
+ "gate_fired": false,
+ "unverified_keystones":[],
+ "stronger_lane":"lane-a",
+ "stuck": false,
+ "next_action":"relay_next_round",
+ "rationale":"The gate did not fire: every keystone both lanes rest on (200028=<|begin_of_text|> special token, vocab_size=201024, BOS invalid for a JSON grammar/reaches accept_tokens and is rejected) is marked verified in both lanes with consistent sources, so there is no shared unverified, cheaply-verifiable fact to bounce on. The lanes are NOT aligned: they share only the crash site (BOS fed to xgrammar -> fatal rejection at scheduler.py) but diverge on the underlying defect. Lane A identifies a bitmask-application timing race that lets the first post-reasoning-end token be sampled unconstrained, plus a tolerant-vs-fatal asymmetry, and explains WHY BOS was emitted; Lane B treats the grammar rejection as correct and only proposes filtering special tokens, not explaining why BOS was sampled and even questioning a model issue -- symptom-vs-cause, with fixes that behave differently on the failing input (B's special-token filter misses non-special unconstrained leaks that A's constrain-and-rollback covers). Relay for a substantive mechanism reconciliation (not a verify-bounce): Lane A is stronger and this is round 1, so not stuck."
+}

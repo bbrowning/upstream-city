@@ -28,6 +28,16 @@ Negative knowledge ("do NOT assume X") beats affirmative restatement. **Prune as
 one sharp reflex, not three soft ones. A persona that restates general best practice is
 noise that costs context on every review.
 
+**Two consumers now — review AND hard-bug diagnosis.** The personas are injected into the PR
+reviewer (as `$GC_PR_PERSONAS`) *and* the hard-bug lanes (as `$GC_VLLM_PERSONAS`) — the same
+files. So: (1) validate a persona edit against **both** case families before it ships — a
+diagnosis-helping reflex must not add review noise, and vice-versa; (2) keep personas to
+**domain facts**; *method* ("prefer static analysis", "ground-truth cheap load-bearing facts
+before asserting") lives in the pack prompts, not here — that separation is what lets one
+corpus serve both; (3) a **verification reflex** (one that tells a diagnoser to ground-truth
+a fact) is a fifth bar test: it must name *what* to fetch and *when* — **cheap AND
+load-bearing** — so it can't degenerate into "always fetch everything."
+
 ## The flywheel — miss → one reflex → re-run → confirm
 **Cases are regression tests for personas.** The loop, every time:
 
@@ -49,6 +59,17 @@ noise that costs context on every review.
 
 A reflex that does not flip its case from miss→catch on re-run is not pulling its weight —
 rewrite it tighter or drop it. That is the whole discipline.
+
+**Diagnosis cases (hard-bug) are the second case family.** A hard-bug miss — a lane that
+guessed a load-bearing fact instead of verifying it, or two lanes that *converged on the same
+unverified guess* (correlated error) — reconstructs the same way, with two differences from a
+review case: the artifact is a sanitized **bug report** (the arc bead's `description` only,
+never its `gc.output_json` answer), and the network rule is a **positive allowlist**, not the
+review harness's air-gap — the HF `tokenizer_config.json`/`config.json` fetch *is* the reflex
+under test, while the incident's answer (corrected arc state, prior lane beads, this repo's
+`run-*/` + memories) stays hidden. Grade the diagnosis, not a diff; "noticed the fact was
+uncertain but didn't verify it" is a **MISS**. First case: `cases/caseVPD/` (see its
+`meta.json` blind notes). Same bar, same flywheel.
 
 ## Adding a validation case — verifying real maintainer feedback
 Real cases come from merged/closed PRs where a trusted maintainer (`@bbrowning`,

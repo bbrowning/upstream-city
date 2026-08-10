@@ -1,0 +1,89 @@
+{
+  "phase": "root_cause",
+  "round": 1,
+  "root_cause": {
+    "statement": "For an Inkling model, the V1 scheduler feeds the model's trailing block-terminator special token (id 200028, an Inkling structural marker — almost certainly <|end_message|> or <|content_model_end_sampling|>) into grammar.accept_tokens after the JSON content is complete. Inkling delimits every content block, including the <|content_text|> block that carries the structured-output JSON, with dedicated special tokens; that terminator is not part of the compiled JSON grammar and is not xgrammar's stop/EOS token, so xgrammar's matcher rejects it (or the matcher is already terminated), accept_tokens returns False, and the scheduler marks the request FINISHED_ERROR -> 500. The structured-output reasoning plumbing only strips LEADING reasoning tokens (trim_reasoning_for_advance / reasoning_end_token_index); it has no notion of a TRAILING structural terminator, so the block-close token reaches the grammar.",
+    "mechanism": "After the reasoning block closes, should_advance() returns True for every subsequent step and the scheduler (scheduler.py:1829-1855) passes all post-reasoning-boundary tokens to grammar.accept_tokens, filtered only by trim_reasoning_for_advance which removes tokens up to and including the reasoning-end marker (structured_output/__init__.py:462-486; request.py comment: reasoning_end_token_index scopes ONLY leading reasoning content). The model constrains the JSON body via the bitmask (should_fill_bitmask becomes True once <|content_text|> flips reasoning_ended True), but the bitmask is the full/unconstrained mask whenever should_fill_bitmask is False or grammar.is_terminated() (structured_output/__init__.py:199-205), so nothing prevents the model from sampling its natural block terminator 200028 either during reasoning or at grammar completion. adjust_request sets skip_special_tokens=False (parser_engine.py:207), so the terminator stays in the token stream. check_stop (sched/utils.py:104-111) may or may not classify 200028 as a stop token, but _update_request_with_output (scheduler.py:2114-2123) keeps the stopping token in new_token_ids and there is NO `and not stopped` guard on the advance block, so the terminator is still fed to accept_tokens. XgrammarGrammar.accept_tokens (backend_xgrammar.py:158-171) returns False when the matcher rejects the token or _is_terminated is already True; the scheduler treats that False as fatal (scheduler.py:1847-1855) and returns 500.",
+    "confidence": "medium"
+  },
+  "proposed_fix": {
+    "summary": "Stop forwarding trailing structural/terminator special tokens (and any token on an already-stopped request) to grammar.accept_tokens, symmetric to the existing leading-reasoning trim; treat legitimate end-of-message markers as request completion rather than a grammar error.",
+    "changes": [
+      {
+        "file": "vllm/v1/core/sched/scheduler.py",
+        "what": "In the structured-output advance block (~1829-1855) do not feed the terminal token to grammar.accept_tokens once check_stop has marked the request stopped (add an `and not stopped` guard), and/or trim trailing structural special tokens from advance_token_ids; when accept_tokens still returns False on a token that already stopped the request, finish as FINISHED_STOPPED rather than FINISHED_ERROR."
+      },
+      {
+        "file": "vllm/v1/structured_output/__init__.py",
+        "what": "Add trailing-structural-token trimming alongside trim_reasoning_for_advance (e.g. trim_structural_for_advance) so block-terminator/channel special tokens reported by the reasoner/parser are excluded from the tokens passed to accept_tokens."
+      },
+      {
+        "file": "vllm/parser/inkling.py (and the ParserEngine/ReasoningParser interface)",
+        "what": "Expose the Inkling block-terminator special-token ids (END_MESSAGE / CONTENT_MODEL_END_SAMPLING) so the structured-output layer can identify and exclude them; alternatively register them as stop tokens so the request finishes cleanly before the grammar sees them."
+      },
+      {
+        "file": "vllm/v1/structured_output/backend_xgrammar.py",
+        "what": "Optional hardening: pass Inkling's message-terminator special tokens as xgrammar stop_token_ids so the grammar accepts them at completion instead of rejecting."
+      }
+    ],
+    "tests_to_add": [
+      "Scheduler unit test simulating an Inkling structured-output token stream (thinking block, <|end_message|>, <|message_model|>, <|content_text|>, JSON body, trailing <|end_message|>/200028); assert the request finishes FINISHED_STOPPED (not FINISHED_ERROR) and grammar.accept_tokens is never invoked with the trailing structural terminator.",
+      "Unit test for the new trailing-structural trim: given post-reasoning new_token_ids ending in a structural marker, the tokens passed to accept_tokens exclude that marker.",
+      "Regression test confirming a plain-EOS structured-output request (no reasoner) still terminates without being fed a rejected token."
+    ],
+    "verification_plan": [
+      "Decode token 200028 with the Inkling tokenizer (thinkingmachines/Inkling-Small-NVFP4) to confirm it is a block-terminator/channel special token (<|end_message|> or <|content_model_end_sampling|>) and note whether it is inside or outside xgrammar's compiled vocab view.",
+      "Reproduce on an inkling-small server: POST /v1/chat/completions with a JSON-schema structured output and reasoning enabled; confirm current build returns 500 with 'grammar rejected tokens [200028]' and that the patched build returns 200 with schema-valid JSON.",
+      "Run the new scheduler/structured-output unit tests and the existing structured-output test suite."
+    ]
+  },
+  "evidence": [
+    {
+      "kind": "line",
+      "ref": "vllm/v1/core/sched/scheduler.py:1829-1855",
+      "note": "Advance block: post-reasoning tokens go to grammar.accept_tokens filtered only by trim_reasoning_for_advance; no exclusion of trailing structural tokens and no `and not stopped` guard; accept_tokens False -> logs the exact 'grammar rejected tokens' message and sets FINISHED_ERROR (the scheduler.py:1841 line in the report)."
+    },
+    {
+      "kind": "line",
+      "ref": "vllm/v1/structured_output/__init__.py:462-486",
+      "note": "trim_reasoning_for_advance only removes tokens up to/including the reasoning-end marker (leading reasoning content); no handling of trailing block terminators."
+    },
+    {
+      "kind": "line",
+      "ref": "vllm/v1/structured_output/request.py:26-33",
+      "note": "Comment: reasoning_end_token_index marks tokens 'at or before' the reasoning-end marker as reasoning content to exclude — scoped ONLY to leading content, confirming trailing structural tokens are unhandled."
+    },
+    {
+      "kind": "file",
+      "ref": "vllm/parser/inkling.py:47-65,251-272",
+      "note": "Inkling delimits every block with dedicated special tokens (<|message_model|>, <|content_text|>, <|content_thinking|>, <|end_message|>, <|content_model_end_sampling|>...); the JSON is inside a <|content_text|> block closed by <|end_message|>, the trailing token that the grammar rejects."
+    },
+    {
+      "kind": "line",
+      "ref": "vllm/parser/engine/parser_engine.py:204-208",
+      "note": "adjust_request sets skip_special_tokens=False, so Inkling structural markers remain in the generated token stream and reach the grammar."
+    },
+    {
+      "kind": "line",
+      "ref": "vllm/v1/structured_output/backend_xgrammar.py:152-171",
+      "note": "accept_tokens returns False if matcher.accept_token fails OR if _is_terminated is already True; either path yields the scheduler's fatal rejection."
+    },
+    {
+      "kind": "line",
+      "ref": "vllm/v1/structured_output/__init__.py:194-205",
+      "note": "_fill_bitmasks writes the FULL (unconstrained) mask whenever apply_bitmask is False (reasoning not ended) or grammar.is_terminated(), so the model can freely sample its structural terminator (200028) at those positions."
+    },
+    {
+      "kind": "line",
+      "ref": "vllm/v1/core/sched/scheduler.py:2114-2123 and vllm/v1/core/sched/utils.py:104-111",
+      "note": "check_stop/_update_request_with_output: even when a token stops the request it is retained in new_token_ids, so the subsequent advance block still feeds it to the grammar."
+    },
+    {
+      "kind": "line",
+      "ref": "vllm/v1/structured_output/__init__.py:132-138",
+      "note": "xgrammar vocab_size = model_config.get_vocab_size(); could_not_verify whether Inkling's special-token ids fall outside xgrammar's effective constrained view vs. being emitted at an unconstrained (full-mask) position — both routes produce the same rejection."
+    }
+  ],
+  "failure_class": null,
+  "failure_reason": null
+}

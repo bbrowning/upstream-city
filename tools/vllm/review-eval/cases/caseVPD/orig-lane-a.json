@@ -1,0 +1,81 @@
+{
+  "lane_id": "hb-worker-a",
+  "provider": "anthropic",
+  "model": "claude-opus-4-8",
+  "phase": "root_cause",
+  "round": 1,
+  "root_cause": {
+    "statement": "The 500 is not a real grammar violation. Once the JSON structured-output grammar reaches its terminated state (the top-level JSON value is complete), the model is deliberately left UNCONSTRAINED, and it then emits its normal block-terminator special token (Inkling <|end_message|>/<|content_model_end_sampling|>, id 200028). The scheduler still calls grammar.accept_tokens() on that post-termination token; XgrammarGrammar.accept_tokens returns False for an already-terminated matcher, and the scheduler mis-reads that False as a fatal 'grammar rejected tokens' and terminates the request with FINISHED_ERROR -> 500. The bug is the conflation of 'grammar is already complete / nothing left to accept' with 'token was rejected by the grammar'.",
+    "mechanism": "Trace: (1) After reasoning ends, structured output constrains generation to the JSON schema (grammar_bitmask -> apply_grammar_bitmask). (2) When the top-level JSON value completes, xgrammar's matcher.is_terminated() becomes True; XgrammarGrammar._is_terminated is set (backend_xgrammar.py:170,193). (3) On the NEXT bitmask fill, StructuredOutputManager._fill_bitmasks (__init__.py:198-206) sees `apply_bitmask and not grammar.is_terminated()` is False, so it writes the FULL mask (self._full_mask) for that request -> the model is now UNCONSTRAINED. (4) Being an Inkling wrapper-format model, the unconstrained model emits its natural block terminator special token, id 200028 (a dedicated Inkling special token such as <|end_message|> or <|content_model_end_sampling|>), not the EOS the bare JSON grammar knows about. (5) Back in the scheduler (scheduler.py:1829-1855), should_advance(request) is still True (reasoning_ended stays True and should_advance never checks is_terminated), so accept_tokens(req_id,[200028]) is called. (6) accept_tokens (backend_xgrammar.py:152-158) hits `if self._is_terminated: return False` and returns False. (7) scheduler.py:1844-1855 treats False as 'Unexpected: grammar rejected tokens [200028] ... Terminating request', sets FINISHED_ERROR -> serving layer returns 500. This exactly matches the symptom: a SINGLE special token (200028) rejected immediately after valid JSON, with the constraint pipeline having already reported 200 OK. The 'above vocab_size / never-allowed token' theory is a symptom-level misread: if generation were still constrained, the bitmask would forbid 200028 and the model could never sample it -- it is samplable precisely because the terminated grammar switched to full-mask.",
+    "confidence": "high"
+  },
+  "proposed_fix": {
+    "summary": "Stop treating a terminated grammar as a rejection: do not feed post-termination tokens to accept_tokens. Guard the scheduler's advance call with `not grammar.is_terminated()`, mirroring the identical is_terminated() guards already used on the bitmask-fill path (__init__.py:199 and :324). Once the JSON grammar is complete, the request should keep generating unconstrained and finish through normal stop-token handling, not be killed as a grammar error.",
+    "changes": [
+      {
+        "file": "vllm/v1/core/sched/scheduler.py",
+        "what": "At the advance site (~line 1844), add an is_terminated() short-circuit before calling accept_tokens: change `if advance_token_ids and not grammar.accept_tokens(req_id, advance_token_ids):` to `if (advance_token_ids and not grammar.is_terminated() and not grammar.accept_tokens(req_id, advance_token_ids)):`. This skips grammar advancement (and the fatal-error branch) once the grammar has terminated, letting post-JSON wrapper/stop special tokens pass through as unconstrained output."
+      },
+      {
+        "file": "vllm/v1/structured_output/backend_xgrammar.py",
+        "what": "(Defense-in-depth for spec-decode / multi-token windows where termination happens mid-batch) Harden XgrammarGrammar.accept_tokens: return True (not False) when self._is_terminated at entry, and break out of the token loop as soon as self.matcher.is_terminated() so trailing wrapper tokens after JSON completion are not rejected within a single accept batch. Keep returning False only for a genuine matcher.accept_token() rejection while the grammar is still live."
+      }
+    ],
+    "tests_to_add": [
+      "Unit test in tests/v1/structured_output that constructs a StructuredOutputGrammar, feeds a complete JSON value so it becomes terminated, then asserts the scheduler advance branch is skipped (is_terminated True) and no FINISHED_ERROR results from a trailing special token id.",
+      "Scheduler-level regression test: a structured-output (JSON schema) request whose model emits a trailing special token after the JSON completes must finish as FINISHED_STOPPED via normal stop handling, NOT FINISHED_ERROR, and must not log 'grammar rejected tokens'.",
+      "Backend unit test: XgrammarGrammar.accept_tokens on an already-terminated grammar returns True and does not log 'Failed to advance FSM'; a batch [<last json token>, <trailing special token>] that terminates mid-batch is accepted (returns True)."
+    ],
+    "verification_plan": [
+      "VLLM_USE_PRECOMPILED=1 uv pip install -e . --torch-backend=auto",
+      ".venv/bin/python -m pytest tests/v1/structured_output -v -k 'terminated or reasoning or advance'",
+      ".venv/bin/python -m pytest tests/v1/core -v -k 'structured or scheduler'",
+      "Repro (if a GPU + inkling-small is available): POST /v1/chat/completions with response_format json_schema to inkling-small; assert 200 OK and valid JSON body, and that engine-core logs show no 'grammar rejected tokens [200028]' line.",
+      "pre-commit run --all-files"
+    ]
+  },
+  "considered_second_opinion": {
+    "peer_bead": null,
+    "stance": "none",
+    "why": "Round 1: no peer/prior output was named in the step bead (prior_peer_bead empty)."
+  },
+  "evidence": [
+    {
+      "kind": "line",
+      "ref": "vllm/v1/structured_output/backend_xgrammar.py:152-170",
+      "note": "accept_tokens returns False immediately when self._is_terminated (line 158); _is_terminated set from matcher.is_terminated() after processing (170). This False is what the scheduler mis-reads as a rejection."
+    },
+    {
+      "kind": "line",
+      "ref": "vllm/v1/core/sched/scheduler.py:1844-1855",
+      "note": "`if advance_token_ids and not grammar.accept_tokens(...)` -> logs 'Unexpected: grammar rejected tokens %s' and sets RequestStatus.FINISHED_ERROR. No is_terminated() guard here (unlike the bitmask path), so a terminated grammar's False triggers the 500."
+    },
+    {
+      "kind": "line",
+      "ref": "vllm/v1/structured_output/__init__.py:198-206",
+      "note": "_fill_bitmasks writes the FULL mask (self._full_mask) once grammar.is_terminated() is True -> model becomes unconstrained after JSON completes and can freely sample wrapper/stop token 200028. Confirms the disallowed-token theory is wrong."
+    },
+    {
+      "kind": "line",
+      "ref": "vllm/v1/structured_output/__init__.py:199 and :324",
+      "note": "grammar-advance and bitmask-fill paths already guard with `not grammar.is_terminated()`; the scheduler accept path at 1844 is the asymmetric site missing this guard -- pinpoints the fix."
+    },
+    {
+      "kind": "line",
+      "ref": "vllm/v1/structured_output/__init__.py:381-439",
+      "note": "should_advance returns True whenever reasoning_ended and never checks grammar.is_terminated(), so the scheduler keeps advancing an already-terminated grammar for the post-JSON wrapper token."
+    },
+    {
+      "kind": "file",
+      "ref": "vllm/parser/inkling.py:45-64",
+      "note": "Inkling content blocks are wrapped in dedicated special tokens and closed by <|end_message|> or standalone <|content_model_end_sampling|>. After a JSON block the model emits one of these terminators -- the 200028 in the log -- not the bare JSON grammar's EOS."
+    },
+    {
+      "kind": "trace",
+      "ref": "bug vllm-vpd log: 'grammar rejected tokens [200028] ... Terminating request' then 500",
+      "note": "Exactly one special token rejected right after a valid (200 OK) structured request -- consistent with rejection at the grammar-termination boundary. could_not_verify precise 200028->name mapping without the inkling-small tokenizer, but its role as block terminator is unambiguous from format + single-token symptom."
+    }
+  ],
+  "failure_class": "none",
+  "failure_reason": ""
+}

@@ -46,6 +46,22 @@ and `failure_reason=work_dir-misresolved-to-rig-root`.
    exact **JSON schema** to emit, and — from round 2 on — a **peer bead** to weigh as
    a second opinion plus a short coordinator relay note. Your own step-bead id is in
    your `gc` context (from `gc prime`).
+5. **Load the domain lens.** Read `$GC_VLLM_PERSONAS/base.md` (cross-cutting reflexes),
+   plus any persona whose `**Activates on:**` header lists a path prefix matching a
+   subsystem this bug lives in — read from the symptom / log / trace (e.g.
+   `vllm/v1/structured_output/`, `vllm/parser/`, `vllm/entrypoints/openai/`), not just the
+   one file you might end up editing. These encode what actually bites in this area.
+   ```bash
+   cat "$GC_VLLM_PERSONAS/base.md"
+   # then each persona whose "Activates on:" prefixes match a subsystem in the trace:
+   cat "$GC_VLLM_PERSONAS/<persona>.md"
+   ```
+   These personas are **shared with the PR reviewer and written in review voice**: take the
+   domain reflexes and gotchas (what's true about this area, what silently breaks), and
+   skip the review-*process* items that presuppose a diff (public-API back-compat,
+   test-coverage-of-a-change, competing in-flight PRs) — they don't apply to a diagnosis.
+   If `$GC_VLLM_PERSONAS` is unset, note that in your output and reason from first
+   principles.
 
 Your task is one of four; pick the matching playbook by the schema your step names:
 
@@ -79,19 +95,32 @@ dismiss one without addressing its evidence.
 
 1. **Understand the bug** (you read the bead + any linked upstream issue in Startup).
    Trace the reported behavior through the code. **Prefer static analysis** — reading
-   the code path plus the issue is usually enough to find a root cause. Do **NOT** build
-   a heavy environment from scratch to reproduce (no full `uv pip install -e .
-   --torch-backend=auto` / torch download) — it rarely changes the root-cause call and
-   burns time. If you genuinely must observe dynamically, use the prepared fast CPU-only
-   recipe when it's wired (`$GC_PREPARE_TEST_ENV`, which reuses the warm uv cache);
-   otherwise reason from code and mark that evidence `could_not_verify`. Save real
-   execution for the implement phase. Do not edit code here. If a linked issue or PR
-   proposes a fix, do **not** just defer to it — reach your OWN conclusion (you may
-   check the PR, but treat it as one more opinion to verify).
+   the code path plus the issue is usually enough to find a root cause.
+   - **Don't reproduce with a heavy runtime.** No full `uv pip install -e .
+     --torch-backend=auto` / torch download / GPU run just to *observe* the failure — it
+     rarely changes the root-cause call and burns time. If you genuinely must observe
+     dynamically, use the prepared fast CPU-only recipe when it's wired
+     (`$GC_PREPARE_TEST_ENV`, warm uv cache); otherwise reason from code. Save real
+     execution for the implement phase.
+   - **DO ground-truth the cheap facts your diagnosis rests on.** A *keystone* fact — a
+     token id ↔ name, a special / EOS / BOS token, a chat-template marker, a config
+     default, `vocab_size` — is a fact you **fetch, not infer**: the model's
+     `tokenizer_config.json` / `config.json` / `special_tokens_map.json` (HuggingFace,
+     via read-only `gh`/web), the constant or enum in the code, the upstream issue. Never
+     infer a token id's meaning from the wire format or a test fixture's placeholder ids.
+     `could_not_verify` is only for facts genuinely expensive to obtain (a live model
+     run) — **not** a two-fetch lookup.
+   Do not edit code here. If a linked issue or PR proposes a fix, do **not** just defer to
+   it — reach your OWN conclusion (you may check the PR, but treat it as one more opinion
+   to verify).
 2. **Find the ROOT CAUSE, not a symptom.** Trace the failure to the underlying defect
    and the *mechanism* by which it produces the symptom. Read enough surrounding code
    to be sure. A symptom masquerading as a cause is the most common way these lanes
-   diverge — be specific about the causal chain.
+   diverge — be specific about the causal chain. **If your root cause turns on a keystone
+   fact, verify that fact before you emit.** An unverified keystone caps
+   `root_cause.confidence` at `medium` and must be listed in `keystone_facts` (see
+   **Output**) — a confident conclusion resting on a guess is exactly how aligned lanes
+   are both wrong.
 3. **Sketch a fix** (do not implement yet): what change, where, and why it addresses
    the cause (not just the symptom).
 4. Take a mutation baseline so you can prove you changed nothing:
@@ -186,10 +215,14 @@ run a separate `gc bd close`.
 ### Fields by schema (your step's description is authoritative; this is the shape)
 
 **`hard-bug-diagnosis.v1`** — `lane_id`, `provider`, `model`, `phase`, `round`,
-`root_cause{statement, mechanism, confidence}`, `proposed_fix{summary, changes:[{file,
-what}], tests_to_add:[…], verification_plan:[…]}`, `considered_second_opinion{peer_bead
-| null, stance (adopted|refined|rejected|none), why}`, `evidence:[{kind (file|line|
-repro|trace|test), ref, note}]`, `failure_class`, `failure_reason`.
+`root_cause{statement, mechanism, confidence}`, `keystone_facts:[{fact, status
+(verified|could_not_verify), source}]` — the facts the root cause turns on and how you
+grounded each (e.g. `{fact:"token 200028 = <|begin_of_text|>", status:"verified",
+source:"tokenizer_config.json"}`); any `could_not_verify` keystone caps `confidence` at
+`medium` — `proposed_fix{summary, changes:[{file, what}], tests_to_add:[…],
+verification_plan:[…]}`, `considered_second_opinion{peer_bead | null, stance
+(adopted|refined|rejected|none), why}`, `evidence:[{kind (file|line|repro|trace|test),
+ref, note}]`, `failure_class`, `failure_reason`.
 
 **`hard-bug-implement.v1`** — `branch`, `pushed` (bool), `head_sha`, `base`, `summary`,
 `tests:[{command, result}]`, `files_changed:[…]`, `follow_ups:[…]`, `failure_class`,

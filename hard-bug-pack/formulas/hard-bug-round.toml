@@ -109,7 +109,10 @@ record your stance in `considered_second_opinion`.
 
 Task by phase (see your worker method for the full playbook):
 - root_cause: find the ROOT CAUSE and its mechanism (not a symptom); back it with
-  concrete evidence (files, lines, repro, traces); sketch a fix.
+  concrete evidence (files, lines, repro, traces); sketch a fix. Ground-truth the
+  keystone facts your diagnosis rests on (token ids, special/EOS tokens, config
+  defaults — fetch the tokenizer/config, don't infer); list them in `keystone_facts`
+  and cap confidence at `medium` for any you could not verify.
 - fix: the root cause is already agreed (read `agreed_root_cause` from `{{bug_bead}}`'s
   hard-bug-state.v1); converge the concrete FIX — the change, tests_to_add, and
   verification_plan.
@@ -144,7 +147,10 @@ record your stance in `considered_second_opinion`.
 
 Task by phase (see your worker method for the full playbook):
 - root_cause: find the ROOT CAUSE and its mechanism (not a symptom); back it with
-  concrete evidence (files, lines, repro, traces); sketch a fix.
+  concrete evidence (files, lines, repro, traces); sketch a fix. Ground-truth the
+  keystone facts your diagnosis rests on (token ids, special/EOS tokens, config
+  defaults — fetch the tokenizer/config, don't infer); list them in `keystone_facts`
+  and cap confidence at `medium` for any you could not verify.
 - fix: the root cause is already agreed (read `agreed_root_cause` from `{{bug_bead}}`'s
   hard-bug-state.v1); converge the concrete FIX — the change, tests_to_add, and
   verification_plan.
@@ -173,7 +179,9 @@ gc.root_bead_id filtered to schema hard-bug-diagnosis.v1):
 Make the subjective "aligned close enough?" call yourself (see your coordinator
 protocol for the rubric): compare root_cause+mechanism (phase root_cause) or the
 proposed_fix (phase fix). Also decide `stronger_lane` and whether the lanes are
-`stuck`. Emit `hard-bug-reconcile.v1` via emit-json.sh, then MERGE-update
+`stuck`. Before declaring aligned, apply the unverified-keystone gate: agreement on a
+keystone both lanes marked `could_not_verify` is NOT convergence — bounce a directed
+verify round (see your protocol). Emit `hard-bug-reconcile.v1` via emit-json.sh, then MERGE-update
 `{{bug_bead}}`'s hard-bug-state.v1 (bump rounds.{{phase}}, set last_reconcile, and —
 when root cause aligns — record agreed_root_cause).
 

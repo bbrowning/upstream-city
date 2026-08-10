@@ -59,6 +59,10 @@ includes = ["pr-review-pack", "hard-bug-pack"]   # in-city folders (PR review + 
   # needs to run vllm reuses the warm uv cache + the blessed CPU-only recipe
   # (tools/vllm/vllm-testenv.sh, ~seconds warm) instead of a full torch install from
   # scratch. (vLLM-specific env, kept out of the generic pack.)
+  # GC_VLLM_PERSONAS = the SAME vLLM domain-knowledge corpus the reviewer loads (as
+  # $GC_PR_PERSONAS): tools/vllm/review-personas/. The lane loads base.md + any persona
+  # whose "Activates on:" matches a subsystem in the bug's trace, and applies the domain
+  # reflexes (skipping the review-process ones). One corpus, two consumers.
   #
   # Per-worker model: uncomment option_defaults.model to control each lane's model
   # (valid claude: opus|sonnet|haiku|fable-5|opus-4-7|sonnet-5|sonnet-4-6). NB:
@@ -67,12 +71,12 @@ includes = ["pr-review-pack", "hard-bug-pack"]   # in-city folders (PR review + 
   [[rigs.patches]]
   agent = "hb-worker-a"
   # option_defaults = { model = "opus" }
-  env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh" }
+  env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_VLLM_PERSONAS = "/pvc/workspace/tools/vllm/review-personas" }
 
   [[rigs.patches]]
   agent = "hb-worker-b"
   # option_defaults = { model = "sonnet" }
-  env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh" }
+  env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_VLLM_PERSONAS = "/pvc/workspace/tools/vllm/review-personas" }
 
 [[rigs]]
 name = "gascity"

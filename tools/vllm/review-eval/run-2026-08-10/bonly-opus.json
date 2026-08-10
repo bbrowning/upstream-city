@@ -1,0 +1,48 @@
+{
+ "lane_id":"bonly-opus","provider":"anthropic","model":"opus","phase":"root_cause","round":1,
+ "root_cause":{
+   "statement":"Token 200028 is the Inkling special/control token <|begin_of_text|>, not JSON content and not the model's EOS. The 500 is not an out-of-vocab/oversized-vocab problem (200028 < unpadded_vocab_size 200058 < padded vocab_size 201024). It is a reasoning->structured-content boundary defect: at the boundary the xgrammar JSON bitmask does NOT constrain the sampled position (the structured-output gate leaves the mask FULL while reasoning_ended is False, and _fill_bitmasks reverts to a FULL mask once the grammar is_terminated after the JSON completes; reasoning_ended is also only persisted after sampling, a one-step lag under async scheduling). The model therefore samples one of its own structural special tokens unconstrained. The scheduler then force-feeds every post-boundary token to grammar.accept_tokens (scheduler.py ~1844) with NO is_terminated() guard and no tolerance for the model's structural tokens, so xgrammar rejects <|begin_of_text|> (a non-JSON, non-EOS special token) and the request is set to FINISHED_ERROR -> 500.",
+   "mechanism":"1) Inkling generates <|content_thinking|>...<|end_message|><|message_model|><|content_text|>{json}<|end_message|><|content_model_end_sampling|>. 2) is_reasoning_end (inkling.py:339) latches reasoning_ended=True at <|content_text|> (200004); trim_reasoning_for_advance drops tokens through that marker, then the grammar advances over the JSON. 3) When the JSON object completes, XgrammarGrammar._is_terminated flips True; StructuredOutputManager._fill_bitmasks (__init__.py:199,205) then writes a FULL (all-allowed) mask for that request, so the next sampled position is unconstrained. The model's configured EOS is <|content_model_end_sampling|> (200006); any OTHER special token it emits post-JSON (log shows <|begin_of_text|>=200028, also plausibly <|end_message|>=200010) is not caught by the stop-token check in _update_request_with_output. 4) should_advance still returns True (reasoning_ended persisted), trim returns the stray token unchanged (num_reasoning<=0), and scheduler.py:1844 calls grammar.accept_tokens([200028]); accept_tokens returns False immediately because self._is_terminated is True (backend_xgrammar.py:158-159) -> logger.error 'grammar rejected tokens [200028]' -> RequestStatus.FINISHED_ERROR (1853) -> serving 500. The same 500 occurs via the async one-step lag where the first post-reasoning token is sampled with a stale (unconstrained) bitmask.",
+   "confidence":"medium"
+ },
+ "keystone_facts":[
+   {"fact":"Token id 200028 = '<|begin_of_text|>', special=true (a BOS/document-start control token, not JSON content)","status":"verified","source":"HF thinkingmachines/Inkling-Small-NVFP4 tokenizer_config.json added_tokens_decoder[200028] (verified via 3 verbatim WebFetches)"},
+   {"fact":"Model EOS = 200006 = '<|content_model_end_sampling|>'; 200028 and 200010(<|end_message|>) are NOT the EOS/stop token","status":"verified","source":"HF config.json eos_token_id=200006 + tokenizer_config.json content for 200006"},
+   {"fact":"vocab_size=201024 (text_config), unpadded_vocab_size=200058, so 200028 is WITHIN the compiled vocab -> the 'token above compiled vocab_size' hypothesis is ruled out","status":"verified","source":"HF config.json (vocab_size, unpadded_vocab_size)"},
+   {"fact":"Inkling is_reasoning_end latches at <|content_text|>(200004)/<|content_model_end_sampling|>(200006); structural markers <|message_model|>(200001), <|end_message|>(200010), <|begin_of_text|>(200028) are never JSON grammar content","status":"verified","source":"vllm/parser/inkling.py:339-350,47-65"}
+ ],
+ "proposed_fix":{
+   "summary":"Stop force-feeding post-boundary/terminal tokens into the JSON grammar and stop turning a benign stray special token into a hard 500: guard the advance with is_terminated(), treat rejection of a model special/stop token as clean end-of-generation, and keep the terminated-state bitmask constrained (stop-token-only) instead of reverting to a full mask.",
+   "changes":[
+     {"file":"vllm/v1/core/sched/scheduler.py","what":"In the should_advance/accept_tokens block (~1829-1855): skip advancement when grammar.is_terminated(); and when accept_tokens returns False for a token that is a model special/stop token (or the grammar is already terminated), finish the request as FINISHED_STOPPED rather than FINISHED_ERROR (no 500)."},
+     {"file":"vllm/v1/structured_output/__init__.py","what":"In _fill_bitmasks, when apply_bitmask and grammar.is_terminated(), fill a stop-token-only mask instead of the full (-1) mask (line 205), so the model cannot sample stray special tokens after the JSON completes."},
+     {"file":"vllm/v1/structured_output/__init__.py","what":"Extend trim_reasoning_for_advance (or add a post-boundary filter) to drop the model's structural special tokens (message/channel/begin/end markers) from advance_token_ids, since they are never grammar content -- mirrors the existing reasoning-end trimming."},
+     {"file":"vllm/parser/inkling.py / model stop-token config","what":"Register the model's structural terminators (<|end_message|> 200010, plus <|content_model_end_sampling|> 200006) as stop tokens so generation halts cleanly at the end of the content block instead of spilling extra tokens into the grammar."}
+   ],
+   "tests_to_add":[
+     "Boundary regression: after reasoning ends and the JSON object completes (grammar terminated), feed a non-EOS special token (e.g. 200028) as the next new_token_ids; assert the request finishes STOPPED, not FINISHED_ERROR, and no accept_tokens rejection 500.",
+     "Async-scheduling boundary: the first post-reasoning token is a special token sampled with a stale/unconstrained bitmask; assert no grammar-rejection 500.",
+     "Inkling end-to-end structured output: <|content_thinking|>...<|end_message|><|message_model|><|content_text|>{json}<|end_message|><|content_model_end_sampling|> under xgrammar JSON completes without grammar rejection."
+   ],
+   "verification_plan":[
+     "Reproduce on Inkling-Small with xgrammar JSON + a reasoning parser; log grammar.is_terminated() and the applied-bitmask flag at the failing step to confirm 200028 reaches accept_tokens with the grammar terminated / mask full.",
+     "Toggle async scheduling on/off to determine whether the stray token enters at the async boundary lag or after grammar termination (disambiguates the exact unconstrained window).",
+     "Confirm the effective stop-token set (only 200006) and verify that after the fix generation halts at <|end_message|>/EOS without a 500."
+   ]
+ },
+ "evidence":[
+   {"kind":"line","ref":"vllm/v1/core/sched/scheduler.py:1829-1855","note":"should_advance -> trim_reasoning_for_advance -> grammar.accept_tokens(advance_token_ids); on False sets FINISHED_ERROR (1853). No is_terminated() guard before accept_tokens (1844); this is the only site that emits the 'grammar rejected tokens' 500."},
+   {"kind":"line","ref":"vllm/v1/structured_output/backend_xgrammar.py:158-171","note":"accept_tokens returns False immediately when self._is_terminated is True, and False for any token the xgrammar matcher won't accept (special tokens are not JSON content)."},
+   {"kind":"line","ref":"vllm/v1/structured_output/__init__.py:194-205","note":"_fill_bitmasks writes a FULL mask (self._full_mask=-1) when the grammar is terminated or bitmask not applied -> sampling becomes unconstrained after the JSON completes."},
+   {"kind":"line","ref":"vllm/v1/structured_output/__init__.py:361-379,338-347","note":"should_fill_bitmask uses the persisted reasoning_ended flag; the inline comment notes reasoning_ended is only persisted later by should_advance -> one-step lag between detection and bitmask constraint (async boundary window)."},
+   {"kind":"line","ref":"vllm/parser/inkling.py:339-350","note":"is_reasoning_end scans backward and returns True at <|content_text|>(200004)/<|content_model_end_sampling|>(200006); it does not treat <|end_message|>/<|message_model|>/<|begin_of_text|> as grammar content."},
+   {"kind":"file","ref":"HF thinkingmachines/Inkling-Small-NVFP4 tokenizer_config.json & config.json","note":"200028=<|begin_of_text|> (special); eos_token_id=200006=<|content_model_end_sampling|>; vocab_size=201024, unpadded_vocab_size=200058 -> 200028 is in-vocab."},
+   {"kind":"repro","ref":"bug-report.md log","note":"scheduler.py:1841 'Unexpected: grammar rejected tokens [200028] ... Terminating request' -> serving.py 500; matches the FINISHED_ERROR path at scheduler.py:1853."}
+ ],
+ "follow_ups":[
+   "Pin the exact unconstrained window with a live trace: async one-step bitmask lag at the reasoning->JSON boundary vs. post-termination full-mask after the JSON completes (both are real code gaps; the fix should close both).",
+   "Confirm whether xgrammar TokenizerInfo.from_huggingface registers Inkling special tokens as stop tokens; if only 200006 is a stop token, structural markers are masked during the grammar body but the terminated-state full mask still lets them through.",
+   "Check whether the Inkling chat template / model naturally emits <|begin_of_text|> at a message boundary post-content, or whether it is an out-of-distribution artifact of being forced into the JSON channel."
+ ],
+ "failure_class":null,"failure_reason":null
+}

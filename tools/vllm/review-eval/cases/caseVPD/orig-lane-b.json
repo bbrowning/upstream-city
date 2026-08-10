@@ -1,0 +1,104 @@
+{
+  "lane_id": "hb-worker-b",
+  "provider": "claude",
+  "model": "claude-sonnet-5",
+  "phase": "root_cause",
+  "round": 1,
+  "root_cause": {
+    "statement": "For Inkling models, StructuredOutputManager.should_advance()/trim_reasoning_for_advance() only trim the reasoning PREFIX before the grammar-constrained span; once that boundary is crossed, `structured_req.reasoning_ended` latches True forever and every subsequently generated token is force-fed to grammar.accept_tokens(), with no notion of a SUFFIX terminator that closes the grammar-constrained content block. Inkling's wire format closes every content block (including the JSON-schema-constrained `<|content_text|>` block) with the structural marker `<|end_message|>`, which is distinct from the model's real end-of-turn token `<|content_model_end_sampling|>`. `<|end_message|>` is not part of the compiled JSON-schema grammar's vocabulary and is not registered as a stop/eos token, so when the scheduler force-feeds it into grammar.accept_tokens() right after the JSON payload is complete, the xgrammar backend rejects it (via its `if self._is_terminated: return False` early-out, or via the matcher rejecting an out-of-grammar token if termination is gated on the real eos), and the scheduler treats that rejection as fatal, killing the request with FINISHED_ERROR (the observed 500). Token 200028 is `<|end_message|>` (or equivalently `<|content_model_end_sampling|>` in a variant ordering) in inkling-small's vocab, i.e. one of the INKLING_SPECIAL_TOKENS block-boundary markers, not adversarial/malformed model output.",
+    "mechanism": "1) vllm/renderers/inkling_encoding.py:184 shows CONTENT_MODEL_END_SAMPLING is appended exactly ONCE, at the very end of an assistant turn (the true stop token the model is trained against), while END_MESSAGE is appended after EVERY block via _append_message at line 263 (a per-block terminator, not a stop signal). So a JSON-schema structured-output turn looks like: <|message_model|><|content_thinking|>...<|end_message|>  <|message_model|><|content_text|>{...json...}<|end_message|>  <|content_model_end_sampling|>. 2) vllm/parser/inkling.py:339-350 InklingParser.is_reasoning_end() scans input_ids in reverse and returns True the instant it hits CONTENT_TEXT or CONTENT_MODEL_END_SAMPLING; it says nothing about END_MESSAGE, so the transition into the grammar-constrained block is detected correctly, but there is no equivalent 'grammar span closed' signal for the corresponding exit. 3) vllm/v1/structured_output/__init__.py:404-406 should_advance(): `if structured_req.reasoning_ended: return True` — once flipped True (at the <|content_text|> token), this short-circuits for the rest of the request's life; it never re-examines whether the model has since produced a token that lies outside the grammar's span. 4) vllm/v1/structured_output/__init__.py:462-486 trim_reasoning_for_advance() only ever strips a PREFIX (`new_token_ids[num_reasoning:]`); once `first_idx > end_idx` (i.e. every step after the boundary), num_reasoning<=0 and the full new_token_ids is returned unchanged — including the <|end_message|> token that follows the completed JSON payload. 5) vllm/v1/core/sched/scheduler.py:1829-1855 unconditionally calls `grammar.accept_tokens(req_id, advance_token_ids)` whenever should_advance() is True, with no `grammar.is_terminated()` guard, and treats any False return as an unrecoverable error (`request.status = RequestStatus.FINISHED_ERROR`) — logged at line 1847 matching the reported 'Unexpected: grammar rejected tokens [...]' message (line-number drift vs. the report's scheduler.py:1841 is consistent with the report being generated from a build a few commits removed from HEAD 41e7746b8, but it is the same statement/message). 6) vllm/v1/structured_output/backend_xgrammar.py:157-171 XgrammarGrammar.accept_tokens(): `if self._is_terminated: return False` fires as soon as the underlying xgr.GrammarMatcher considers the JSON schema fully matched (the closing `}`); <|end_message|> arrives on the very next step and is rejected outright by this guard (or, if termination is instead gated on consuming the tokenizer's real eos_token_id, by the matcher's normal accept_token() rejecting an out-of-alphabet token) — either sub-path produces the same observable failure. Corroborating evidence that this is a genuine gap rather than intended behavior: vllm/v1/structured_output/backend_guidance.py:158-171 explicitly special-cases this exact situation (`if self.ll_matcher.is_stopped(): return True`, i.e. treat post-termination tokens as a harmless no-op success) and vllm/v1/structured_output/backend_outlines.py:119-121 explicitly delays its is_terminated() flag by one step 'so EOS can still be emitted' — both backends already anticipate that one extra non-grammar token may need to pass through accept_tokens() after the schema is satisfied; xgrammar's implementation does not extend the same tolerance, and none of the three backends (nor the scheduler-level should_advance/trim_reasoning_for_advance contract) anticipate Inkling's case of a dedicated, non-EOS block-closing token that is entirely outside both the grammar's alphabet and the registered stop-token set.",
+    "confidence": "high"
+  },
+  "proposed_fix": {
+    "summary": "Give the structured-output path a way to recognize and skip Inkling's block-closing marker(s) after the grammar-constrained span closes, instead of force-feeding every post-boundary token into grammar.accept_tokens() forever; as defense in depth, also stop treating a rejection caused purely by an already-terminated grammar as fatal.",
+    "changes": [
+      {
+        "file": "vllm/v1/structured_output/__init__.py",
+        "what": "Extend trim_reasoning_for_advance() (or add a parallel helper) to also drop a SUFFIX: once grammar.is_terminated() is True for a request, stop calling accept_tokens on further tokens for that request (mirroring how _fill_bitmasks already treats a terminated grammar as 'no longer applicable' by filling the full/open mask). Concretely, in the scheduler's advance block, skip the accept_tokens call (or trim advance_token_ids to the point of termination) once `grammar.is_terminated()` is already true."
+      },
+      {
+        "file": "vllm/v1/core/sched/scheduler.py",
+        "what": "At the accept_tokens call site (~line 1844), check `grammar.is_terminated()` before calling accept_tokens; if already terminated, do not call accept_tokens (or don't treat a False return as fatal) — this makes the scheduler-level contract consistent with the guidance backend's own post-termination no-op semantics and is a backend-agnostic fix that doesn't depend on per-parser marker sets."
+      },
+      {
+        "file": "vllm/parser/inkling.py",
+        "what": "Optional, more precise alternative/complement: expose an Inkling-specific 'content block closed' signal (parallel to is_reasoning_end) that the structured-output manager can use to trim END_MESSAGE/CONTENT_MODEL_END_SAMPLING out of advance_token_ids the same way reasoning-prefix tokens are trimmed today, rather than relying solely on grammar.is_terminated()."
+      }
+    ],
+    "tests_to_add": [
+      "tests/v1/structured_output: unit test that after grammar.accept_tokens() drives a JSON-schema grammar to is_terminated()==True, a subsequent should_advance()==True step with a token outside the grammar's vocab (simulating <|end_message|>) does NOT raise/kill the request (i.e. the scheduler path either skips accept_tokens or tolerates the rejection) — mirrors the existing #44006 reasoning-boundary regression test but for the trailing boundary.",
+      "tests/v1/structured_output or tests/entrypoints: an inkling-specific structured-output integration test (or a scheduler-level unit test using a mock Inkling-shaped reasoner) that runs a full reasoning -> content_text(JSON) -> end_message -> content_model_end_sampling token sequence through Scheduler._update_from_output-equivalent logic and asserts the request finishes successfully rather than FINISHED_ERROR.",
+      "backend_xgrammar unit test: accept_tokens() called again after is_terminated() became True returns True (no-op) rather than False, to align with backend_guidance's existing behavior."
+    ],
+    "verification_plan": [
+      ".venv/bin/python -m pytest tests/v1/structured_output/ -v",
+      ".venv/bin/python -m pytest tests/parser/engine/test_inkling.py -v",
+      ".venv/bin/python -m pytest tests/v1/core/test_scheduler.py -k structured -v",
+      "Manual/CPU-only reproduction if the fast prepared env is available: serve inkling-small (or a mock model exercising the InklingParser) with a chat.completions request using response_format=json_schema and reasoning enabled, confirm no 500 / FINISHED_ERROR and that the JSON content plus subsequent <|end_message|> are handled without hitting the accept_tokens rejection path."
+    ]
+  },
+  "considered_second_opinion": {
+    "peer_bead": null,
+    "stance": "none",
+    "why": "Round 1 root_cause step; step bead named no prior_peer_bead, so no peer output exists yet to weigh."
+  },
+  "evidence": [
+    {
+      "kind": "file",
+      "ref": "vllm/renderers/inkling_encoding.py:184",
+      "note": "CONTENT_MODEL_END_SAMPLING appended exactly once, at the end of the whole assistant turn (the true stop token)."
+    },
+    {
+      "kind": "file",
+      "ref": "vllm/renderers/inkling_encoding.py:263",
+      "note": "END_MESSAGE appended after every single block via _append_message — a per-block terminator, not a stop signal."
+    },
+    {
+      "kind": "file",
+      "ref": "vllm/parser/inkling.py:339-350",
+      "note": "InklingParser.is_reasoning_end(): only CONTENT_TEXT / CONTENT_MODEL_END_SAMPLING flip reasoning_ended True; END_MESSAGE is not treated as any kind of boundary here."
+    },
+    {
+      "kind": "file",
+      "ref": "vllm/v1/structured_output/__init__.py:404-406",
+      "note": "should_advance() latches structured_req.reasoning_ended=True permanently once observed, short-circuiting all future re-evaluation."
+    },
+    {
+      "kind": "file",
+      "ref": "vllm/v1/structured_output/__init__.py:462-486",
+      "note": "trim_reasoning_for_advance() only strips a PREFIX before the grammar boundary; returns new_token_ids unchanged for every step once past the boundary, including block-closing tokens."
+    },
+    {
+      "kind": "line",
+      "ref": "vllm/v1/core/sched/scheduler.py:1829-1855",
+      "note": "Unconditional grammar.accept_tokens() call once should_advance() is True, no grammar.is_terminated() check, treats False return as fatal (FINISHED_ERROR) — logger.error at line 1847 matches the reported message text (line-number drift vs reported scheduler.py:1841 is consistent with a slightly different commit for the report)."
+    },
+    {
+      "kind": "file",
+      "ref": "vllm/v1/structured_output/backend_xgrammar.py:157-171",
+      "note": "XgrammarGrammar.accept_tokens(): `if self._is_terminated: return False` — the exact rejection path token 200028 (<|end_message|>) would hit right after the JSON payload is syntactically complete."
+    },
+    {
+      "kind": "file",
+      "ref": "vllm/v1/structured_output/backend_guidance.py:158-171",
+      "note": "Contrast: GuidanceGrammar.accept_tokens() explicitly treats post-termination tokens as a no-op success (`if self.ll_matcher.is_stopped(): return True`) — shows the intended/expected contract that xgrammar's implementation does not follow."
+    },
+    {
+      "kind": "file",
+      "ref": "vllm/v1/structured_output/backend_outlines.py:119-121",
+      "note": "OutlinesGrammar explicitly delays is_terminated() by one step 'so EOS can still be emitted' — another backend independently working around the same class of problem, confirming this is a known-shaped gap, just not covered for xgrammar/Inkling's two-terminator format."
+    },
+    {
+      "kind": "test",
+      "ref": "tests/parser/engine/test_inkling.py:33-41,238-243",
+      "note": "Confirms END_MESSAGE and END_SAMPLING are distinct tokens with distinct ids in the mock vocab; render_inkling_messages (inkling_encoding.py) shows real turns always emit block-scoped END_MESSAGE after content blocks, with END_SAMPLING only appended once at the very end of the turn."
+    },
+    {
+      "kind": "repro",
+      "ref": "could_not_verify",
+      "note": "Did not spin up a live inkling-small server per the diagnose-phase instructions (static analysis only); did not independently confirm the exact numeric token id 200028 maps to END_MESSAGE vs. CONTENT_MODEL_END_SAMPLING in the real inkling-small tokenizer vocab (only the test-fixture vocab in tests/parser/engine/test_inkling.py, which uses different placeholder ids), though either identification supports the same root cause."
+    }
+  ],
+  "failure_class": null,
+  "failure_reason": null
+}

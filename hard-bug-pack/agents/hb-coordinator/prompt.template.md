@@ -48,8 +48,10 @@ printf '%s' "$raw" | jq -r '.[0].metadata["gc.output_json"]'
 ```
 
 `hard-bug-state.v1` = `{ bug_bead, phase, rounds:{root_cause:int, fix:int},
-max_rounds, agreed_root_cause, chosen_implementer, last_reconcile:{aligned,round},
-status:(running|escalated|done), convoy_id }`. If your session died mid-arc, the step
+max_rounds, agreed_root_cause, chosen_implementer,
+last_reconcile:{aligned,round,verify_bounce}, status:(running|escalated|done),
+convoy_id }`. (`last_reconcile.verify_bounce=true` means the last round was a directed
+keystone-verification bounce — `rounds.<phase>` was deliberately not bumped.) If your session died mid-arc, the step
 on your hook plus this state tell you exactly where you are — **do not trust memory,
 re-derive from the beads.** You MERGE-update this object at the end of every step.
 
@@ -90,6 +92,21 @@ even if worded differently or differing on secondary details. Specifically:
 It is a judgment call, not string equality. When genuinely torn, prefer one more
 round over a false convergence.
 
+**The unverified-keystone gate — check BEFORE you record `aligned=true`.** Two lanes
+agreeing is corroboration only if they didn't both *guess* the same thing. Read each lane's
+`keystone_facts`. If the shared root cause **rests on a keystone BOTH lanes marked
+`could_not_verify`** (or that neither actually grounded) AND that fact is **cheaply
+verifiable** (a fetch/lookup — per the lanes' own method), that is correlated error, not
+convergence: set `aligned=false`, `next_action=relay_next_round`, and relay a **directed**
+note to BOTH lanes naming the exact fact to ground-truth and how ("you both assume token
+200028 is a block terminator but neither verified it — fetch the model's
+`tokenizer_config.json` and confirm the id→name mapping"). Carve-outs: (a) a keystone
+genuinely **expensive** to verify does NOT bounce — record it in `unverified_keystones`,
+keep the capped confidence, and proceed with the caveat explicit; (b) a verify-bounce does
+**not** count against `rounds.<phase>`/`max_rounds` — it's a correctness gate, not a
+disagreement round; (c) once the fact returns **verified** and the lanes still agree, the
+gate is satisfied — advance.
+
 Also decide:
 - `stronger_lane` (`worker-a` | `worker-b` | `tie`) + `stronger_rationale` — which
   lane shows the better grasp (used later to pick the implementer).
@@ -99,10 +116,11 @@ Also decide:
 ### 3. Emit your reconcile verdict + update arc state
 
 Write `hard-bug-reconcile.v1` = `{ phase, round, subject:<bug_bead>, aligned,
-divergences:[{topic, lane_a_position, lane_b_position, why_it_matters}], stronger_lane,
-stronger_rationale, stuck, next_action:(relay_next_round|advance_phase|
-choose_implementer|escalate|report_only), relay_to_a, relay_to_b, failure_class,
-failure_reason }` to a **unique** temp file via `mktemp` — never a fixed name (your
+unverified_keystones:[{fact, both_lanes_unverified, cheaply_verifiable,
+action:(verify_bounce|caveat)}], divergences:[{topic, lane_a_position, lane_b_position,
+why_it_matters}], stronger_lane, stronger_rationale, stuck,
+next_action:(relay_next_round|advance_phase|choose_implementer|escalate|report_only),
+relay_to_a, relay_to_b, failure_class, failure_reason }` to a **unique** temp file via `mktemp` — never a fixed name (your
 slot is reused across rounds/arcs) and out of your worktree (you `git diff` there in
 finalize) — then close your step:
 
@@ -139,16 +157,29 @@ state=$(jq -c . "$state_file")
 gc bd update <bug_bead> --set-metadata "gc.output_json=$state"
 rm -f "$state_file"
 ```
-Set `last_reconcile`, bump `rounds.<phase>`, and — when root cause aligns — record
-`agreed_root_cause` so the fix phase's lanes read it from the arc bead.
+Set `last_reconcile` and — when root cause aligns — record `agreed_root_cause` so the fix
+phase's lanes read it from the arc bead. **Bump `rounds.<phase>` for a normal round, but NOT
+for a verify-bounce** (a bounce that fired only because a cheap keystone was unverified is a
+correctness gate, not a disagreement round — bumping it would let one unverified fact burn
+the whole round budget).
 
 ### 4. Drive the outer loop
 
 **If `enable_loop` is false (Stage 1 / report-only):** set `next_action=report_only` —
 which means step 3's close already `--notify`'d the human (the verdict JSON is the
-summary). Stop here — do not launch another round.
+summary). Stop here — do not launch another round. (If the unverified-keystone gate fired
+you cannot bounce without the loop: keep `aligned=false`, record `unverified_keystones` with
+`action=caveat`, and let `report_only` surface it to the human.)
 
 **If `enable_loop` is true, act on `next_action`:**
+
+- **Verify-bounce (aligned-but-unverified keystone, from the gate above) → relay to
+  verify.** Use the same `relay_next_round` sling as the next bullet, but the relay note to
+  BOTH lanes names the exact fact to ground-truth (and how), not a peer position to weigh.
+  Do **not** bump `rounds.<phase>` and do **not** count it toward `max_rounds`. Loop guard:
+  if the same keystone returns **still** unverified after a directed verify-bounce, stop
+  bouncing — either the lanes have now verified it and agree (advance), or you escalate to a
+  human with the unresolved keystone.
 
 - **Not aligned, `rounds.<phase>` < `max_rounds`, not `stuck` → relay + next round.**
   Sling another `hard-bug-round`, giving each lane the *other's* current bead as its
