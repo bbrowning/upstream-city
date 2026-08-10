@@ -602,6 +602,24 @@ mine → distill → `learn` invariant-corpus pipeline, now archived at `//tools
   prescan can still run harmlessly), so `--local` is mostly head/base resolution +
   the working-tree snapshot — not a new machine. Persona routing already keys off
   changed paths regardless of where the diff came from, so it works unchanged.
+- **A "simplify" quality pass, distinct from bug review.** During iteration, run a
+  pass that hunts **code smells, not bugs** — the `/simplify` complement to the
+  correctness-hunting `review` lane. Scope: reuse/duplication (magic strings &
+  numbers → named constants), **altitude correctness** (is the change at the right
+  layer / place, or bolted onto a symptom?), dead code, naming, premature
+  abstraction (YAGNI), over-complex flow. Explicitly **quality-only — it must not
+  hunt for bugs** (that's `review`); the two are complementary passes, ideally both
+  runnable on local iteration (see the local-commit item above).
+  - Shape: a review-lane **variant**, not a new machine — same spine (worktree,
+    persona-load, atomic emit), a simplify playbook + its own output schema
+    (`simplify.v1`; findings tagged by smell: `duplication` / `altitude` /
+    `magic-constant` / `naming` / `dead-code` / `over-abstraction`). Expose as a
+    verb (`gc dev-pack simplify <ref>`) or a `--lens quality` dial on `review`.
+  - Autonomy dial: report-only vs **apply the fixes in the worktree and hand back a
+    diff** (what `/simplify` does) — a local pass probably wants apply + diff.
+  - The lens leans on cross-cutting engineering hygiene (DRY/SRP/KISS/YAGNI/
+    centralized constants — much of it model-native), so a lean simplify brief may
+    beat a heavy domain-persona load.
 - **Sharpen the personas** in `//tools/vllm/personas/` with the reflexes that keep
   catching real issues — that's the real reviewer spec (validate via
   `//tools/vllm/eval/RUNBOOK.md`).
