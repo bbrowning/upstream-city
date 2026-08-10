@@ -104,8 +104,23 @@ cruft. Counter-pressures, enforced not hoped:
 5. **Cross-lane is eviction pressure, not accretion.** A reflex must earn its keep in ≥1 lane
    AND not add noise to the others (validate against all case families — already in RUNBOOK). If
    it helps bug but noises review, it becomes a **lane lens**, not a base reflex.
-6. **Lint/CI gate on the corpus:** size budget + "every reflex has a case" + no duplicate
-   `{{define}}` names + no orphan lenses.
+6. **Lint/CI gate on the corpus — the ENFORCEMENT, not a convention (Ben: "I can't rely just
+   on Claude-Code memory to protect against bloat").** Points 1–5 are discipline; this is what
+   makes them real. A **git-tracked check that FAILS the build** on violation, run where the
+   personas actually live — **outside the pack**, in the city at `tools/<rig>/personas/` (the
+   corpus is per-consumer-rig, so the gate lives in the city repo and stays independent of where
+   the pack repo eventually goes — see Long-term self-hosting). Split by cost:
+   - **Cheap static (every commit):** per-file **size budget** (`base.md` ≤ ~40 lines, each
+     domain persona ≤ ~80) with **add-must-evict**; **every reflex has a regression case**; no
+     duplicate `{{define}}` names; no orphan lenses; the four-/five-test bar where mechanically
+     checkable (terseness, grounded citation present).
+   - **Expensive dynamic (periodic, not per-commit):** the **prove-your-keep sweep** (§3) and
+     **attribution/decay** (§4) — both need real-run evidence, supplied by the run-retrospection
+     process (see Long-term). That's the loop: retro proposes additions from real runs; this
+     gate blocks bloat and drives eviction of reflexes that never fire / no longer flip a case.
+   Built in **Phase 4** (port plan) — until then, governance is design + human discipline only,
+   which is exactly the reliance Ben flagged as insufficient. **This gate is the safeguard; ship
+   it before the corpus grows under real use.**
 
 ## Port plan (phased; each phase E2E-gated; nothing live until `gc reload` + Ben pushes)
 
@@ -137,7 +152,11 @@ cruft. Counter-pressures, enforced not hoped:
   an N=2 bug run, and an N=2 review run.
 - **Phase 4 — feature lane + governance.** Grow `feature-dev` into the full
   decompose→design→implement→test→cross-review over the spine; add the feature case family + the
-  leanness lint gate. Gate: feature E2E + the corpus lint gate green.
+  leanness lint gate. Gate: feature E2E + the corpus lint gate green. **NB:** the leanness
+  gate's cheap-static subset (size budget + every-reflex-has-a-case + no dup/orphan lenses) is
+  **not coupled to the feature lane and should be pulled forward** the moment the corpus is under
+  real use — bloat protection can't wait on the last phase (Ben's flag). The expensive dynamic
+  checks (prove-your-keep, attribution/decay) land with the retrospection process.
 - **Retire** `pr-review-pack` + `hard-bug-pack` (archive) once the pack passes all lane E2Es.
 
 ## Long-term — run retrospection / meta-review (formalize the improvement flywheel's input)
