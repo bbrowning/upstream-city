@@ -228,25 +228,32 @@ def project_diagnosis(run, case, pack_commit):
     }]
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default=A.DECISIONS)
-    args = ap.parse_args()
-    pack_commit = A.git_head()
+def project(out=A.DECISIONS, quiet=False):
+    """Project the eval review + diagnosis runs into the arena log; return a stats dict.
 
+    Idempotent + cost-preserving. Eval arms are Agent-tool subagents so their tokens
+    are unrecoverable (cost null) — see module docstring / README "Token sourcing"."""
+    def say(*a):
+        if not quiet:
+            print(*a)
+
+    pack_commit = A.git_head()
     rows = []
     for run in REVIEW_RUNS:
         rows += project_review(run, pack_commit)
     for run, case in DIAGNOSIS_RUNS.items():
         rows += project_diagnosis(run, case, pack_commit)
 
-    total, added, updated = A.merge_write(rows, args.out)
+    total, added, updated = A.merge_write(rows, out)
     nrev = sum(1 for r in rows if r["source"] == "eval-review")
     ndia = sum(1 for r in rows if r["source"] == "eval-diagnosis")
-    print(f"eval: {len(rows)} decisions ({nrev} review, {ndia} diagnosis) "
-          f"-> +{added} new / {updated} updated; log now {total} rows")
-    print("  NOTE: eval arm token counts are null — Agent-tool subagent usage is not persisted.")
-    print("  run-2026-08-10b skipped (no blind judge was run).")
+    say(f"eval: {len(rows)} decisions ({nrev} review, {ndia} diagnosis) "
+        f"-> +{added} new / {updated} updated; log now {total} rows")
+    say("  NOTE: eval arm token counts are null — Agent-tool subagent usage is not persisted.")
+    say("  run-2026-08-10b skipped (no blind judge was run).")
+    if quiet:
+        return {"source": "eval", "rows": len(rows), "added": added,
+                "updated": updated, "total": total}
     wins = {}
     for r in rows:
         wm = r["outcome"]["winner_model_canonical"]
@@ -258,6 +265,15 @@ def main():
                  else r["participants"][1]["treatment"], 0) + 1
     if wins:
         print("  review winner by treatment: " + ", ".join(f"{k}={v}" for k, v in wins.items()))
+    return {"source": "eval", "rows": len(rows), "added": added,
+            "updated": updated, "total": total}
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default=A.DECISIONS)
+    args = ap.parse_args()
+    project(out=args.out)
 
 
 if __name__ == "__main__":

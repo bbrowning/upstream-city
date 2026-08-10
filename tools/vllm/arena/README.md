@@ -29,10 +29,17 @@ rows. Don't naively pool them — slice by `blind` and `source`.
 ## Files
 
 - `decisions.jsonl` — one arena decision per line (`schema: arena-decision.v0.2`).
-- `arena_common.py` — shared load/merge/write (idempotent, cost-preserving).
+- `arena_common.py` — shared load/merge/write (idempotent, cost-preserving) +
+  `scan_transcript_usage()` (the session/window token join, deduped by message.id).
 - `backfill_bug_lane.py` — projects `hard-bug-reconcile.v1` beads + per-worker
-  transcript tokens. Backfill AND going-forward: re-run after each hard-bug run.
+  transcript tokens. `project()` is the going-forward entry point; re-run anytime.
 - `eval_to_arena.py` — projects `tools/vllm/eval/run-*/` (review + diagnosis).
+- `arena_refresh.py` — **the single idempotent capture entry point**: runs every
+  projector under a lock, logs to `refresh.log`. Called by the Stop hook / manually /
+  `--loop`. Add new N≥2 sources to its `PROJECTORS` list.
+- `arena_stop_hook.sh` — Claude Code Stop hook; on a *coordinator* worktree session
+  ending it fires `arena_refresh.py` detached. Wired from `~/.claude/settings.json`.
+- `test_arena.py` — hermetic tests for the token math (dedup, session-vs-window).
 
 Every projector merges into the same log by `decision_id`, preserves foreign rows
 and prior token counts, and rewrites — so running any of them is always safe.
@@ -40,9 +47,31 @@ and prior token counts, and rewrites — so running any of them is always safe.
 ## Run
 
 ```
-python3 tools/vllm/arena/backfill_bug_lane.py   # bug lane (exports beads, joins tokens)
-python3 tools/vllm/arena/eval_to_arena.py       # eval review + diagnosis
+python3 tools/vllm/arena/arena_refresh.py       # capture ALL sources (idempotent)
+python3 tools/vllm/arena/backfill_bug_lane.py   # just the bug lane
+python3 tools/vllm/arena/eval_to_arena.py       # just eval review + diagnosis
+python3 tools/vllm/arena/test_arena.py          # token-math regression tests
 ```
+
+## Auto-capture (going-forward) — no manual backfilling
+
+New N≥2 decisions land in the log automatically; the transcript token counts are
+captured promptly, before those worktree transcripts age out (Claude Code
+`cleanupPeriodDays`, ~30d default).
+
+- **Primary (live now, no gascity edit): a Claude Code Stop hook.** `arena_stop_hook.sh`
+  is wired into `~/.claude/settings.json` and fires when any session ends. It stays
+  cheap for the common case and only acts when a *coordinator* worktree session ends
+  (the one that just wrote the reconcile decision, with all worker transcripts fresh),
+  launching `arena_refresh.py` detached. gascity agents run as normal Claude Code
+  sessions under the default config dir, so user hooks apply. This container has no
+  cron and no systemd-user timers, so a persistent event hook beats a polling daemon.
+- **Fallback: periodic.** `python3 arena_refresh.py --loop 6h` (or invoke `arena_refresh.py`
+  from any external scheduler). Robust but needs a host to keep it alive.
+- **Ideal end-state (gascity-owned, Ben-gated): emit at reconcile close.** gascity is the
+  only always-on scheduler here and it holds the session→worktree mapping, so having the
+  coordinator emit the arena row (or trigger the refresh) at reconcile close is the
+  cleanest/promptest path. See "Going-forward gaps".
 
 ## Token sourcing is HARNESS-SPECIFIC (future-enhancement seam)
 
@@ -52,9 +81,21 @@ method / why-absent):
 
 - **gascity agents** run as full Claude Code sessions, each with its own worktree
   transcript under `~/.claude/projects/-pvc-workspace--gc-worktrees-vllm-<agent>/`.
-  Tokens are recovered by an agent × timestamp-window scan, **deduped by
-  `message.id`** (usage lines are logged 2–4× per message — don't sum raw lines).
-  → `cost_source: "claude-code/worktree-transcript"`.
+  The transcript **filename is the Claude Code session UUID**, and each record carries
+  `sessionId`, `effort`, and `model`. Tokens are **deduped by `message.id`** (usage
+  lines are logged 2–4× per message — don't sum raw lines). There are two join tiers
+  (`cost.join` records which was used):
+  - **`session` (stable, preferred)** — when the lane bead carries a stamped
+    `gc.cc_session_id`, read exactly that session's file. Window-independent, immune to
+    sibling sessions accumulating in a reused worktree. → `cost_source:
+    "claude-code/worktree-transcript#session"`.
+  - **`window` (fallback)** — no stamp: scan all sessions in the worktree, keep records
+    within the bead's `[created_at, closed_at]`. Fragile — a loose window (missing
+    `closed_at` → +3h) or session reuse can bleed a sibling run's tokens.
+    → `cost_source: "claude-code/worktree-transcript#window"`.
+  The stamp isn't emitted yet (gascity follow-up), so today's rows are `#window`; the
+  code prefers `#session` the moment gascity stamps it. `effort_resolved` (ground truth)
+  is likewise read from the transcript now and from the stamp later.
 - **eval arms** are Agent-tool subagents, NOT gascity sessions. Their internal
   turns/usage are **not persisted** anywhere — only the parent keeps the spawn
   prompt and the final `tool_result` (no usage). → tokens null,
@@ -72,16 +113,20 @@ schema, decision_id, source, source_refs[], root_bead, subject_ref, subject_mode
 lane, phase, round, at, pack_commit, blind, mode ("pairwise"|"nway")
 judge{kind, agent, provider, model, effort}, criterion, aligned, tie
 participants[]: slot, treatment, provider, model_intent, model_resolved,
-  model_canonical, effort, effort_source, harness, window, cost{tokens{input,
-  output,cache_creation,cache_read,total}, messages}, cost_source, scores, verdict, rank
+  model_canonical, effort, effort_source, effort_resolved, effort_resolved_source,
+  cc_session_id, harness, window, cost{tokens{input,output,cache_creation,cache_read,
+  total}, messages, join, sessions[]}, cost_source, scores, verdict, rank
 outcome{winner_slot, winner_model_canonical, ranking[]}
 reason_tags[], rationale, divergences[], next_action, failure_class, failure_reason, notes
 ```
 
 - `model_intent` = what was asked for (bead `opt_model`; often empty/invalid).
-  `model_resolved` = what actually ran (transcript; **ground truth**). Prefer resolved.
-- `effort` on bug-lane rows is resolved from pack config (city.toml/agent.toml) — an
-  *intent* proxy, accurate when projected promptly. `effort_source` says where it came from.
+  `model_resolved` = what actually ran (stamp or transcript; **ground truth**). Prefer resolved.
+- `effort` = INTENT (pack config: city.toml/agent.toml, accurate when projected promptly;
+  `effort_source` says where). `effort_resolved` = GROUND TRUTH (bead stamp when present,
+  else the transcript's per-message `effort`); `effort_resolved_source` records which.
+- `cc_session_id` = the Claude Code session the tokens came from (the stamp, or — in the
+  window path — the sole session found). `cost.join` = `session` | `window` (see Token sourcing).
 - `reason_tags` is an empty going-forward field (controlled vocab for *why* a side lost).
 
 ## Example queries
@@ -109,17 +154,36 @@ jq -c 'select(.aligned==false)' decisions.jsonl
   agreed and the coordinator still named a `stronger_lane`. Weak signal; filter on `aligned`.
 - **Small, non-independent N.** ~8 production decisions over repeated subjects; 8+1
   eval. Report CIs; don't over-interpret.
-- **Token attribution is approximate** (per-agent × timestamp window; assumes a
-  worker wasn't running two decisions concurrently; no `session_id` on the bead).
+- **Token attribution.** Rows with `cost.join == "window"` are approximate (per-agent ×
+  timestamp window; assumes the worktree wasn't serving two sessions in that window).
+  `cost.join == "session"` is exact (read from the stamped session file). All existing
+  rows are `#window` until gascity stamps `gc.cc_session_id` (see Going-forward gaps).
 - **Diagnosis winner/rank is derived** from a verdict ordinal (strong-catch > catch
   > partial > miss); raw grades are in `participant.scores`.
 - **Review arms are the same model** (opus) — that axis is persona/config, not model.
 
 ## Going-forward gaps
 
-- **Effort at source** — stamp effort into the bead at dispatch (gascity follow-up)
-  so it's captured exactly, not re-derived from config.
-- **Live emission** — the coordinator could emit an arena row directly; review/feature
-  lanes don't compare yet (review quorum is dev-pack Phase 3).
+- **Stamp session_id/effort/model at dispatch (the launch-time-threading follow-up).**
+  This is the highest-value robustness fix — it makes the token join stable instead of a
+  timestamp-window guess. gascity does not currently know the CC session UUID (it tracks
+  its own `wo-*` session beads; the CC UUID appears nowhere in `.gc/`). The code side is
+  DONE and degrades gracefully: `arena_common.scan_transcript_usage()` prefers a stamped
+  key and falls back to the window; `backfill_bug_lane.py` reads these bead keys when set:
+  - `gc.cc_session_id` — the Claude Code session UUID → direct, window-independent join.
+  - `gc.effort` — resolved effort at dispatch → `effort_resolved`.
+  - `gc.model_resolved` — resolved model at dispatch → `model_resolved`.
+
+  **Ben edit (gascity core):** at dispatch, launch the agent with a known
+  `claude --session-id <uuid>` (or read the created transcript's filename back) and add
+  that uuid — plus the resolved effort/model — to the step/lane bead metadata. In the
+  formula this surfaces as e.g. `"gc.cc_session_id" = "{{.SessionId}}"` in each
+  `[[steps]]` `metadata` block of `dev-pack/formulas/hard-bug-round.toml` once gascity
+  exposes the var; then `gc reload`. No projector change needed — it's already read.
+- **Live emission (the cleanest end-state, Ben-gated).** Have the coordinator emit the
+  arena row (or trigger `arena_refresh.py`) at reconcile close — prompt, no polling. Today
+  capture rides the Stop hook (see "Auto-capture"). Review/feature lanes don't compare yet
+  (review quorum is dev-pack Phase 3); when they do, add their projector to
+  `arena_refresh.PROJECTORS` and the Stop-hook `*coordinator*` guard already covers them.
 - **Other-harness token adapters** — codex/opencode usage extraction (see Token sourcing).
 - **eval cost** — genuinely unrecoverable for existing runs (subagent usage not persisted).

@@ -16,7 +16,6 @@ dispatch (a gascity follow-up). See README.md.
 Usage:  python3 backfill_bug_lane.py [--export path] [--out path]
 """
 import argparse
-import glob
 import json
 import os
 import subprocess
@@ -35,11 +34,16 @@ except ModuleNotFoundError:  # py<3.11
 REPO = A.REPO
 RIG_DIR = os.path.join(REPO, "rigs", "vllm")
 DEVPACK_AGENTS = os.path.join(REPO, "dev-pack", "agents")
-TRANSCRIPTS = os.path.expanduser("~/.claude/projects")
-WORKTREE_PREFIX = "-pvc-workspace--gc-worktrees-vllm-"
 
 RECONCILE_SCHEMA = "hard-bug-reconcile.v1"
 DIAGNOSIS_SCHEMA = "hard-bug-diagnosis.v1"
+
+# Bead-metadata keys gascity would stamp at dispatch (launch-time threading). Absent
+# today -> the projector falls back to the agent x timestamp-window transcript scan.
+# See README "Going-forward gaps" + the gascity follow-up proposal.
+STAMP_SESSION = "gc.cc_session_id"   # Claude Code session UUID -> stable token join
+STAMP_EFFORT = "gc.effort"           # resolved effort at dispatch
+STAMP_MODEL = "gc.model_resolved"    # resolved model at dispatch
 
 
 def meta(b, k, default=None):
@@ -92,49 +96,7 @@ def role_agent(slot):
     return slot
 
 
-# ---- token counts from transcripts ------------------------------------------
-def transcript_tokens(agent, start, end):
-    d = os.path.join(TRANSCRIPTS, WORKTREE_PREFIX + agent)
-    if not os.path.isdir(d):
-        return None
-    tot = {"input": 0, "output": 0, "cache_creation": 0, "cache_read": 0}
-    models = defaultdict(int)
-    seen = set()
-    msgs = 0
-    for fp in glob.glob(os.path.join(d, "*.jsonl")):
-        with open(fp) as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                m = rec.get("message") or {}
-                u = m.get("usage")
-                if not u:
-                    continue
-                ts = A.parse_ts(rec.get("timestamp"))
-                if ts is None or ts < start or ts > end:
-                    continue
-                mid = m.get("id")
-                if mid and mid in seen:
-                    continue
-                if mid:
-                    seen.add(mid)
-                msgs += 1
-                tot["input"] += u.get("input_tokens", 0) or 0
-                tot["output"] += u.get("output_tokens", 0) or 0
-                tot["cache_creation"] += u.get("cache_creation_input_tokens", 0) or 0
-                tot["cache_read"] += u.get("cache_read_input_tokens", 0) or 0
-                if m.get("model"):
-                    models[m["model"]] += 1
-    tot["total"] = sum(tot[k] for k in ("input", "output", "cache_creation", "cache_read"))
-    resolved = max(models, key=models.get) if models else None
-    return {"tokens": tot, "messages": msgs, "model_resolved": resolved}
-
-
+# ---- participants (identity + resolved model/effort + transcript tokens) -----
 def build_participants(lane_beads):
     by_lane = defaultdict(list)
     for b in lane_beads:
@@ -154,14 +116,46 @@ def build_participants(lane_beads):
         end = max(ends) if ends else (start + timedelta(hours=3) if start else None)
 
         agent = provider = model_intent = None
+        stamp_sid = stamp_effort = stamp_model = None
         for b in beads:
             agent = agent or (meta(b, "gc.execution_routed_to") or "").split("/")[-1] or None
             provider = provider or meta(b, "gc.provider")
             model_intent = model_intent or meta(b, "opt_model") or None
+            stamp_sid = stamp_sid or meta(b, STAMP_SESSION) or None
+            stamp_effort = stamp_effort or meta(b, STAMP_EFFORT) or None
+            stamp_model = stamp_model or meta(b, STAMP_MODEL) or None
 
-        cost = transcript_tokens(agent, start, end) if (agent and start and end) else None
-        model_resolved = cost.get("model_resolved") if cost else None
+        # STABLE join first: if gascity stamped the CC session id, read that session's
+        # transcript directly (window-independent). Fall back to the timestamp window
+        # if nothing was stamped, or the stamped file is gone (scan returns None).
+        scan = None
+        if agent:
+            if stamp_sid:
+                scan = A.scan_transcript_usage(agent, start, end, session_id=stamp_sid)
+            if scan is None and start and end:
+                scan = A.scan_transcript_usage(agent, start, end)
+
+        cost = None
+        cost_source = None
+        if scan:
+            cost = {"tokens": scan["tokens"], "messages": scan["messages"],
+                    "join": scan["join"], "sessions": scan["sessions"]}
+            # HOW tokens were obtained (harness-specific — see README "Token sourcing").
+            # #session = stamped CC session id (stable); #window = agent x timestamp scan.
+            cost_source = "claude-code/worktree-transcript#" + scan["join"]
+
+        # model: stamped resolved > transcript-modal > opt_model intent
+        model_resolved = stamp_model or (scan.get("model_resolved") if scan else None)
+        # effort: `effort` is the INTENT proxy (pack config); `effort_resolved` is ground
+        # truth (bead stamp when present, else the transcript's per-message effort).
         effort, effort_src = resolve_effort(role_agent(slot))
+        if stamp_effort:
+            effort_resolved, effort_resolved_src = stamp_effort, "bead-stamp"
+        elif scan and scan.get("effort_resolved"):
+            effort_resolved, effort_resolved_src = scan["effort_resolved"], "transcript"
+        else:
+            effort_resolved, effort_resolved_src = None, "unavailable"
+
         parts[slot] = {
             "slot": slot,
             "treatment": None,
@@ -169,17 +163,18 @@ def build_participants(lane_beads):
             "agent": agent,
             "provider": provider,
             "model_intent": model_intent,       # opt_model (INTENT; often empty/invalid)
-            "model_resolved": model_resolved,   # from transcript (GROUND TRUTH)
+            "model_resolved": model_resolved,   # stamp or transcript (GROUND TRUTH)
             "model_canonical": A.canonical_model(model_resolved or model_intent),
-            "effort": effort,
+            "effort": effort,                          # INTENT (pack config proxy)
             "effort_source": effort_src,
+            "effort_resolved": effort_resolved,        # GROUND TRUTH (stamp/transcript)
+            "effort_resolved_source": effort_resolved_src,
+            "cc_session_id": stamp_sid or (scan["sessions"][0] if scan and len(scan.get("sessions") or []) == 1 else None),
             "window": {"start": start.isoformat() if start else None,
                        "end": end.isoformat() if end else None},
             "harness": "claude-code",   # model runtime; token sourcing below is harness-specific
             "cost": cost,
-            # HOW tokens were obtained (harness-specific — see README "Token sourcing").
-            # gascity agents run as full Claude Code sessions with their own transcripts.
-            "cost_source": "claude-code/worktree-transcript" if cost else None,
+            "cost_source": cost_source,
             "scores": None,
             "verdict": None,
             "rank": None,
@@ -187,16 +182,19 @@ def build_participants(lane_beads):
     return parts
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--export", help="pre-exported beads JSONL (else runs gc bd export)")
-    ap.add_argument("--out", default=A.DECISIONS)
-    args = ap.parse_args()
+def project(export=None, out=A.DECISIONS, quiet=False):
+    """Project bug-lane reconcile decisions into the arena log; return a stats dict.
 
-    export_path = args.export
+    Idempotent + cost-preserving (via A.merge_write). Safe to re-run — this is the
+    going-forward capture entry point (called by arena_refresh.py and by main())."""
+    def say(*a):
+        if not quiet:
+            print(*a)
+
+    export_path = export
     if not export_path:
         export_path = "/tmp/arena_vllm_beads.jsonl"
-        print(f"exporting vllm beads -> {export_path}")
+        say(f"exporting vllm beads -> {export_path}")
         subprocess.run(["gc", "bd", "export", "--all", "-o", export_path],
                        cwd=RIG_DIR, check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -220,20 +218,20 @@ def main():
             skipped += 1
             continue
         try:
-            out = json.loads(raw)
+            recon = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
             skipped += 1
             continue
-        recon_by_key[(meta(b, "gc.root_bead_id"), out.get("phase"), str(out.get("round")))].append((b, out))
+        recon_by_key[(meta(b, "gc.root_bead_id"), recon.get("phase"), str(recon.get("round")))].append((b, recon))
 
     pack_commit = A.git_head()
     rows = []
     for key, members in sorted(recon_by_key.items()):
         root, phase, rnd = key
         members = sorted(members, key=lambda m: m[0]["id"])
-        rep, out = members[0]
+        rep, recon = members[0]
         parts = build_participants(lanes_by_key.get(key, []))
-        stronger = out.get("stronger_lane")
+        stronger = recon.get("stronger_lane")
         tie = stronger == "tie"
         winner_slot = None if tie else stronger
         winner = parts.get(winner_slot) if winner_slot else None
@@ -246,11 +244,11 @@ def main():
             "source": "bug-lane-reconcile",
             "source_refs": [m[0]["id"] for m in members],
             "root_bead": root,
-            "subject_ref": out.get("subject"),
+            "subject_ref": recon.get("subject"),
             "subject_model": None,
             "lane": "bug",
             "phase": phase,
-            "round": out.get("round"),
+            "round": recon.get("round"),
             "at": rep.get("created_at"),
             "pack_commit": pack_commit,             # git HEAD at projection (≈ run-time if projected promptly)
             "blind": False,                         # coordinator sees lane labels + is opus-family
@@ -258,26 +256,37 @@ def main():
             "judge": {"kind": "coordinator", "agent": judge_agent, "provider": "claude",
                       "model": None, "effort": judge_effort},
             "criterion": "stronger diagnosis (mechanism rigor / test coverage / verification)",
-            "aligned": out.get("aligned"),
+            "aligned": recon.get("aligned"),
             "tie": tie,
             "participants": [parts[s] for s in sorted(parts)],
             "outcome": {"winner_slot": winner_slot,
                         "winner_model_canonical": winner["model_canonical"] if winner else None,
                         "ranking": None},
             "reason_tags": [],
-            "rationale": out.get("stronger_rationale"),
-            "divergences": out.get("divergences"),
-            "next_action": out.get("next_action"),
-            "failure_class": out.get("failure_class"),
-            "failure_reason": out.get("failure_reason"),
+            "rationale": recon.get("stronger_rationale"),
+            "divergences": recon.get("divergences"),
+            "next_action": recon.get("next_action"),
+            "failure_class": recon.get("failure_class"),
+            "failure_reason": recon.get("failure_reason"),
             "notes": None,
             "backfilled": True,
         })
 
-    total, added, updated = A.merge_write(rows, args.out)
-    print(f"\nbug-lane: {len(rows)} decisions projected ({skipped} unparseable skipped) "
-          f"-> +{added} new / {updated} updated; log now {total} rows")
-    _summary(rows)
+    total, added, updated = A.merge_write(rows, out)
+    say(f"\nbug-lane: {len(rows)} decisions projected ({skipped} unparseable skipped) "
+        f"-> +{added} new / {updated} updated; log now {total} rows")
+    if not quiet:
+        _summary(rows)
+    return {"source": "bug-lane", "rows": len(rows), "added": added,
+            "updated": updated, "total": total, "skipped": skipped}
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--export", help="pre-exported beads JSONL (else runs gc bd export)")
+    ap.add_argument("--out", default=A.DECISIONS)
+    args = ap.parse_args()
+    project(export=args.export, out=args.out)
 
 
 def _summary(rows):
@@ -285,6 +294,7 @@ def _summary(rows):
     aligned = ties = no_tok = 0
     subjects = defaultdict(int)
     efforts = defaultdict(int)
+    joins = defaultdict(int)
     for r in rows:
         subjects[r["subject_ref"]] += 1
         aligned += bool(r["aligned"])
@@ -293,15 +303,19 @@ def _summary(rows):
         if wm:
             wins[wm] += 1
         for p in r["participants"]:
-            if not (p.get("cost") and p["cost"].get("messages")):
+            c = p.get("cost")
+            if not (c and c.get("messages")):
                 no_tok += 1
-            efforts[p.get("effort")] += 1
+            else:
+                joins[c.get("join") or "?"] += 1
+            efforts[p.get("effort_resolved") or p.get("effort")] += 1
     n = len(rows)
     parts = sum(len(r["participants"]) for r in rows)
     print("  winner by model: " + ", ".join(f"{m}={c}" for m, c in sorted(wins.items(), key=lambda x: -x[1])))
     print(f"  aligned=true {aligned}/{n}  ties {ties}  distinct subjects {len(subjects)}")
-    print(f"  effort resolved: " + ", ".join(f"{e}={c}" for e, c in efforts.items()))
-    print(f"  participants with tokens: {parts - no_tok}/{parts}")
+    print(f"  effort (resolved): " + ", ".join(f"{e}={c}" for e, c in efforts.items()))
+    print(f"  participants with tokens: {parts - no_tok}/{parts}  "
+          f"(join: " + ", ".join(f"{k}={v}" for k, v in joins.items()) + ")")
 
 
 if __name__ == "__main__":
