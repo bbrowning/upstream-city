@@ -585,6 +585,23 @@ mine → distill → `learn` invariant-corpus pipeline, now archived at `//tools
   Keep the current bare-number + `--rig` path working; `--rig` stays the explicit
   override. Same parsing belongs in `commands/review/run.sh` and
   `commands/materialize/run.sh` (both take a rig-less PR today).
+- **Review local commits / working-tree changes, not just PRs.** Run a full review
+  round while iterating locally — a pre-PR (even pre-push) pass on a feature or bug
+  fix. The review lane's real entry artifact is a `base...head` diff; a PR is just
+  one way to name `head`. Extend `review` (e.g. a `--local` mode) to accept:
+  - a **local branch / commit sha** — already largely reachable: the reviewer's
+    isolated worktree shares the rig's git object store, so a local ref in the rig
+    repo is visible **without a fetch** (skip the PR `pull/N/head` fetch path).
+    Default the base to the branch point (`git merge-base origin/main <head>`), not
+    a flat `origin/main`.
+  - **uncommitted working-tree changes** (the real iterating case) — the reviewer's
+    own worktree can't see another tree's dirty state, so snapshot it into a
+    throwaway ref the reviewer can diff (`git stash create` / `git commit-tree`), or
+    hand it a captured patch. This is the piece that needs real work.
+  Posture is largely moot for your own local code (it's trusted; the deterministic
+  prescan can still run harmlessly), so `--local` is mostly head/base resolution +
+  the working-tree snapshot — not a new machine. Persona routing already keys off
+  changed paths regardless of where the diff came from, so it works unchanged.
 - **Sharpen the personas** in `//tools/vllm/personas/` with the reflexes that keep
   catching real issues — that's the real reviewer spec (validate via
   `//tools/vllm/eval/RUNBOOK.md`).
