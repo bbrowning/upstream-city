@@ -1,0 +1,82 @@
+{
+  "lane_id": "caseQwen-A",
+  "provider": "anthropic",
+  "model": "claude-opus-4-8[1m]",
+  "phase": "root_cause",
+  "round": 1,
+  "root_cause": {
+    "statement": "With `--tool-call-parser qwen3_xml` and no `--reasoning-parser`, only the TOOL half of the unified Qwen3 reasoning+tool engine is attached. The engine is then driven entirely in ParserState.CONTENT, where the model's single closing `</think>` (token id 248069) matches the `(ParserState.CONTENT, \"THINK_END\")` transition that was added to absorb a *duplicate* close tag. That transition emits no events and consumes the literal, so the only reasoning-boundary marker is silently dropped; the reasoning text is emitted as `content` and, because there is no reasoning parser, no `reasoning_content` is ever produced.",
+    "mechanism": "Registry: `qwen3_xml` -> `Qwen3EngineToolParser` = `Qwen3ParserToolAdapter` (vllm/tool_parsers/__init__.py:169-172; vllm/tool_parsers/qwen3_engine_tool_parser.py; vllm/parser/engine/registered_adapters.py:48-51). ParserManager.get_parser builds a `DelegatingParser` with reasoning_parser_cls=None, tool_parser_cls=Qwen3EngineToolParser (vllm/parser/parser_manager.py:101-140; get_reasoning_parser returns None when no name given, :66). STREAMING (matches the repro's 0/5): DelegatingParser.parse_delta marks state.reasoning_ended=True on the first delta because _reasoning_parser is None (vllm/parser/abstract_parser.py:813-818); _in_reasoning_phase() returns False (:738-741) so the reasoning phase is skipped; _in_tool_call_phase() is True (:743-746) so it delegates to the tool adapter, whose extract_tool_calls_streaming calls engine.initialize_streaming(initial_state=ParserState.CONTENT) (vllm/parser/engine/adapters.py:177-187). The engine therefore starts and stays in CONTENT for the whole reply (vllm/parser/engine/streaming_parser_engine.py:170-179). The model emits `</think>` as the single added token 248069; the TokenIDScanner pre-lexes it to a THINK_END terminal handled by _on_terminal (streaming_parser_engine.py:226-236, 312-356). In CONTENT state, transitions.get((CONTENT, 'THINK_END')) returns Transition(CONTENT, ()) (vllm/parser/qwen3.py:132-135); _apply_transition emits no event and does not re-emit the value, so `</think>` is dropped (streaming_parser_engine.py:382-436). Reasoning text before it and the answer after it both classify as TEXT_CHUNK -> content (config.content_events, parser_engine_config.py:65-72), and REASONING_END is never emitted because state is never REASONING -> reasoning_content stays None. Result: content = reasoning+answer with the boundary removed; finish_reason=stop (not truncation). NON-STREAMING asymmetry: DelegatingParser.parse calls extract_reasoning first, which returns (None, raw_model_output) unchanged when _reasoning_parser is None (abstract_parser.py:385-392, 793); it then runs _extract_tool_calls, which for a no-tool reply hits the auto branch and returns `(None, content)` where `content` is the ORIGINAL raw output, discarding the engine's `</think>`-stripped parse (abstract_parser.py:478-509, esp. the `return None, content` at :507). So for a plain Q&A reply the non-streaming path actually PRESERVES `</think>` in content (still with reasoning_content=None); it only drops `</think>` non-streaming if a tool call also fires (then content = tool_call_info.content). Hence the reporter's 0/5 is the streaming path. The report's pointer that the engine 'starts in REASONING' is not what happens for the tool-parser-only config: the tool adapter forces CONTENT, so the culprit is the (CONTENT, THINK_END) absorb-duplicate transition, not (REASONING, THINK_END). Qwen3Parser.__init__ deriving thinking from chat_template_kwargs.get('enable_thinking', True) (vllm/parser/qwen3.py:225-226) is moot here because the tool adapter overrides initial_state to CONTENT regardless.",
+    "confidence": "high"
+  },
+  "keystone_facts": [
+    {
+      "fact": "token 248069 = \"</think>\" and token 248068 = \"<think>\": each is a single added token in the model vocab with special=false, so `</think>` is emitted as one token and vocab.get('</think>')=248069 resolves it as a THINK_END token-id terminal in the engine",
+      "status": "verified",
+      "source": "https://huggingface.co/Qwen/Qwen3.6-27B/resolve/main/tokenizer_config.json (added_tokens_decoder ids 248068/248069, special:false)"
+    },
+    {
+      "fact": "Core Q2 premise is TRUE: the chat template appends `<think>\\n` to the assistant generation prompt on every turn whenever add_generation_prompt is set and enable_thinking is not explicitly false (the repro sets no enable_thinking, so it defaults to thinking-enabled). Only `enable_thinking is defined and false` pre-fills the closed `<think>\\n\\n</think>\\n\\n` block. So every reply opens an unclosed think block and must emit `</think>` to close it — which is exactly the marker that gets dropped.",
+      "status": "verified",
+      "source": "https://huggingface.co/Qwen/Qwen3.6-27B/resolve/main/chat_template.jinja (generation-prompt branch: `{%- if enable_thinking is defined and enable_thinking is false %}{{ '<think>\\n\\n</think>\\n\\n' }}{%- else %}{{ '<think>\\n' }}`)"
+    },
+    {
+      "fact": "config model_type = \"qwen3_5\", vocab_size = 248320 (consistent with the report's env and with the 248068/248069 think-token ids being in-vocab)",
+      "status": "verified",
+      "source": "https://huggingface.co/Qwen/Qwen3.6-27B/resolve/main/config.json"
+    }
+  ],
+  "proposed_fix": {
+    "summary": "Restore the invariant that a combined reasoning+tool engine parser is never attached tool-half-only. Preferred: when a tool parser whose engine owns a reasoning phase is selected and no reasoning parser is configured, auto-pair the engine's matching reasoning adapter so `</think>` becomes a real REASONING_END (populating reasoning_content) instead of being absorbed as a duplicate in CONTENT. Add a startup guardrail and a defensive fallback so the boundary is never silently destroyed on misconfiguration.",
+    "changes": [
+      {
+        "file": "vllm/parser/parser_manager.py",
+        "what": "In get_parser, when tool_parser_cls is an engine adapter whose paired engine has a reasoning phase (e.g. Qwen3-family: THINK terminals present / engine._has_reasoning) and reasoning_parser_cls is None, default reasoning_parser_cls to that engine's paired reasoning adapter (already exposed via make_adapters as parser_engine_cls.reasoning_parser_cls). This makes `--tool-call-parser qwen3_xml` alone behave like the tested both-adapters config."
+      },
+      {
+        "file": "vllm/entrypoints/openai/chat_completion/serving.py",
+        "what": "At startup (near ParserManager.get_parser, ~line 151), if a reasoning-owning tool parser is selected without a reasoning parser and auto-pairing is not applied, emit a clear warning (or error) instructing the user to also pass the matching `--reasoning-parser`; addresses 'nothing consults whether a reasoning parser is actually attached.'"
+      },
+      {
+        "file": "vllm/parser/qwen3.py",
+        "what": "Defensive fallback for tool-only use: make the (ParserState.CONTENT, \"THINK_END\") transition emit the literal `</think>` as a TEXT_CHUNK (i.e. Transition(CONTENT, (EventType.TEXT_CHUNK,))) rather than dropping it, OR gate the silent absorb so it only fires after a REASONING_END has already occurred in the same parse. This guarantees the client-visible boundary survives even if reasoning_content cannot be produced."
+      },
+      {
+        "file": "vllm/parser/abstract_parser.py",
+        "what": "Minor: in DelegatingParser._extract_tool_calls, the no-tool auto branch returns the ORIGINAL content, so streaming and non-streaming diverge (non-streaming keeps `</think>`, streaming drops it). Once auto-pairing lands this is moot, but the branch should be made consistent with the engine-parsed content path to avoid stream/non-stream skew."
+      }
+    ],
+    "tests_to_add": [
+      "Serving/parser wiring test: DelegatingParser with tool_parser=Qwen3ParserToolAdapter and reasoning_parser=None over 'reasoning</think>answer' — assert `</think>` is not silently dropped and reasoning is separated (or at minimum the boundary is preserved) in BOTH extract streaming (parse_delta) and non-streaming (parse).",
+      "get_parser test: `--tool-call-parser qwen3_xml` with no reasoning parser auto-attaches the Qwen3 reasoning adapter (or raises/warns), verified by inspecting the returned parser's reasoning_parser.",
+      "Streaming regression mirroring the repro: feed [reasoning tokens..., (248069,), answer tokens...] and assert one delta carries reasoning_content and content excludes the merged reasoning, `</think>` never appears merged into content."
+    ],
+    "verification_plan": [
+      "Unit: run the new tests plus existing tests/parser/engine/test_qwen3_reasoning.py (esp. test_duplicate_think_end_absorbed, test_streaming_content_after_think_end) and test_qwen3.py to confirm the genuine duplicate-`</think>` absorb still works and paired reasoning+tool behavior is unchanged.",
+      "Behavioral parity check reproducing the report without a GPU: drive the composed parser over the byte-identical rendered output for chat (parser path) vs completions (raw) and assert `</think>` presence / reasoning_content are consistent and correct in streaming and non-streaming.",
+      "Confirm no `</think>` leaks as literal into tool-args or reasoning for the paired config (guard against re-introducing the leak the existing regression tests cover)."
+    ]
+  },
+  "evidence": [
+    { "kind": "file", "ref": "vllm/tool_parsers/__init__.py:169-172", "note": "qwen3_xml -> Qwen3EngineToolParser (same class as qwen3_coder); it is a TOOL parser." },
+    { "kind": "file", "ref": "vllm/tool_parsers/qwen3_engine_tool_parser.py:7; vllm/parser/engine/registered_adapters.py:48-51", "note": "Qwen3EngineToolParser = Qwen3ParserToolAdapter, a ParserEngineToolAdapter over the unified Qwen3Parser engine." },
+    { "kind": "file", "ref": "vllm/parser/parser_manager.py:66, 101-140", "note": "No --reasoning-parser => get_reasoning_parser returns None => DelegatingParser has reasoning_parser_cls=None, tool_parser_cls=qwen3 tool adapter." },
+    { "kind": "line", "ref": "vllm/parser/qwen3.py:130-135", "note": "The (ParserState.CONTENT, 'THINK_END') -> Transition(CONTENT, ()) transition: comment says 'Absorb duplicate </think> ... drop it silently'. This is what eats the only `</think>` in tool-only mode." },
+    { "kind": "line", "ref": "vllm/parser/engine/adapters.py:177-187", "note": "ParserEngineToolAdapter.extract_tool_calls_streaming forces engine.initialize_streaming(initial_state=ParserState.CONTENT) — engine never enters REASONING in tool-only streaming." },
+    { "kind": "line", "ref": "vllm/parser/engine/parser_engine.py:556-579", "note": "extract_tool_calls_from_content also forces initial_state=ParserState.CONTENT (non-streaming tool path)." },
+    { "kind": "line", "ref": "vllm/parser/engine/streaming_parser_engine.py:312-356, 382-436", "note": "_on_terminal/_apply_transition: an empty-events transition consumes the terminal's literal and emits nothing => `</think>` dropped; TEXT is classified by content_events for the current state (CONTENT=>TEXT_CHUNK)." },
+    { "kind": "line", "ref": "vllm/parser/abstract_parser.py:813-818, 738-746", "note": "parse_delta forces state.reasoning_ended=True at t0 when _reasoning_parser is None; reasoning phase skipped, tool phase entered immediately." },
+    { "kind": "line", "ref": "vllm/parser/abstract_parser.py:478-509", "note": "Non-streaming no-tool auto branch returns the ORIGINAL raw content (return None, content), so non-streaming plain replies actually retain `</think>` — the drop is the streaming path (and non-streaming only when a tool call fires)." },
+    { "kind": "test", "ref": "tests/parser/engine/test_qwen3_reasoning.py:153-159, 386-401", "note": "test_duplicate_think_end_absorbed / test_streaming_duplicate_think_end_absorbed confirm the (CONTENT,THINK_END) transition is intended to absorb a *second* `</think>`, not the first/only one." },
+    { "kind": "test", "ref": "tests/parser/engine/test_qwen3_reasoning.py:40-42, 195-213", "note": "The tested, correct config wires BOTH Qwen3ParserReasoningAdapter and Qwen3ParserToolAdapter; the reasoning half runs first in REASONING and emits reasoning_content. The bug config omits the reasoning half." },
+    { "kind": "trace", "ref": "chat serving uses parser.parse() (serving.py:904) and parser.parse_delta() (serving.py:618)", "note": "Confirms the DelegatingParser is invoked via parse/parse_delta, i.e. the paths traced above." }
+  ],
+  "follow_ups": [
+    "Decide fix posture: auto-pair the reasoning adapter (silent 'just works') vs fail-loud at startup. Auto-pair matches the tested config and existing regression suite; a warning is the minimum.",
+    "Same tool-half-only hazard applies to every combined engine parser exposed as a tool parser with a reasoning phase (deepseek_v32/v4, glm47_moe, minimax_m2, nemotron_v3, seed_oss, kimi, inkling, etc. via registered_adapters). The fix should be generic in get_parser, not qwen3-specific.",
+    "Reconcile the streaming vs non-streaming divergence in DelegatingParser._extract_tool_calls (no-tool branch returns raw content) so behavior is identical across transports.",
+    "Confirm on a live server (out of scope here) that `--tool-call-parser qwen3_xml --reasoning-parser qwen3` already yields correct reasoning_content + preserved boundary, validating the auto-pair target state."
+  ],
+  "failure_class": null,
+  "failure_reason": null
+}

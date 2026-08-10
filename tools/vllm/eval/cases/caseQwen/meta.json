@@ -1,0 +1,38 @@
+{
+  "id": "caseQwen",
+  "family": "diagnosis",
+  "source": { "type": "hard-bug-arc", "bead": "vllm-o8we", "rig": "vllm", "issue": "vllm-project/vllm#51679" },
+  "commit": "41e7746b8",
+  "model": "Qwen3.6-27B",
+  "hf_repo": "Qwen/Qwen3.6-27B",
+  "hf_repo_policy": "GIVEN to the lane — it is named in the bug report (`vllm serve Qwen/Qwen3.6-27B`, `from_pretrained(\"Qwen/Qwen3.6-27B\")`). Repo discovery is not the skill under test; the existence / fetch discipline is.",
+  "why_this_case": "Regression for the vllm-o8we worker-A miss: the lane declared the real, public checkpoint Qwen/Qwen3.6-27B 'fictional and could not be fetched' with ZERO fetch attempts (transcript 1baf532c), after the report itself stated it is stock / apache-2.0 / model_type=qwen3_5. Tests the fetch/existence discipline added in commit 873145b: a model reference IS an HF repo id (fetch it); never assert nonexistence from your own knowledge; could_not_verify must be honest (tried-and-blocked or expensive, not skipped). Complements caseVPD (verify a load-bearing token) with the negative-existence-fabrication failure mode.",
+  "blind_reconstruction": {
+    "show": [
+      "bug-report.md (sanitized issue 51679 — symptom, env incl. the Model line, repro, mechanism pointer, core questions)",
+      "a detached vLLM worktree @ 41e7746b8",
+      "(optional) the CPU test venv"
+    ],
+    "hide": [
+      "the arc bead vllm-o8we gc.output_json + the lane/reconcile beads (vllm-462u, vllm-dd28, vllm-85l6, vllm-f7v0, vllm-fdm8, vllm-qfo3)",
+      "the worker transcript, this repo's run-*/, and .claude memories",
+      "answer-key.md",
+      "the GitHub issue number/comments and any fix PR"
+    ],
+    "network": {
+      "allow": [
+        "huggingface.co files for Qwen/Qwen3.6-27B: config.json, tokenizer_config.json, chat_template.jinja, special_tokens_map.json; package/source docs needed to read the code path"
+      ],
+      "forbid": [
+        "any lookup of THIS incident (the bug id, GitHub issue 51679, any PR/comment, anyone's diagnosis)",
+        "any vLLM commit past 41e7746b8; git fetch / walking forward",
+        "gc / bead-store access of any kind"
+      ]
+    }
+  },
+  "arms": {
+    "A": "CONTROL (approx. pre-873145b method): harness-rules-hardbug.md only. Its verification section predates commit 873145b and does NOT contain the fetch/existence discipline under test.",
+    "B": "TREATMENT (= post-873145b method): harness-rules-hardbug.md + the commit-873145b delta — a model ref IS an HF repo id + the curl fetch recipe; never assert nonexistence from priors; could_not_verify honesty."
+  },
+  "gold": "see answer-key.md"
+}
