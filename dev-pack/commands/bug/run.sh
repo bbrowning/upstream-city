@@ -17,6 +17,7 @@ CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
 
 BEAD="" ; RIG="" ; LOOP="false" ; MAXR="3" ; BASEREF="origin/main"
 LANE_A_MODEL="" ; LANE_B_MODEL="" ; LANE_A_TARGET="" ; LANE_B_TARGET=""
+BRANCH_PREFIX=""
 DRYRUN="no"
 
 usage() {
@@ -34,6 +35,7 @@ hard-bug-round to <rig>/bug-coordinator with the <rig>/worker-* lane targets fil
   --lane-b-model M    pin lane B's model this run (default: unset -> city.toml option_defaults)
   --lane-a-target T   override lane A target (default <rig>/bug-worker-a)
   --lane-b-target T   override lane B target (default <rig>/bug-worker-b)
+  --branch-prefix P   prefix the eventual fix branch (default: unset -> no prefix)
   --dry-run           print the gc sling command without running it (skips live checks)
   -h, --help
 EOF
@@ -57,6 +59,8 @@ while [ $# -gt 0 ]; do
         --lane-a-target=*) LANE_A_TARGET="${1#*=}"; shift ;;
         --lane-b-target)   LANE_B_TARGET="${2:?}"; shift 2 ;;
         --lane-b-target=*) LANE_B_TARGET="${1#*=}"; shift ;;
+        --branch-prefix)   BRANCH_PREFIX="${2:?}"; shift 2 ;;
+        --branch-prefix=*) BRANCH_PREFIX="${1#*=}"; shift ;;
         --dry-run)         DRYRUN="yes"; shift ;;
         -h|--help)         usage; exit 0 ;;
         --)                shift; break ;;
@@ -97,6 +101,9 @@ set -- "$COORD" hard-bug-round --formula \
 # false test doesn't trip `set -e`.
 if [ -n "$LANE_A_MODEL" ]; then set -- "$@" --var "lane_a_model=$LANE_A_MODEL"; fi
 if [ -n "$LANE_B_MODEL" ]; then set -- "$@" --var "lane_b_model=$LANE_B_MODEL"; fi
+# branch_prefix defaults to "" in the formula too, but only pass it explicitly
+# when set so a --dry-run without it matches the formula's own default output.
+if [ -n "$BRANCH_PREFIX" ]; then set -- "$@" --var "branch_prefix=$BRANCH_PREFIX"; fi
 set -- "$@" --title "hard-bug root-cause round 1: $BEAD" --json
 
 if [ "$DRYRUN" = "yes" ]; then

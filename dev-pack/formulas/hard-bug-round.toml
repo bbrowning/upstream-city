@@ -47,6 +47,10 @@ default = "3"
 description = "false = report-only (coordinator stops after the reconcile verdict, Stage 1); true = coordinator drives the outer loop (Stage 2+)."
 default = "false"
 
+[vars.branch_prefix]
+description = "Prefix for the eventual fix branch, forwarded unchanged to hard-bug-finalize when the coordinator advances to implement. Empty (the default) means the branch is just the bug-bead id."
+default = ""
+
 [vars.lane_a_id]
 description = "Durable identity for lane A (survives slot churn)."
 default = "bug-worker-a"
@@ -189,7 +193,7 @@ when root cause aligns — record agreed_root_cause).
 
 Then act on the outer loop per your protocol, using THESE run vars:
   bug_bead={{bug_bead}} phase={{phase}} round={{round}} max_rounds={{max_rounds}}
-  enable_loop={{enable_loop}} base_ref={{base_ref}}
+  enable_loop={{enable_loop}} base_ref={{base_ref}} branch_prefix={{branch_prefix}}
   lane_a: id={{lane_a_id}} target={{lane_a_target}} provider={{lane_a_provider}} model={{lane_a_model}} (empty = agent's option_defaults)
   lane_b: id={{lane_b_id}} target={{lane_b_target}} provider={{lane_b_provider}} model={{lane_b_model}} (empty = agent's option_defaults)
   coordinator_target={{coordinator_target}}

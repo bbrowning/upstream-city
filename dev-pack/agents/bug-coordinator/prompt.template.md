@@ -194,6 +194,7 @@ you cannot bounce without the loop: keep `aligned=false`, record `unverified_key
     --var lane_a_target=<lane_a_target> \
     --var lane_b_target=<lane_b_target> \
     --var coordinator_target={{.Rig}}/bug-coordinator \
+    --var branch_prefix=<branch_prefix> \
     --var prior_peer_bead_a=<lane-b-bead> --var relay_note_a="<what B argues; consider or refute>" \
     --var prior_peer_bead_b=<lane-a-bead> --var relay_note_b="<what A argues; consider or refute>" \
     --title "hard-bug <phase> round <round+1>: <bug_bead>"
@@ -203,6 +204,9 @@ you cannot bounce without the loop: keep `aligned=false`, record `unverified_key
   `--var lane_b_model=<lane_b_model>` if your step description carried a *non-empty*
   model for that lane (a per-run pin); an empty model means "use the agent default" —
   omit the flag rather than forwarding it empty.
+  **Branch prefix:** forward `branch_prefix` unchanged from your own run vars (see
+  step 3) on every round-advance AND into `hard-bug-finalize` below — it defaults to
+  empty, so passing it through costs nothing when unset.
   Keep each `relay_note` a neutral, specific summary of the *other* lane's position —
   "Lane B argues the cause is X in file:line because Y; consider or refute" — never
   "adopt this." Lane A gets B's note (`relay_note_a`), lane B gets A's.
@@ -222,6 +226,7 @@ you cannot bounce without the loop: keep `aligned=false`, record `unverified_key
     --var implementer_target=<stronger lane target> \
     --var reviewer_target=<other lane target> \
     --var coordinator_target={{.Rig}}/bug-coordinator --var max_rounds=<max_rounds> \
+    --var branch_prefix=<branch_prefix> \
     --var enable_loop=true --title "hard-bug finalize: <bug_bead>"
   ```
 
