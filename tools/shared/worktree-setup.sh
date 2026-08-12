@@ -64,11 +64,15 @@ mkdir -p "$(dirname "$WT")"
 STAGE=""
 
 merge_stage_entry() {
-    SRC="$1"
-    DST="$2"
+    # SRC/DST/ENTRY must be local: this function recurses, and a sibling's
+    # recursive call clobbering the parent's $DST/$SRC (plain globals) misdirects
+    # later siblings' merges and the trailing rmdir — see wo-4yi6.
+    local SRC="$1"
+    local DST="$2"
 
     if [ -d "$SRC" ]; then
         mkdir -p "$DST"
+        local ENTRY
         for ENTRY in "$SRC"/.[!.]* "$SRC"/..?* "$SRC"/*; do
             [ -e "$ENTRY" ] || continue
             merge_stage_entry "$ENTRY" "$DST/$(basename "$ENTRY")"

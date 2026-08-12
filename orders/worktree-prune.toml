@@ -1,0 +1,5 @@
+[order]
+description = "Prune stale git-worktree registrations across all rigs"
+trigger = "cooldown"
+interval = "1h"
+exec = "$ORDER_DIR/scripts/worktree-prune.sh"
