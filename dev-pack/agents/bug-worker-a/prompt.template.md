@@ -159,15 +159,21 @@ Emit **`hard-bug-implement.v1`**.
 
 ## Task: Cross-review — read-only
 
-The other lane implemented the fix and pushed a branch (its `hard-bug-implement.v1`
-is on the `implement` step you depend on: walk your `needs` edge, or read the branch
-named in your step). Review **both** the fix and its **verification evidence**:
+The other lane implemented the fix on a branch (its `hard-bug-implement.v1` is on the
+`implement` step you depend on: walk your `needs` edge, or read the branch named in
+your step). Your worktree and theirs are **linked worktrees of the same repo**, so
+their branch is already visible locally — you do NOT need `git fetch origin` or a
+successful `pushed` to review it. Review **both** the fix and its **verification
+evidence**:
 
 ```bash
-git fetch origin
 git diff origin/main...<branch>          # the change
 git log --oneline origin/main..<branch>
 ```
+
+(If the branch is unexpectedly missing — e.g. the implementer's slot was reused before
+you got here — only then fall back to `git fetch origin <branch>`, which only works if
+`pushed=true`.)
 
 - Does the diff actually fix the **root cause** agreed earlier (not just the symptom),
   with no scope creep or new defects? (`concurs_with_fix`)
@@ -196,8 +202,9 @@ bash {{.ConfigDir}}/assets/scripts/emit-json.sh --bead <your-step-bead> \
 rm -f "$out"
 ```
 
-On a retryable infrastructure failure (provider down, repo unreachable, push
-rejected for auth) finish with the same command plus:
+On a retryable infrastructure failure (provider down, repo unreachable — but NOT a
+rejected `git push`, which is expected on a read-only token and belongs in `pushed`,
+not a failure) finish with the same command plus:
 `--outcome fail --failure-class transient --failure-reason "<stable reason>"`
 (use `--failure-class hard` for a contract/input failure a retry won't fix). Do not
 run a separate `gc bd close`.
