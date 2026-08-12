@@ -21,65 +21,65 @@ prefix = "vllm"
 default_branch = "main"
 includes = ["dev-pack"]   # in-city folder: one dev pack — PR review + two-opinion hard-bug + feature lanes
 
-  # Lane B of the hard-bug lane is provider-agnostic and the formula no longer pins its
-  # model, so a real second vendor is a true one-liner: uncomment this patch (and add
-  # a [providers.codex] block + creds); formulas/prompts unchanged.
-  # [[rigs.patches]]
-  # agent = "bug-worker-b"
-  # provider = "codex"
-  # option_defaults = { model = "gpt-5-codex" }
+# Lane B of the hard-bug lane is provider-agnostic and the formula no longer pins its
+# model, so a real second vendor is a true one-liner: uncomment this patch (and add
+# a [providers.codex] block + creds); formulas/prompts unchanged.
+# [[rigs.patches]]
+# agent = "bug-worker-b"
+# provider = "codex"
+# option_defaults = { model = "gpt-5-codex" }
 
-  # Per-agent model/effort (my choice, not the pack's). Triage is backstopped by
-  # the deterministic prescan + reviewer re-derivation, so it stays lean; the
-  # reviewer's verdict is what I act on, so it gets the deeper pass.
-  [[rigs.patches]]
-  agent = "pr-triage"
-  option_defaults = { model = "opus", effort = "high" }
+# Per-agent model/effort (my choice, not the pack's). Triage is backstopped by
+# the deterministic prescan + reviewer re-derivation, so it stays lean; the
+# reviewer's verdict is what I act on, so it gets the deeper pass.
+[[rigs.patches]]
+agent = "pr-triage"
+option_defaults = { model = "opus", effort = "high" }
 
-  [[rigs.patches]]
-  agent = "pr-reviewer"
-  option_defaults = { model = "opus", effort = "xhigh" }
-  # Dynamic checks: lazily build/reuse a CPU vLLM test venv (vLLM-specific, kept out
-  # of the generic pack). GC_PREPARE_TEST_ENV is the builder the gate runs only when
-  # a trusted check actually executes; UV_CACHE_DIR stays on btrfs for reflinks.
-  # GC_PERSONAS is the vLLM persona set (vLLM-specific, kept out of the generic
-  # pack); the reviewer always loads base.md and adds any persona whose
-  # "Activates on:" header matches a changed path (see tools/vllm/personas/).
-  # ONE env for every persona consumer (reviewer + hard-bug lanes); injected as
-  # $GC_PERSONAS.
-  env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
+[[rigs.patches]]
+agent = "pr-reviewer"
+option_defaults = { model = "opus", effort = "xhigh" }
+# Dynamic checks: lazily build/reuse a CPU vLLM test venv (vLLM-specific, kept out
+# of the generic pack). GC_PREPARE_TEST_ENV is the builder the gate runs only when
+# a trusted check actually executes; UV_CACHE_DIR stays on btrfs for reflinks.
+# GC_PERSONAS is the vLLM persona set (vLLM-specific, kept out of the generic
+# pack); the reviewer always loads base.md and adds any persona whose
+# "Activates on:" header matches a changed path (see tools/vllm/personas/).
+# ONE env for every persona consumer (reviewer + hard-bug lanes); injected as
+# $GC_PERSONAS.
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
 
-  # Human-approved dynamic-check lane. Same env wiring as the reviewer; the gate
-  # (run-scoped-check.sh --min-ceiling limited) still floors it on the fresh ceiling.
-  # Carries $GC_PERSONAS for parity/forward-readiness; the runner prompt does not
-  # load personas today, so it is inert until a future prompt change reads it.
-  [[rigs.patches]]
-  agent = "pr-runner"
-  option_defaults = { model = "opus", effort = "high" }
-  env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
+# Human-approved dynamic-check lane. Same env wiring as the reviewer; the gate
+# (run-scoped-check.sh --min-ceiling limited) still floors it on the fresh ceiling.
+# Carries $GC_PERSONAS for parity/forward-readiness; the runner prompt does not
+# load personas today, so it is inert until a future prompt change reads it.
+[[rigs.patches]]
+agent = "pr-runner"
+option_defaults = { model = "opus", effort = "high" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
 
-  # Hard-bug lanes: same prepared CPU test-venv wiring as the reviewer, so a lane that
-  # needs to run vllm reuses the warm uv cache + the blessed CPU-only recipe
-  # (tools/vllm/vllm-testenv.sh, ~seconds warm) instead of a full torch install from
-  # scratch. (vLLM-specific env, kept out of the generic pack.)
-  # GC_PERSONAS = the SAME vLLM domain-knowledge corpus the reviewer loads:
-  # tools/vllm/personas/. The lane loads base.md + any persona whose "Activates on:"
-  # matches a subsystem in the bug's trace, and applies the domain reflexes (skipping
-  # the review-process ones). One corpus, one env, every consumer.
-  #
-  # Per-worker model: uncomment option_defaults.model to control each lane's model
-  # (valid claude: opus|sonnet|haiku|fable-5|opus-4-7|sonnet-5|sonnet-4-6). NB:
-  # rig-patch option_defaults are NOT validated at `gc reload` — a typo here is caught
-  # at launch (logged, falls back to default), not at reload.
-  [[rigs.patches]]
-  agent = "bug-worker-a"
-  # option_defaults = { model = "opus" }
-  env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
+# Hard-bug lanes: same prepared CPU test-venv wiring as the reviewer, so a lane that
+# needs to run vllm reuses the warm uv cache + the blessed CPU-only recipe
+# (tools/vllm/vllm-testenv.sh, ~seconds warm) instead of a full torch install from
+# scratch. (vLLM-specific env, kept out of the generic pack.)
+# GC_PERSONAS = the SAME vLLM domain-knowledge corpus the reviewer loads:
+# tools/vllm/personas/. The lane loads base.md + any persona whose "Activates on:"
+# matches a subsystem in the bug's trace, and applies the domain reflexes (skipping
+# the review-process ones). One corpus, one env, every consumer.
+#
+# Per-worker model: uncomment option_defaults.model to control each lane's model
+# (valid claude: opus|sonnet|haiku|fable-5|opus-4-7|sonnet-5|sonnet-4-6). NB:
+# rig-patch option_defaults are NOT validated at `gc reload` — a typo here is caught
+# at launch (logged, falls back to default), not at reload.
+[[rigs.patches]]
+agent = "bug-worker-a"
+# option_defaults = { model = "opus" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
 
-  [[rigs.patches]]
-  agent = "bug-worker-b"
-  # option_defaults = { model = "sonnet" }
-  env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
+[[rigs.patches]]
+agent = "bug-worker-b"
+# option_defaults = { model = "sonnet" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
 
 [[rigs]]
 name = "gascity"
