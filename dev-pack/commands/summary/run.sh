@@ -28,6 +28,7 @@ GC="${GC_BIN:-gc}"
 CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RENDER="$SCRIPT_DIR/../../assets/scripts/render-verdict.sh"
+RESOLVE="$SCRIPT_DIR/../../assets/scripts/resolve-verdict-bead.sh"
 
 RIG="vllm"
 SPEC=""
@@ -55,36 +56,11 @@ done
 [ $# -eq 0 ] || { [ -z "$SPEC" ] && SPEC="$1"; }
 [ -n "$SPEC" ] || { usage >&2; die "missing <bead-id | PR-number>"; }
 [ -x "$RENDER" ] || die "renderer not found/executable: $RENDER"
+[ -x "$RESOLVE" ] || die "resolver not found/executable: $RESOLVE"
 
-# Resolve the target bead. A bead id carries a non-digit (e.g. vllm-957); a bare
-# integer is a PR number to look up among closed pr-review verdict beads.
-if printf '%s' "$SPEC" | grep -qE '^[0-9]+$'; then
-    N="$SPEC"
-    BEAD=$("$GC" --city "$CITY" --rig "$RIG" bd list --all --json \
-             --metadata-field "gc.output_json_schema=pr-review.v1" -n 0 2>/dev/null \
-           | jq -r --arg n "$N" '
-               [ .[]?
-                 | . as $b
-                 | ($b.metadata["gc.output_json"] // "" | fromjson?) as $vj
-                 | select($vj != null
-                          and (($vj.head_ref // "") | tostring
-                               | test("(^|[^0-9])" + $n + "([^0-9]|$)")))
-                 | {id: $b.id,
-                    ts: ($b.closed_at // $b.updated_at // $b.created_at // ""),
-                    canon: (($b.close_reason // "") | test("^(review|dynamic check):"))}
-               ] as $all
-               # Prefer the bead emit-verdict.sh actually closed+mailed (its close
-               # reason marks it); a run can also leave framework copy/finalize beads
-               # carrying the same schema. Fall back to all if none are marked.
-               | (($all | map(select(.canon))) as $c
-                  | if ($c|length) > 0 then $c else $all end)
-               | sort_by(.ts) | last | .id // empty' 2>/dev/null || true)
-    [ -n "$BEAD" ] || die "no pr-review verdict bead found for PR $N in rig '$RIG'.
-Try --rig <name>, or pass the bead id from the verdict mail: gc dev-pack summary <bead-id>"
-    printf '%s\n' "summary: PR $N -> review bead $BEAD" >&2
-else
-    BEAD="$SPEC"
-fi
+# Resolve the target bead (PR number -> newest verdict bead, or a bead id used
+# as-is). Shared with `gc dev-pack ask`, which also walks follow-up chains.
+BEAD=$("$RESOLVE" "$SPEC" --rig "$RIG") || exit $?
 
 # Read the stored verdict JSON + root bead id from metadata (the same
 # gc.output_json emit-verdict.sh wrote at finish time).

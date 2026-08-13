@@ -22,6 +22,8 @@ lane that self-verifies its own keystones; N≥2 fans out N independent opinions
 
 Helpers: `gc dev-pack materialize <PR>` (durable human checkout) ·
 `gc dev-pack summary <bead|PR>` (re-render a stored verdict) ·
+`gc dev-pack ask <bead|PR> "<question>"` (one-shot agent answers a follow-up,
+in the real code, mailed back threaded) ·
 `gc dev-pack status <bead>` (a bug arc's phase/round/status).
 
 All lanes share one persona corpus (`$GC_PERSONAS`) and one method spine
@@ -51,6 +53,11 @@ hunting for its result:
      ├─ want it again later? (verdict mail is ephemeral)
      │      gc dev-pack summary 51296       ← re-render the verdict, LLM-free
      │
+     ├─ have a specific followup question?
+     │      gc dev-pack ask 51296 "does this handle empty batches?"
+     │      # one-shot agent, real code, mails the answer back — threaded
+     │      # ask again later; it still remembers every prior round
+     │
      └─ want to see/run the code yourself?
             gc dev-pack materialize 51296   ← durable checkout on disk
             cd <city>/pr-worktrees/vllm/pr-51296
@@ -73,7 +80,13 @@ A few things make this ergonomic instead of a scavenger hunt:
    out into a **durable, human-owned** worktree that agent slot-reuse and
    `gc stop --clean` never touch. See
    [Materialize a PR for human review](#materialize-a-pr-for-human-review).
-3. **Trusted PRs get tested, not just read.** When the deterministic ceiling is
+3. **Followups get an agent, not just a checkout.** `gc dev-pack ask <PR>
+   "<question>"` reuses that same durable worktree and slings a one-shot agent to
+   answer from the real code, mailed back threaded into the same conversation.
+   It's one-shot per question but not stateless: every round is chained to the
+   verdict bead, so later rounds still see earlier ones. See
+   [Ask a follow-up question](#ask-a-follow-up-question).
+4. **Trusted PRs get tested, not just read.** When the deterministic ceiling is
    `trusted`, the reviewer auto-runs one in-scope check and folds the result into
    the verdict; a `limited` PR surfaces a scoped check you can approve with one
    sling. See [Dynamic checks](#dynamic-checks-running-a-prs-tests).
@@ -171,9 +184,11 @@ agents/pr-reviewer/                   # posture-gated reviewer, pooled up to 2 s
 agents/pr-reviewer-a/                 # review-quorum lane A (1 slot, opus): shares pr-reviewer's prompt
 agents/pr-reviewer-b/                 # review-quorum lane B (1 slot, sonnet): shares pr-reviewer's prompt
 agents/pr-runner/                     # human-approved dynamic-check lane (1 slot)
+agents/pr-follow-up/                  # one-shot follow-up Q&A on a reviewed PR (1 slot)
 formulas/pr-review.toml               # N=1: triage → review TASK + pr-review.v1 verdict contract
 formulas/pr-review-quorum.toml        # N=2: triage → pr-reviewer-a + pr-reviewer-b → synthesis + pr-review-quorum.v1
 formulas/pr-review-dynamic.toml       # human-approved check TASK + pr-review-dynamic.v1 contract
+formulas/pr-followup.toml             # per-question follow-up TASK + pr-followup.v1 contract
 # --- bug lane (N-opinion dial: solo self-verify, or opinions until convergence) ---
 agents/bug-worker-a/                  # lane A / sole lane at N=1: diagnose / reconsider / implement / cross-review (1 slot)
 agents/bug-worker-b/                  # lane B (N≥2): same method (shares worker-a's prompt), different model
@@ -191,6 +206,7 @@ commands/bug/                         # `gc dev-pack bug <bead>`      — start 
 commands/feature/                     # `gc dev-pack feature <bead>`  — start a feature implementation
 commands/materialize/                 # `gc dev-pack materialize <PR>`— durable human checkout
 commands/summary/                     # `gc dev-pack summary <bead|PR>`— re-render a verdict readably
+commands/ask/                         # `gc dev-pack ask <bead|PR> "<question>"` — one-shot follow-up Q&A
 commands/status/                      # `gc dev-pack status <bead>`   — a bug arc's durable state
 template-fragments/recovery-header.template.md  # `gc prime` recovery note (every prompt)
 template-fragments/worktree-guard.template.md   # "you're in your own worktree; abort in rig root" guard
@@ -199,7 +215,9 @@ assets/scripts/pr-prescan.sh          # deterministic, injection-proof posture c
 assets/scripts/posture-latitude.sh    # pure posture → FETCH/EXEC/GATE table (review)
 assets/scripts/run-scoped-check.sh    # the deterministic EXEC gate for dynamic checks (review)
 assets/scripts/emit-verdict.sh        # review-lane atomic finish: write verdict + close + notify human
+assets/scripts/emit-followup.sh       # follow-up atomic finish: write answer + chain + close + thread + notify
 assets/scripts/render-verdict.sh      # verdict JSON → human-readable summary (mail body + `summary` cmd)
+assets/scripts/resolve-verdict-bead.sh # PR/bead spec → root verdict bead (shared by `summary` and `ask`)
 assets/scripts/emit-json.sh           # bug-lane schema-agnostic atomic finish: write + set outcome + close
 assets/scripts/fetch-origin.sh        # the fetch order's exec body
 # worktree-setup.sh lives at //tools/shared/ (shared spine — see "How the isolation actually works")
@@ -264,12 +282,12 @@ on-demand slot auto-materializes the rig and the session.
    gc doctor                     # THIS validates the pre_start script exists on
                                  # disk (the pre-start-scripts check) — not gc lint
    gc formula list               # expect: pr-review, pr-review-quorum, pr-review-dynamic,
-                                 #         feature-dev, hard-bug-round, hard-bug-round-solo,
-                                 #         hard-bug-finalize
+                                 #         pr-followup, feature-dev, hard-bug-round,
+                                 #         hard-bug-round-solo, hard-bug-finalize
    gc agent list                 # expect: vllm/pr-triage, vllm/pr-reviewer, vllm/pr-runner,
-                                 #         vllm/bug-coordinator, vllm/bug-worker-a, vllm/bug-worker-b,
-                                 #         vllm/feature-dev
-   gc dev-pack --help            # expect: review, bug, feature, materialize, summary, status
+                                 #         vllm/pr-follow-up, vllm/bug-coordinator,
+                                 #         vllm/bug-worker-a, vllm/bug-worker-b, vllm/feature-dev
+   gc dev-pack --help            # expect: review, bug, feature, materialize, summary, ask, status
                                  # (discovered per-invocation from commands/, no reload needed)
    ```
    (Confirm exact subcommands with `gc formula --help` / `gc agent --help`.)
@@ -386,6 +404,49 @@ gc dev-pack materialize 51296 --remove
 > the CPU test venv once with `//tools/vllm/vllm-testenv.sh --src .` and use
 > `.venv/bin/python -m pytest …` — the very same venv the reviewer/runner use. See
 > [Dynamic checks](#dynamic-checks-running-a-prs-tests).
+
+## Ask a follow-up question
+
+The verdict mail answers what the reviewer already thought to say. When you have
+a **specific followup** ("does this handle empty batches?") you want answered
+*from the code*, not from memory of the summary, `gc dev-pack ask` gets you an
+agent that has the PR's actual code checked out — not the reviewer's transient
+per-slot scratch, and not an interactive session with no local checkout either:
+
+```bash
+gc dev-pack ask 51296 "does this handle empty batches?"
+```
+
+Under the hood this: resolves `51296` to its stored `pr-review.v1` verdict bead
+(the same lookup `summary` uses); runs `gc dev-pack materialize` for you so the
+PR's code is on disk in the durable, PR-keyed worktree described above; slings a
+**one-shot** agent (`pr-follow-up`) into that worktree with your question; and
+mails the answer back, threaded into the same mail conversation as the original
+verdict (`gc mail thread <verdict-mail-id>` shows both).
+
+**It's one-shot, but it isn't stateless.** Ask a second question later —
+
+```bash
+gc dev-pack ask 51296 "does that also cover the batching concern from before?"
+```
+
+— and the fresh agent still sees the first round: every prior follow-up on a PR
+is chained to the original verdict bead (`gc.followup_of` metadata), so `ask`
+rebuilds the full conversation (verdict recap + every Q&A so far) into a context
+file in the worktree before slinging. There is no persistent session to keep
+alive between rounds, and no risk of it going stale — the record lives on the
+beads, not in a session's memory.
+
+You can also pass any bead in the chain instead of the PR number (the verdict
+bead id, or an earlier follow-up bead id) — both resolve to the same
+conversation. Same idempotency/refresh rules as `materialize` apply: if the PR's
+head has moved since you last asked, `ask` reports it and you re-run with
+`--force` to update the worktree (discarding local changes there).
+
+**v1 is read-only** — the follow-up agent answers from the diff and the checked
+out files; it does not run tests or execute code, even when the tree it's sitting
+in could support it under the reviewer's `dynamic_request`. Approve a dynamic
+check the normal way (see below) if you need one run.
 
 ## Dynamic checks: running a PR's tests
 

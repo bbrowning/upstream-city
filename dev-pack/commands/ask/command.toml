@@ -1,0 +1,1 @@
+description = "Ask a follow-up question about a reviewed PR: resolves the prior verdict (and every follow-up asked since), materializes the PR's code into a durable worktree, and slings a one-shot agent that answers from the real code and mails the answer back"

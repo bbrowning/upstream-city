@@ -1,0 +1,84 @@
+description = """
+Single-lane follow-up: answer one human question about an already-reviewed PR.
+
+Routes one question to the pr-follow-up agent, which works read-only inside a
+durable, PR-keyed worktree (created by `gc dev-pack ask` via `materialize`
+before this step is slung, NOT the reviewer's transient per-slot scratch), and
+emits a structured answer to `gc.output_json`. The step closes itself and mails
+the answer back to the human, threaded into the same mail conversation as the
+original verdict where possible.
+
+Deliberately the minimal shape and a single lane, mirroring feature-dev: one
+question in, one answer out, no fan-out. Multi-round continuity is NOT session
+state — it comes from `gc dev-pack ask` rebuilding the prior Q&A transcript into
+`context_file` fresh on every invocation.
+"""
+formula = "pr-followup"
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[vars]
+[vars.pr]
+description = "PR number or ref this question is about."
+
+[vars.base_ref]
+description = "Diff baseline for this PR."
+default = "origin/main"
+
+[vars.question]
+description = "The human's question, verbatim."
+
+[vars.worktree_path]
+description = "The durable, PR-keyed worktree path from `gc dev-pack materialize` — where the agent must actually work, not its own per-slot scratch."
+
+[vars.root_bead]
+description = "The original pr-review.v1 / pr-review-quorum.v1 verdict bead id this question is about."
+
+[vars.context_file]
+description = "Path (inside worktree_path) to the rendered prior-conversation transcript: the original verdict recap plus every follow-up Q&A so far, oldest first."
+
+[[steps]]
+id = "answer"
+title = "Answer a human follow-up question about a reviewed PR"
+description = """
+Answer this question about PR {{pr}}, working **only inside the materialized
+worktree at {{worktree_path}}** — not your own per-slot scratch worktree, and
+not the shared rig root.
+
+Question: "{{question}}"
+
+Method (see your pr-follow-up prompt for detail):
+- `cd {{worktree_path}}`; verify it's a real checkout, not the rig root.
+- Read `{{context_file}}` for the full prior conversation on this PR before
+  answering — a later question may depend on an earlier answer.
+- Investigate with `git log`, `git diff {{base_ref}}...HEAD`, and by reading the
+  actual files — ground the answer in what you read, not in the verdict alone.
+- You are read-only: never edit, never run code, never open a PR.
+
+Write this JSON object to `gc.output_json`:
+
+- `question`: the question, verbatim ({{question}})
+- `answer`: your response (markdown ok)
+- `pr`: {{pr}}
+- `base_ref`: {{base_ref}}
+- `root_bead`: {{root_bead}}
+- `files_referenced`: array of paths you actually read
+- `failure_class`: one of `none`, `transient`, `hard`
+- `failure_reason`: stable reason string, or "" when `none`
+
+Finish with ONE command — `emit-followup.sh --bead <your-bead> --root-bead
+{{root_bead}} --answer-file <path> --outcome pass` — which writes the metadata,
+stamps `gc.followup_of={{root_bead}}`, closes the bead, and mails the human
+(threaded when a prior thread exists). Do not close or mail separately.
+
+On success, `--outcome pass` covers every honest answer, including "I could not
+determine this from the code." Use `--outcome fail --failure-class transient`
+(retryable infra: worktree unreachable, root bead unreadable) or `hard`
+(work_dir misresolved to the rig root) only for genuine infrastructure failures.
+"""
+metadata = { "gc.output_json_schema" = "pr-followup.v1", "gc.output_json_required" = "true" }
+
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"

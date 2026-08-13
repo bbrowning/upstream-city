@@ -22,6 +22,11 @@
 #                           (pr-reviewer-1, pr-reviewer-2), each in its OWN worktree.
 #     agents/pr-runner/     human-approved dynamic-check lane (1 slot): runs one
 #                           operator-approved check on a `limited` PR, gated the same.
+#     agents/pr-follow-up/  one-shot, read-only follow-up Q&A on an already-reviewed
+#                           PR (1 slot): works in the durable worktree `materialize`
+#                           creates, not the reviewer's transient per-slot scratch.
+#                           No persistent per-PR session — continuity across rounds
+#                           comes from a rebuilt Q&A transcript, not agent memory.
 #
 #   bug     — a symptom/bead -> root cause + fix, over N opinions (the fan-out dial,
 #             `--n`). N=1 (default) is a solo lane that self-verifies its keystones;
@@ -52,6 +57,9 @@
 #                                     synthesis + pr-review-quorum.v1 (superset verdict).
 #     formulas/pr-review-dynamic.toml human-slung approval lane: run one approved
 #                                     check + pr-review-dynamic.v1 contract.
+#     formulas/pr-followup.toml       per-question follow-up: one answer +
+#                                     pr-followup.v1 contract, chained to the root
+#                                     verdict bead via gc.followup_of.
 #     formulas/feature-dev.toml       per-run implement task + feature-dev.v1 report.
 #     formulas/hard-bug-round.toml    N>=2 round: the lanes + a coordinator reconcile
 #                                     fan-in. Re-slung per round.
@@ -67,6 +75,9 @@
 #     materialize <PR>  check a PR out into a DURABLE, human-owned worktree (outside
 #                       .gc/, never reaped) so a person can read/diff/run it.
 #     summary <bead|PR> re-render a stored pr-review / dynamic-check verdict, LLM-free.
+#     ask <bead|PR> "<question>"  one-shot agent answers a follow-up in the PR's
+#                       real code (via materialize) and mails the answer back,
+#                       threaded; each round sees every prior round on the PR.
 #     status <bead>     render a bug arc's durable state (phase/round/status).
 #
 # SHARED SPINE
@@ -115,4 +126,4 @@
 [pack]
 name = "dev-pack"
 schema = 2
-description = "One engineering-workflow pack, three lanes over a shared spine: posture-gated PR review (triage → review or N-opinion quorum, trusted auto-run + human-approved dynamic-check lane), bug fix with an N-opinion dial (solo self-verify or two-opinion diagnose → converge → implement → cross-review), and a feature-dev write lane — each isolated in its own git worktree (native work_dir + pre_start), sharing one persona corpus via $GC_PERSONAS."
+description = "One engineering-workflow pack, three lanes over a shared spine: posture-gated PR review (triage → review or N-opinion quorum, trusted auto-run + human-approved dynamic-check lane, plus a one-shot `ask` follow-up Q&A lane), bug fix with an N-opinion dial (solo self-verify or two-opinion diagnose → converge → implement → cross-review), and a feature-dev write lane — each isolated in its own git worktree (native work_dir + pre_start), sharing one persona corpus via $GC_PERSONAS."

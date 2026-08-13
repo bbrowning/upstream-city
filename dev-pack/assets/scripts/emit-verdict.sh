@@ -98,4 +98,13 @@ body=$("$SCRIPT_DIR/render-verdict.sh" "$VF" --bead "$BEAD" --run-url "${base}/$
          body="(summary render failed — full verdict: gc bd show $BEAD --json)"; }
 
 # Best-effort: the step already closed; a mail hiccup must not fail the step.
-"$GC" mail send "$TO" -s "$subj" -m "$body" || printf '%s\n' "emit-verdict: WARN notify to '$TO' failed (bead already closed)" >&2
+mail_json=$("$GC" mail send "$TO" -s "$subj" -m "$body" --json 2>/dev/null) \
+    || { printf '%s\n' "emit-verdict: WARN notify to '$TO' failed (bead already closed)" >&2; mail_json=""; }
+
+# Stash the sent mail's id so a later `gc dev-pack ask` follow-up can thread its
+# answer into this same mail conversation (see emit-followup.sh).
+if [ -n "$mail_json" ]; then
+    mail_id=$(printf '%s' "$mail_json" | jq -r '.id // empty' 2>/dev/null || true)
+    [ -n "$mail_id" ] && "$GC" bd update "$BEAD" --set-metadata "gc.notify_mail_id=$mail_id" \
+        || printf '%s\n' "emit-verdict: WARN could not stash gc.notify_mail_id" >&2
+fi

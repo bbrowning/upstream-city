@@ -23,6 +23,8 @@
 #   --base <ref>    diff baseline for the summary        (default: origin/main)
 #   --force         re-create the worktree if it exists  (default: no-op/refuse)
 #   --remove        remove the worktree for this PR/ref and exit
+#   --json          machine-readable {path,rig,head_sha,base} instead of the
+#                   human summary (used by `gc dev-pack ask` to get the path)
 #   -h, --help      show this help
 #
 # Env (provided by gc): GC_CITY_PATH, GC_BIN. Optional override:
@@ -36,10 +38,11 @@ RIG="vllm"
 BASE="origin/main"
 FORCE=0
 REMOVE=0
+JSONOUT=0
 SPEC=""
 
 usage() {
-    sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -50,6 +53,7 @@ while [ $# -gt 0 ]; do
         --base=*)  BASE="${1#*=}"; shift ;;
         --force)   FORCE=1; shift ;;
         --remove)  REMOVE=1; shift ;;
+        --json)    JSONOUT=1; shift ;;
         -h|--help) usage; exit 0 ;;
         --)        shift; break ;;
         -*)        echo "materialize: unknown option '$1'" >&2; exit 2 ;;
@@ -92,9 +96,13 @@ DEST="$WT_ROOT/$LABEL"
 
 # --- --remove: tear down this PR/ref's worktree and exit. -------------------
 if [ "$REMOVE" -eq 1 ]; then
-    git -C "$RIG_ROOT" worktree remove --force "$DEST" 2>/dev/null || rm -rf "$DEST"
-    git -C "$RIG_ROOT" worktree prune 2>/dev/null || true
-    echo "materialize: removed $DEST"
+    git -C "$RIG_ROOT" worktree remove --force "$DEST" >/dev/null 2>&1 || rm -rf "$DEST"
+    git -C "$RIG_ROOT" worktree prune >/dev/null 2>&1 || true
+    if [ "$JSONOUT" -eq 1 ]; then
+        jq -n --arg path "$DEST" '{removed: $path}'
+    else
+        echo "materialize: removed $DEST"
+    fi
     exit 0
 fi
 
@@ -134,13 +142,22 @@ print_summary() {
     echo "Remove when done:  gc dev-pack materialize $SPEC --rig $RIG --remove"
 }
 
+print_json() {
+    jq -n --arg path "$DEST" --arg rig "$RIG" --arg head_sha "$SHA" --arg base "$BASE" \
+        '{path: $path, rig: $rig, head_sha: $head_sha, base: $base}'
+}
+
 # --- Create, or update in place, the human-owned worktree. -------------------
 if [ -e "$DEST/.git" ]; then
     cur=$(git -C "$DEST" rev-parse HEAD 2>/dev/null || echo "")
     if [ "$FORCE" -ne 1 ]; then
         if [ "$cur" = "$SHA" ]; then
-            echo "materialize: already up to date at $DEST"
-            print_summary
+            if [ "$JSONOUT" -eq 1 ]; then
+                print_json
+            else
+                echo "materialize: already up to date at $DEST"
+                print_summary
+            fi
             exit 0
         fi
         echo "materialize: $DEST already exists at $cur," >&2
@@ -148,8 +165,8 @@ if [ -e "$DEST/.git" ]; then
         echo "materialize: re-run with --force to update it (discards any local changes there)." >&2
         exit 1
     fi
-    git -C "$RIG_ROOT" worktree remove --force "$DEST" 2>/dev/null || rm -rf "$DEST"
-    git -C "$RIG_ROOT" worktree prune 2>/dev/null || true
+    git -C "$RIG_ROOT" worktree remove --force "$DEST" >/dev/null 2>&1 || rm -rf "$DEST"
+    git -C "$RIG_ROOT" worktree prune >/dev/null 2>&1 || true
 fi
 
 mkdir -p "$WT_ROOT"
@@ -157,7 +174,10 @@ mkdir -p "$WT_ROOT"
 # show up in the city's `git status`.
 [ -f "$WT_BASE/.gitignore" ] || printf '*\n' > "$WT_BASE/.gitignore"
 
-GIT_LFS_SKIP_SMUDGE=1 git -C "$RIG_ROOT" worktree add --detach "$DEST" "$SHA"
+# stdout -> stderr: `git worktree add` prints a "Preparing worktree" progress
+# line on stdout, which would otherwise contaminate --json output captured by
+# callers like `gc dev-pack ask` (command substitution only captures stdout).
+GIT_LFS_SKIP_SMUDGE=1 git -C "$RIG_ROOT" worktree add --detach "$DEST" "$SHA" 1>&2
 
 # Point bd at the shared rig ledger (a fresh worktree has no tracked .beads/),
 # and keep gascity/editor runtime files out of this worktree's `git status`.
@@ -170,4 +190,8 @@ for p in ".beads/" ".gc/" ".claude/" "__pycache__/"; do
     grep -qxF "$p" "$EXCLUDE" 2>/dev/null || printf '%s\n' "$p" >> "$EXCLUDE"
 done
 
-print_summary
+if [ "$JSONOUT" -eq 1 ]; then
+    print_json
+else
+    print_summary
+fi

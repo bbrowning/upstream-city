@@ -93,6 +93,13 @@ agent = "pr-runner"
 option_defaults = { model = "opus", effort = "high" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
+# `gc dev-pack ask` follow-up lane: read-only, no execution latitude (v1), so no
+# test-venv wiring — just GC_PERSONAS for parity with the reviewer/runner.
+[[rigs.patches]]
+agent = "pr-follow-up"
+option_defaults = { model = "opus", effort = "high" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
+
 # Hard-bug lanes: same prepared CPU test-venv wiring as the reviewer, so a lane that
 # needs to run vllm reuses the warm uv cache + the blessed CPU-only recipe
 # (tools/vllm/vllm-testenv.sh, ~seconds warm) instead of a full torch install from

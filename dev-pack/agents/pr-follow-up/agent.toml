@@ -1,0 +1,31 @@
+# Follow-up — answer a human's question about an already-reviewed PR, with the
+# PR's actual code checked out locally.
+#
+# One-shot, read-only, no persistent per-PR session: `gc dev-pack ask` slings this
+# agent fresh every round. Continuity across rounds comes from OUTSIDE the
+# session — a deterministically-rebuilt transcript of every prior round on this
+# PR (via gc.followup_of chaining) is handed in as a context file, not carried in
+# agent memory. It never edits, never runs code — v1 is answer-only.
+#
+# Rig-scoped, single slot, on-demand: a session spins up when a `pr-followup`
+# step is routed to it and idles out afterward. Its OWN work_dir (below) is
+# throwaway scratch, purely so an empty work_dir doesn't resolve to the rig root
+# (internal/workdir/workdir.go) — the real PR tree is named by the
+# `worktree_path` formula var and the agent `cd`s there itself. This is the same
+# split pr-runner uses for the identical reason: gascity's work_dir templating
+# has no per-sling-var substitution, and the tree needed here varies per PR, not
+# per slot.
+#
+# Division of labor:
+#   - prompt.template.md       → the follow-up agent's standing METHOD.
+#   - formulas/pr-followup.toml → the per-run TASK (question + PR context) +
+#                                the exact output contract.
+
+scope = "rig"
+nudge = "Follow-up question assignment. Run `gc prime`, read your bead (question + materialized worktree path + prior context file + root verdict bead), cd into the worktree, answer from the real code, then finish with emit-followup.sh."
+idle_timeout = "15m"
+min_active_sessions = 0
+max_active_sessions = 1
+
+work_dir  = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
+pre_start = ["{{.CityRoot}}/tools/shared/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]
