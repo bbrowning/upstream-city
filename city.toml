@@ -38,7 +38,11 @@ option_defaults = { model = "opus", effort = "high" }
 
 [[rigs.patches]]
 agent = "pr-reviewer"
-option_defaults = { model = "opus", effort = "high" }
+# effort=xhigh (data-driven): opus/high demonstrably MISSED the inkling THINK_END
+# regression in PR 47562 across two runs (f41i, 8pr1), while opus/xhigh caught it as a
+# blocker both times (wcq4 x2). Effort — not model — was the decisive factor. See the
+# per-lane breakdown in tools/vllm/arena/decisions.jsonl and follow-up wo-au65.6.
+option_defaults = { model = "opus", effort = "xhigh" }
 # Dynamic checks: lazily build/reuse a CPU vLLM test venv (vLLM-specific, kept out
 # of the generic pack). GC_PREPARE_TEST_ENV is the builder the gate runs only when
 # a trusted check actually executes; UV_CACHE_DIR stays on btrfs for reflinks.
@@ -64,7 +68,9 @@ env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/w
 # metadata skip is the real mechanism.
 [[rigs.patches]]
 agent = "pr-reviewer-a"
-option_defaults = { model = "opus", effort = "high" }
+# effort=xhigh for the same data-driven reason as pr-reviewer above — opus needs xhigh
+# to reliably catch the inkling-class regression (the quorum's opus lane at high missed it).
+option_defaults = { model = "opus", effort = "xhigh" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_NOTIFY_TO = "" }
 
 [[rigs.patches]]
