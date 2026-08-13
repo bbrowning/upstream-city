@@ -53,6 +53,17 @@ done
 [ -n "$AF" ] && [ -f "$AF" ] || die "usage: --answer-file must be an existing file"
 OUT=$(jq -c . "$AF") || die "answer file is not valid JSON: $AF"
 
+# --- guard: --bead must be the caller's own step bead, never the workflow root
+# or the (unrelated) --root-bead verdict bead. Both mistakes have happened: the
+# workflow-root bead is where gc.var.* inputs live, which reads like "my bead"
+# to an agent that didn't check kind — but emitting there leaves the real step
+# bead open (blocking retry/finalize) AND fires a second human notification
+# once the correct bead is emitted later.
+bead_json=$("$GC" bd show "$BEAD" --json 2>/dev/null) || die "--bead $BEAD: cannot read bead"
+bead_kind=$(printf '%s' "$bead_json" | jq -r '.[0].metadata["gc.kind"] // empty')
+[ "$bead_kind" != "workflow" ] || die "--bead $BEAD is the workflow-root bead (gc.kind=workflow) — use your own step-bead id from 'gc prime', not this one"
+[ "$BEAD" != "$ROOT" ] || die "--bead and --root-bead are the same ($BEAD) — --root-bead is the unrelated original verdict bead, never your own step bead"
+
 # --- write metadata (MERGE — never --metadata '{…}', which wipes routing keys) ---
 "$GC" bd update "$BEAD" --set-metadata "gc.output_json=$OUT" --set-metadata "gc.outcome=$OUTCOME" \
     --set-metadata "gc.followup_of=$ROOT"

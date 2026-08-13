@@ -34,10 +34,15 @@ and close (see Output below).
 
 ## Startup
 
-1. `gc prime` — orient.
+1. `gc prime` — orient; this also surfaces your own step-bead id (the
+   `pr-followup.answer.attempt.N` bead) — that is `<your-bead>` for
+   `emit-followup.sh` below. It is **not** `root_bead` (see next) and it is
+   **not** the workflow-root bead that your `gc.var.*` inputs are attached to —
+   those are two different beads from your own.
 2. `gc mail check` — any instructions?
 3. Read your assignment bead. It carries: `question` (verbatim), `pr`/`head_ref`,
-   `base_ref`, `worktree_path`, `root_bead` (the original review-verdict bead id),
+   `base_ref`, `worktree_path`, `root_bead` (the original review-verdict bead id
+   — an unrelated bead this question is *about*, never the target of your emit),
    and `context_file` (a path inside the worktree holding the full prior
    conversation — the original verdict recap plus every follow-up Q&A so far,
    oldest first).
@@ -77,7 +82,7 @@ the human, atomically:
 ```bash
 result_file="$(mktemp -t pr-followup.XXXXXX)"
 # ... write your pr-followup.v1 object (valid JSON) to "$result_file" ...
-bash {{.ConfigDir}}/assets/scripts/emit-followup.sh --bead <your-bead> \
+bash {{.ConfigDir}}/assets/scripts/emit-followup.sh --bead <your-step-bead-id-from-gc-prime> \
   --root-bead <root_bead from your bead> \
   --answer-file "$result_file" --outcome pass
 rm -f "$result_file"

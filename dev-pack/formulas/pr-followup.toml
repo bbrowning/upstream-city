@@ -67,10 +67,13 @@ Write this JSON object to `gc.output_json`:
 - `failure_class`: one of `none`, `transient`, `hard`
 - `failure_reason`: stable reason string, or "" when `none`
 
-Finish with ONE command — `emit-followup.sh --bead <your-bead> --root-bead
-{{root_bead}} --answer-file <path> --outcome pass` — which writes the metadata,
-stamps `gc.followup_of={{root_bead}}`, closes the bead, and mails the human
-(threaded when a prior thread exists). Do not close or mail separately.
+Finish with ONE command — `emit-followup.sh --bead <your-step-bead-id-from-gc-prime>
+--root-bead {{root_bead}} --answer-file <path> --outcome pass` — which writes the
+metadata, stamps `gc.followup_of={{root_bead}}`, closes the bead, and mails the
+human (threaded when a prior thread exists). Do not close or mail separately.
+`--bead` is YOUR OWN step bead (from `gc prime`), never `{{root_bead}}` — that
+var is the unrelated original verdict bead this question is about, not your
+own bead, and not the workflow-root bead your `gc.var.*` inputs live on.
 
 On success, `--outcome pass` covers every honest answer, including "I could not
 determine this from the code." Use `--outcome fail --failure-class transient`
