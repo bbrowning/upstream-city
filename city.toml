@@ -35,6 +35,12 @@ includes = ["dev-pack"]   # in-city folder: one dev pack — PR review + two-opi
 [[rigs.patches]]
 agent = "pr-triage"
 option_defaults = { model = "opus", effort = "high" }
+# Operator PR-author trust allowlist (git-tracked; audit trail via git history).
+# Read by pr-prescan.sh: a listed login is elevated to collaborator-grade so the
+# PR can reach `trusted` (auto-run a scoped test) even when GitHub reports the
+# author as a mere CONTRIBUTOR. Identity-only — every file/pattern risk cap still
+# applies. Injected as $GC_PR_TRUSTED_AUTHORS. See tools/vllm/trusted-authors.txt.
+env = { GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 [[rigs.patches]]
 agent = "pr-reviewer"
@@ -51,7 +57,7 @@ option_defaults = { model = "opus", effort = "xhigh" }
 # "Activates on:" header matches a changed path (see tools/vllm/personas/).
 # ONE env for every persona consumer (reviewer + hard-bug lanes); injected as
 # $GC_PERSONAS.
-env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 # Review quorum lanes (gc dev-pack review --n 2). Distinct single-slot agents so the
 # two lanes get a genuine cross-model split from THEIR option_defaults (a per-step
@@ -71,12 +77,12 @@ agent = "pr-reviewer-a"
 # effort=xhigh for the same data-driven reason as pr-reviewer above — opus needs xhigh
 # to reliably catch the inkling-class regression (the quorum's opus lane at high missed it).
 option_defaults = { model = "opus", effort = "xhigh" }
-env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_NOTIFY_TO = "" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_NOTIFY_TO = "", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 [[rigs.patches]]
 agent = "pr-reviewer-b"
 option_defaults = { model = "sonnet", effort = "xhigh" }
-env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_NOTIFY_TO = "" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_NOTIFY_TO = "", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 # Human-approved dynamic-check lane. Same env wiring as the reviewer; the gate
 # (run-scoped-check.sh --min-ceiling limited) still floors it on the fresh ceiling.
@@ -85,7 +91,7 @@ env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/w
 [[rigs.patches]]
 agent = "pr-runner"
 option_defaults = { model = "opus", effort = "high" }
-env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 # Hard-bug lanes: same prepared CPU test-venv wiring as the reviewer, so a lane that
 # needs to run vllm reuses the warm uv cache + the blessed CPU-only recipe

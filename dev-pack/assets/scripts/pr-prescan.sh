@@ -36,6 +36,7 @@ cap() {
 # --- fetch the diff + author metadata (the only inputs) ---------------------
 DIFF=""
 AUTHOR_ASSOC="UNKNOWN"
+AUTHOR_LOGIN=""
 FILES_JSON="[]"
 SOURCE="git-local"
 
@@ -53,8 +54,13 @@ if printf '%s' "$HEAD_REF" | grep -qE '^[0-9]+$'; then
     if META=$(gh pr view "$HEAD_REF" --json files 2>/dev/null); then
         FILES_JSON=$(printf '%s' "$META" | jq -c '[.files[].path]')
     fi
-    AUTHOR_ASSOC=$(gh api "repos/{owner}/{repo}/pulls/$HEAD_REF" --jq '.author_association' 2>/dev/null || true)
+    # Fetch association AND author login in ONE call: the login feeds the operator
+    # trust allowlist below. Both come from GitHub (not the diff), so they are
+    # trustworthy input a prompt-injected PR cannot forge.
+    PR_META=$(gh api "repos/{owner}/{repo}/pulls/$HEAD_REF" 2>/dev/null || true)
+    AUTHOR_ASSOC=$(printf '%s' "$PR_META" | jq -r '.author_association // empty' 2>/dev/null || true)
     AUTHOR_ASSOC=${AUTHOR_ASSOC:-UNKNOWN}
+    AUTHOR_LOGIN=$(printf '%s' "$PR_META" | jq -r '.user.login // empty' 2>/dev/null || true)
 else
     git fetch --quiet origin 2>/dev/null || true
     if ! DIFF=$(GIT_LFS_SKIP_SMUDGE=1 git diff "$BASE_REF...$HEAD_REF" 2>/dev/null); then
@@ -156,11 +162,38 @@ fi
 [ "$SCRIPT_CHANGE" = true ] && cap limited    "build or shell-script change"
 [ "$CONFTEST" = true ]      && cap limited    "conftest.py change (pytest import-time side effects)"
 [ "$P_DYN" -gt 0 ]          && cap limited    "dynamic-exec/egress pattern: subprocess/eval/exec/import/network"
-case "$AUTHOR_ASSOC" in
-    OWNER|MEMBER|COLLABORATOR) : ;;
-    UNKNOWN) cap limited "author association unknown (non-PR ref or gh unavailable)" ;;
-    *)       cap limited "low author trust: $AUTHOR_ASSOC" ;;
-esac
+# Operator trust allowlist (elevates AUTHOR IDENTITY only). GC_PR_TRUSTED_AUTHORS
+# is optional: a path to a newline-delimited file of GitHub logins (blank lines and
+# `#` comments ignored) OR an inline comma/space-separated list. A matching PR
+# author is treated as collaborator-grade for the author check below — it
+# neutralizes ONLY the author-association cap. Every file/pattern cap above still
+# applies (cap keeps the strictest signal), so a trusted author's risky diff is
+# still floored. Injection-proof: the login is GitHub-verified (not from the diff)
+# and the list is operator config a PR cannot reach.
+AUTHOR_ON_ALLOWLIST=false
+if [ -n "${GC_PR_TRUSTED_AUTHORS:-}" ] && [ -n "$AUTHOR_LOGIN" ]; then
+    if [ -f "$GC_PR_TRUSTED_AUTHORS" ]; then
+        ALLOW_RAW=$(cat "$GC_PR_TRUSTED_AUTHORS")
+    else
+        ALLOW_RAW="$GC_PR_TRUSTED_AUTHORS"
+    fi
+    LOGIN_LC=$(printf '%s' "$AUTHOR_LOGIN" | tr '[:upper:]' '[:lower:]')
+    while IFS= read -r entry; do
+        [ -z "$entry" ] && continue
+        [ "$(printf '%s' "$entry" | tr '[:upper:]' '[:lower:]')" = "$LOGIN_LC" ] \
+            && { AUTHOR_ON_ALLOWLIST=true; break; }
+    done < <(printf '%s\n' "$ALLOW_RAW" | sed 's/#.*//' | tr ',' '\n' | tr -s '[:space:]' '\n')
+fi
+
+if [ "$AUTHOR_ON_ALLOWLIST" = true ]; then
+    REASONS+=("author on operator trust allowlist: $AUTHOR_LOGIN (identity elevated to collaborator-grade)")
+else
+    case "$AUTHOR_ASSOC" in
+        OWNER|MEMBER|COLLABORATOR) : ;;
+        UNKNOWN) cap limited "author association unknown (non-PR ref or gh unavailable)" ;;
+        *)       cap limited "low author trust: $AUTHOR_ASSOC" ;;
+    esac
+fi
 
 # --- assemble the facts JSON ------------------------------------------------
 if [ "${#REASONS[@]}" -gt 0 ]; then
@@ -176,6 +209,8 @@ jq -n \
     --arg ceiling "$CEILING" \
     --argjson reasons "$REASONS_JSON" \
     --arg author "$AUTHOR_ASSOC" \
+    --arg author_login "$AUTHOR_LOGIN" \
+    --argjson on_allowlist "$AUTHOR_ON_ALLOWLIST" \
     --argjson changed_count "${#FILES[@]}" \
     --argjson changed_files "$FILES_JSON" \
     --argjson files_by_class "$FILES_BY_CLASS" \
@@ -206,6 +241,8 @@ jq -n \
         ceiling_reasons: $reasons,
         facts: {
             author_association: $author,
+            author_login: $author_login,
+            author_on_trust_allowlist: $on_allowlist,
             changed_file_count: $changed_count,
             changed_files: $changed_files,
             added_lines: $added_lines,

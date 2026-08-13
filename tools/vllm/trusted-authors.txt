@@ -1,0 +1,23 @@
+# trusted-authors.txt — operator PR-author trust allowlist for the dev-pack review lane.
+#
+# One GitHub login per line (blank lines and `#` comments ignored; matching is
+# case-insensitive). Wired to the review lane via GC_PR_TRUSTED_AUTHORS in
+# city.toml, read by dev-pack/assets/scripts/pr-prescan.sh.
+#
+# WHAT THIS DOES: a listed author is treated as collaborator-grade, so their PRs
+# can reach the `trusted` posture — the only posture whose diligence auto-runs a
+# scoped unit test unattended. GitHub's own OWNER/MEMBER/COLLABORATOR authors
+# already qualify; this list extends that trust to coworkers and proven
+# contributors GitHub reports as mere CONTRIBUTOR/NONE.
+#
+# WHAT IT DOES NOT DO: it elevates *identity only*. Every deterministic risk cap
+# still applies — a listed author's PR that adds a pickle, touches deps/CI, or
+# trips a dynamic-exec pattern is still floored to restricted/limited. This never
+# bypasses the file/pattern gates, only the author-association penalty.
+#
+# SECURITY: this gates automatic code execution. Add people deliberately; the git
+# history of this file is the audit trail. Only add logins you would let run code
+# on this machine unattended.
+
+# --- add trusted GitHub logins below, one per line ---
+yzong-rh

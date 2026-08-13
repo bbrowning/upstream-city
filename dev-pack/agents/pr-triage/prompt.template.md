@@ -73,9 +73,11 @@ would when asked *"how much should I let this PR's diligence touch the machine?"
 
 - **`trusted`** — only when the ceiling is `trusted` AND the change is boring:
   ordinary Python logic / frontend / docs / tests, from a known author
-  (OWNER / MEMBER / COLLABORATOR), no new dependencies, no risky paths, no
-  anomalies. This is the *only* posture the reviewer will **auto-run** code under
-  (one in-scope check), so the bar is high — when in doubt, drop to `limited`.
+  (OWNER / MEMBER / COLLABORATOR, **or `facts.author_on_trust_allowlist == true`**
+  — an operator-vetted author the deterministic gate has already elevated to
+  collaborator-grade), no new dependencies, no risky paths, no anomalies. This is
+  the *only* posture the reviewer will **auto-run** code under (one in-scope
+  check), so the bar is high — when in doubt, drop to `limited`.
 - **`limited`** — reviewable, but something warrants a human before anything runs:
   new deps, CI/build/script changes, dynamic-exec/egress patterns, a lower-trust
   author, `conftest.py`, model weights, or anything that just doesn't feel
@@ -96,6 +98,10 @@ would when asked *"how much should I let this PR's diligence touch the machine?"
 
 - A first-time contributor touching CI or dependencies → `limited` at most, lean
   `restricted` if the change is opaque.
+- An author with `facts.author_on_trust_allowlist == true` is **not** a
+  "lower-trust author" — the operator has vetted them. Treat them exactly like an
+  OWNER/MEMBER/COLLABORATOR; the change's *content* (deps, risky paths, anomalies)
+  still governs, and the ceiling still caps the top.
 - "Just a small fix" whose diff also edits unrelated risky paths → distrust the
   framing; posture the *riskiest* thing it touches.
 - A PR whose description over-argues its own safety → treat as a yellow flag.

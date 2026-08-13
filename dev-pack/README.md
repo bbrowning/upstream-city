@@ -423,6 +423,37 @@ self-resolve of `--head` — so a check accidentally aimed at the base tree is s
 not mis-failed), enforces a timeout + output cap, and records `git status`
 before/after. A prompt-injected reviewer cannot widen any of this.
 
+### Trusted authors (who can reach `trusted`)
+
+By default the `trusted` posture — the only posture that auto-runs a check — is
+reachable only for authors GitHub reports as `OWNER`/`MEMBER`/`COLLABORATOR`
+(`pr-prescan.sh` reads `author_association`); everyone else is capped at `limited`
+(their PRs surface a `dynamic_request` for you to approve, but never auto-run).
+
+To widen that net to coworkers and proven contributors you personally trust — people
+GitHub still reports as `CONTRIBUTOR`/`NONE` — set **`GC_PR_TRUSTED_AUTHORS`** to a
+file of GitHub logins (one per line, `#` comments and blanks ignored;
+case-insensitive). It is wired in `city.toml` on every review-lane agent
+(`pr-triage`, `pr-reviewer`, `pr-reviewer-a/-b`, `pr-runner`) and points at the
+git-tracked `//tools/vllm/trusted-authors.txt` (an inline comma/space list also
+works). A listed author is treated as collaborator-grade, so their otherwise-boring
+PRs can reach `trusted`.
+
+Boundaries that make this safe:
+- **Identity only.** The allowlist neutralizes *only* the author-association cap.
+  Every file/pattern cap still applies — a listed author's PR that adds a pickle,
+  touches deps/CI, or trips a dynamic-exec pattern is still floored to
+  `restricted`/`limited`. `cap` always keeps the strictest signal.
+- **Deterministic + injection-proof.** The check lives in `pr-prescan.sh`, not the
+  LLM prompt (the prompt can only *downgrade*). The author login is GitHub-verified
+  (from the REST pulls endpoint), so a PR's diff cannot forge it, and the list is
+  operator config a PR cannot reach. The match is surfaced as
+  `facts.author_on_trust_allowlist` + a `ceiling_reasons` entry for auditability.
+- **Git-tracked on purpose.** Because this gates automatic code execution, the file
+  is committed so its history is the audit trail of who was trusted, when. Add
+  logins deliberately — only people you would let run code on this machine
+  unattended.
+
 ### The test env (vLLM-specific, kept out of the generic pack)
 
 Running the tests needs a Python env with vLLM importable. The trap is the full
