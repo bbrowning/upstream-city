@@ -52,12 +52,16 @@ STATE=$(printf '%s' "$SHOW" | jq -r '.[0].metadata["gc.output_json"] // empty')
     || die "bead '$BEAD' has no hard-bug-state.v1 yet (no reconcile step has run)"
 
 printf '%s' "$STATE" | jq -r '
-    "hard-bug arc: \(.bug_bead // "?")",
+    (.last_reconcile.n) as $n | (
+    "bug arc: \(.bug_bead // "?")",
     "  phase:             \(.phase // "?")",
+    "  opinions:          \(if $n == null then "?" else ($n|tostring) end)\(if $n == 1 then " (solo)" else "" end)",
     "  rounds:            root_cause=\(.rounds.root_cause // 0)  fix=\(.rounds.fix // 0)   (cap \(.max_rounds // "?"))",
     "  status:            \(.status // "?")",
     "  chosen implementer:\(.chosen_implementer // "-")",
-    "  last reconcile:    round \(.last_reconcile.round // "?")  aligned=\(if .last_reconcile.aligned == null then "?" else .last_reconcile.aligned end)",
+    (if $n == 1
+     then "  last check:        round \(.last_reconcile.round // "?")  self-verify=\(if .last_reconcile.aligned then "passed" else "caveat" end)"
+     else "  last reconcile:    round \(.last_reconcile.round // "?")  aligned=\(if .last_reconcile.aligned == null then "?" else .last_reconcile.aligned end)" end),
     (if .agreed_root_cause then "  agreed root cause: \(.agreed_root_cause)" else empty end),
     (if .convoy_id then "  convoy:            \(.convoy_id)" else empty end)
-'
+    )'

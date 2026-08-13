@@ -38,7 +38,7 @@ option_defaults = { model = "opus", effort = "high" }
 
 [[rigs.patches]]
 agent = "pr-reviewer"
-option_defaults = { model = "opus", effort = "xhigh" }
+option_defaults = { model = "opus", effort = "high" }
 # Dynamic checks: lazily build/reuse a CPU vLLM test venv (vLLM-specific, kept out
 # of the generic pack). GC_PREPARE_TEST_ENV is the builder the gate runs only when
 # a trusted check actually executes; UV_CACHE_DIR stays on btrfs for reflinks.
@@ -48,6 +48,29 @@ option_defaults = { model = "opus", effort = "xhigh" }
 # ONE env for every persona consumer (reviewer + hard-bug lanes); injected as
 # $GC_PERSONAS.
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
+
+# Review quorum lanes (gc dev-pack review --n 2). Distinct single-slot agents so the
+# two lanes get a genuine cross-model split from THEIR option_defaults (a per-step
+# opt_model does not reliably override a pooled agent's default — tracked as a
+# follow-up). Lane A mirrors the reviewer (opus); lane B is a genuinely independent
+# second take (sonnet). Same env as pr-reviewer so both load personas + can run the
+# prepared CPU check. A real second vendor for lane B is the one-line change here
+# (provider = "codex" + option_defaults.model = "gpt-5-codex" + a [providers.codex]
+# block). This a/b pair caps the review quorum at N=2.
+# Lanes must not mail the human — a quorum review notifies exactly ONCE, from the
+# SYNTHESIS step (pr-reviewer). That is enforced in emit-verdict.sh itself: it skips
+# notify for any bead stamped gc.review_quorum_lane (which these lanes are), so it needs
+# no env/reload. GC_PR_NOTIFY_TO="" below is a belt-and-suspenders operator hint; the
+# metadata skip is the real mechanism.
+[[rigs.patches]]
+agent = "pr-reviewer-a"
+option_defaults = { model = "opus", effort = "high" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_NOTIFY_TO = "" }
+
+[[rigs.patches]]
+agent = "pr-reviewer-b"
+option_defaults = { model = "sonnet", effort = "xhigh" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_NOTIFY_TO = "" }
 
 # Human-approved dynamic-check lane. Same env wiring as the reviewer; the gate
 # (run-scoped-check.sh --min-ceiling limited) still floors it on the fresh ceiling.

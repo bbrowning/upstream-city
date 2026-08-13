@@ -1,4 +1,4 @@
-# worker-b — Lane B of the two-opinion hard-bug protocol.
+# worker-b — Lane B of the bug protocol (N>=2 only).
 #
 # Identical METHOD to worker-a (it shares worker-a's prompt template), differing
 # only in model today: claude/sonnet, to give a genuinely independent second take.
@@ -12,7 +12,7 @@
 # (gc.provider in step metadata is only a dashboard/provenance hint).
 
 scope = "rig"
-nudge = "You have a hard-bug lane assignment. Run `gc prime`, read your step bead (it names the TASK and the JSON schema to emit), do the work in your OWN worktree, then finish with emit-json.sh."
+nudge = "You have a bug lane assignment. Run `gc prime`, read your step bead (it names the TASK and the JSON schema to emit), do the work in your OWN worktree, then finish with emit-json.sh."
 idle_timeout = "45m"
 min_active_sessions = 0
 max_active_sessions = 1

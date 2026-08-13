@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# emit-json.sh — finish a hard-bug step ATOMICALLY in one command: MERGE-write the
+# emit-json.sh — finish a bug step ATOMICALLY in one command: MERGE-write the
 # step's gc.output_json, set gc.outcome (+ optional failure class/reason + schema),
 # CLOSE the bead, and OPTIONALLY notify. Schema-agnostic sibling of dev-pack's
 # emit-verdict.sh: same durable-write + close skeleton, and — like emit-verdict — it
@@ -69,12 +69,12 @@ if [ "$FCLASS" != "none" ]; then
 fi
 
 # --- CLOSE the step ----------------------------------------------------------
-[ -n "$REASON" ] || REASON="hard-bug step: ${SCHEMA:-output} ($OUTCOME)"
+[ -n "$REASON" ] || REASON="bug step: ${SCHEMA:-output} ($OUTCOME)"
 "$GC" bd close "$BEAD" --reason "$REASON"
 
 # --- NOTIFY (opt-in) ---------------------------------------------------------
 [ -n "$NOTIFY" ] || exit 0
-[ -n "$SUBJECT" ] || SUBJECT="hard-bug: ${SCHEMA:-step} $OUTCOME ($BEAD)"
+[ -n "$SUBJECT" ] || SUBJECT="bug: ${SCHEMA:-step} $OUTCOME ($BEAD)"
 # Body: `--render <script>` turns the JSON into prose (the script owns the schema),
 # else a raw-JSON pointer. A render failure falls back to the pointer body so the
 # notification is never lost — the close already happened.

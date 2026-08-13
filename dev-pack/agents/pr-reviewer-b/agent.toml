@@ -1,0 +1,21 @@
+# pr-reviewer-b — Lane B of the review quorum (N>=2).
+#
+# Identical METHOD to pr-reviewer (it shares pr-reviewer's prompt template); it
+# exists only so the two quorum lanes can run DIFFERENT models. Its model (a genuine
+# second take — claude/sonnet by default) is set as a [[rigs.patches]] on this agent
+# in city.toml, alongside its env. To use a REAL second vendor later, that patch is
+# the one-line change (provider = "codex" + option_defaults.model + a [providers.codex]
+# block + creds); this agent.toml and the formulas/prompts do not change.
+#
+# NB: this a/b split caps the review quorum at N=2 — see pr-reviewer-a/agent.toml.
+
+scope = "rig"
+nudge = "You have a review-quorum lane assignment. Run `gc prime`, read your bead, review the diff, dispose by posture (on a trusted PR auto-run one in-scope check via run-scoped-check.sh), write your pr-review.v1 verdict to gc.output_json, then close the step and notify the human."
+idle_timeout = "30m"
+min_active_sessions = 0
+max_active_sessions = 1
+
+prompt_template = "agents/pr-reviewer/prompt.template.md"
+
+work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
+pre_start = ["{{.CityRoot}}/tools/shared/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]

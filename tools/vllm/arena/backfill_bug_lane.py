@@ -4,9 +4,11 @@
 Backfill AND going-forward capture: re-run this after each hard-bug run and it
 merges new decisions into decisions.jsonl (preserving prior token counts even
 after transcripts rotate). One row per unique judged comparison; the coordinator's
-pick (`stronger_lane` + `stronger_rationale`) is the judgment; the two lane beads
+pick (`stronger_lane` + `stronger_rationale`) is the judgment; the N lane beads
 supply each participant's model/provider; per-participant token counts come from
-the per-worker Claude Code transcripts (deduped by message.id).
+the per-worker Claude Code transcripts (deduped by message.id). The arena is
+inherently N>=2 — solo (N=1) bug runs emit the same schemas but have one
+participant, so there is no comparison to rate and they are skipped here.
 
 Tokens only, NO dollars (apply a rate table downstream). `effort` is resolved from
 the pack config (city.toml + agent.toml) — an INTENT proxy; `effort_resolved` is
@@ -232,6 +234,12 @@ def project(export=None, out=A.DECISIONS, quiet=False):
         members = sorted(members, key=lambda m: m[0]["id"])
         rep, recon = members[0]
         parts = build_participants(lanes_by_key.get(key, []))
+        # The arena is inherently N>=2: a pairwise decision needs at least two
+        # participants. N=1 (solo) bug runs emit the same reconcile/diagnosis schemas
+        # but have a single lane, so there is no comparison to capture — no-op them.
+        if len(parts) < 2:
+            skipped += 1
+            continue
         stronger = recon.get("stronger_lane")
         tie = stronger == "tie"
         winner_slot = None if tie else stronger

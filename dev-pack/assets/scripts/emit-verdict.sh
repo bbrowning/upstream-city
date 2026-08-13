@@ -66,7 +66,18 @@ fi
 TO="${GC_PR_NOTIFY_TO-human}"
 [ -z "$TO" ] && exit 0   # notification disabled by the operator
 
-root=$("$GC" bd show "$BEAD" --json 2>/dev/null | jq -r '.[0].metadata["gc.root_bead_id"] // empty' || true)
+# One fetch of the bead's metadata, reused below for the run link.
+bead_json=$("$GC" bd show "$BEAD" --json 2>/dev/null || true)
+
+# A review-quorum LANE must never notify the human — the SYNTHESIS step mails the
+# human exactly once for the whole quorum. Lane beads are stamped
+# gc.review_quorum_lane by the formula; the synthesis bead is not (it carries
+# gc.review_quorum_role=synthesis). This keys off metadata the formula already sets,
+# so it needs no env/reload and can't be forgotten in a prompt.
+qlane=$(printf '%s' "$bead_json" | jq -r '.[0].metadata["gc.review_quorum_lane"] // empty' 2>/dev/null || true)
+[ -n "$qlane" ] && exit 0
+
+root=$(printf '%s' "$bead_json" | jq -r '.[0].metadata["gc.root_bead_id"] // empty' 2>/dev/null || true)
 base="${GC_DASHBOARD_BASE:-http://127.0.0.1:8372/city/workspace/runs}"
 
 # Subject stays a scannable one-liner (the inbox shows it in full); the body is

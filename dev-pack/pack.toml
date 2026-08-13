@@ -1,6 +1,6 @@
 # dev-pack — one engineering-workflow pack, three lanes over a shared spine.
 #
-# PR-review, hard-bug fix, and feature-dev are ONE workflow with different inputs:
+# PR-review, bug fix, and feature-dev are ONE workflow with different inputs:
 #   decompose -> verify claims -> converge -> (optionally) act -> check
 # over a per-rig knowledge corpus (personas, injected via $GC_PERSONAS). What
 # differs per lane is the entry artifact, the output schema, and a few dials — not
@@ -23,19 +23,22 @@
 #     agents/pr-runner/     human-approved dynamic-check lane (1 slot): runs one
 #                           operator-approved check on a `limited` PR, gated the same.
 #
-#   bug     — a symptom/bead -> root cause + fix. TWO independent worker lanes
-#             diagnose the same bug and act as each other's second opinion
-#             ("consider or refute — not a mandate") until root cause, then fix,
-#             converge (coordinator-judged); the stronger lane implements + tests,
-#             the other cross-reviews the diff AND its evidence.
+#   bug     — a symptom/bead -> root cause + fix, over N opinions (the fan-out dial,
+#             `--n`). N=1 (default) is a solo lane that self-verifies its keystones;
+#             N>=2 fans out independent worker lanes (different models) that act as
+#             each other's second opinion ("consider or refute — not a mandate") until
+#             root cause, then fix, converge (coordinator-judged, with the
+#             correlated-convergence gate); the stronger lane implements + tests, the
+#             other cross-reviews the diff AND its evidence.
 #     agents/bug-worker-a/  lane A: diagnose / reconsider / implement / cross-review,
 #                           single slot, its OWN detached worktree.
-#     agents/bug-worker-b/  lane B: identical method (shares worker-a's prompt),
+#     agents/bug-worker-b/  lane B (N>=2): identical method (shares worker-a's prompt),
 #                           different model. A real second vendor is a one-line
 #                           [[rigs.patches]] provider change (see city.toml).
-#     agents/bug-coordinator/ the protocol driver (1 slot): reads both lanes, makes
-#                           the subjective convergence call, relays second opinions,
-#                           enforces the per-phase cap, escalates to the human.
+#     agents/bug-coordinator/ the synthesis/judge driver (1 slot): reads the N lanes,
+#                           runs the self-verify pass (N=1) or the convergence call +
+#                           second-opinion relay (N>=2), enforces the per-phase cap,
+#                           escalates to the human.
 #
 #   feature — an intent/bead -> an implementation + tests on a paude/<bead> branch,
 #             pushed to origin. The push is the durable output; opening/merging the
@@ -44,23 +47,27 @@
 #                           branch, pushes to origin.
 #
 # FORMULAS (compile-time DAGs; lanes stay separate formulas that share the spine)
-#     formulas/pr-review.toml         triage -> review + pr-review.v1 verdict.
+#     formulas/pr-review.toml         N=1 review: triage -> review + pr-review.v1 verdict.
+#     formulas/pr-review-quorum.toml  N>=2 review: triage -> N reviewer lanes ->
+#                                     synthesis + pr-review-quorum.v1 (superset verdict).
 #     formulas/pr-review-dynamic.toml human-slung approval lane: run one approved
 #                                     check + pr-review-dynamic.v1 contract.
 #     formulas/feature-dev.toml       per-run implement task + feature-dev.v1 report.
-#     formulas/hard-bug-round.toml    one convergence round: two lanes + a
-#                                     coordinator reconcile fan-in. Re-slung per round.
+#     formulas/hard-bug-round.toml    N>=2 round: the lanes + a coordinator reconcile
+#                                     fan-in. Re-slung per round.
+#     formulas/hard-bug-round-solo.toml N=1 round: one lane + a coordinator self-verify
+#                                     synthesis. Re-slung per round.
 #     formulas/hard-bug-finalize.toml implement -> cross-review -> finalize.
 #     orders/fetch-origin.toml        read-only `git fetch --prune` on a cooldown.
 #
 # COMMANDS (namespaced: `gc dev-pack <cmd>`)
-#     review <PR>       start a PR review (slings pr-review to <rig>/pr-reviewer).
-#     bug <bead>        start a two-opinion hard-bug run (resolves rig + targets).
+#     review <PR>       start a PR review (--n 1 single reviewer, --n 2 quorum).
+#     bug <bead>        start a bug run (--n 1 solo, --n 2 two-opinion; resolves rig).
 #     feature <bead>    start a feature implementation.
 #     materialize <PR>  check a PR out into a DURABLE, human-owned worktree (outside
 #                       .gc/, never reaped) so a person can read/diff/run it.
 #     summary <bead|PR> re-render a stored pr-review / dynamic-check verdict, LLM-free.
-#     status <bead>     render a hard-bug arc's durable state (phase/round/status).
+#     status <bead>     render a bug arc's durable state (phase/round/status).
 #
 # SHARED SPINE
 #     template-fragments/recovery-header  `gc prime` recovery note (every prompt).
@@ -108,4 +115,4 @@
 [pack]
 name = "dev-pack"
 schema = 2
-description = "One engineering-workflow pack, three lanes over a shared spine: posture-gated PR review (triage → review, trusted auto-run + human-approved dynamic-check lane), two-opinion hard-bug fix (diagnose → converge → implement → cross-review), and a feature-dev write lane — each isolated in its own git worktree (native work_dir + pre_start), sharing one persona corpus via $GC_PERSONAS."
+description = "One engineering-workflow pack, three lanes over a shared spine: posture-gated PR review (triage → review or N-opinion quorum, trusted auto-run + human-approved dynamic-check lane), bug fix with an N-opinion dial (solo self-verify or two-opinion diagnose → converge → implement → cross-review), and a feature-dev write lane — each isolated in its own git worktree (native work_dir + pre_start), sharing one persona corpus via $GC_PERSONAS."

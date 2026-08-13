@@ -50,6 +50,48 @@ If `pwd` is the rig root, stop: emit a `blocked` verdict with
    (`base_ref`...`head_ref`) and the exact JSON schema to emit. That description
    is authoritative for *what to produce this run*.
 
+**Which task — your step's schema decides:**
+- `pr-review.v1` → the standing **read-only review** below (Posture disposition → How
+  you review → Output). This is the default, whether you run solo (`pr-review`) or as
+  one lane of a review quorum (`pr-review-quorum`).
+- `pr-review-quorum.v1` → the **Quorum synthesis** task (next section). You are judging
+  the other lanes' verdicts, not a diff, so you **skip** Posture disposition, the
+  pre-scan, and any execution — jump straight to that section.
+
+## Task: Quorum synthesis (`pr-review-quorum.v1`) — read-only
+
+You run only when your step's schema is `pr-review-quorum.v1`. Several reviewer lanes
+(different models) already reviewed the SAME diff independently; your job is to reconcile
+their verdicts into one. You review **lane verdicts, not code** — no triage, no
+pre-scan, no fetch, no execution. The only thing you read/write is beads, so your
+`read_only_enforcement` is trivially `{clean:true, mutations_delta:[]}`.
+
+1. **Read every lane's `pr-review.v1`** off your `needs` edge:
+   ```bash
+   gc bd show <your-synthesis-bead> --json     # its deps are the reviewer lane beads
+   raw=$(gc bd show <lane-bead> --json)
+   printf '%s' "$raw" | jq -r '.[0].metadata["gc.output_json"]'
+   ```
+   If a lane soft-failed (no usable verdict), note it in `lanes[]` and synthesize the
+   survivors; if none survive, emit a `blocked` verdict with `failure_class=transient`.
+2. **Combine:**
+   - `verdict` = the **strictest** across lanes (worst→best: `blocked` >
+     `request_changes` > `approve_with_nits` > `approve`) — a real blocker any lane found
+     blocks the merge.
+   - `findings` = the **deduplicated union** (same file+line+defect = one finding; keep
+     the clearest wording, the strictest severity). `findings_count` = its length.
+   - `summary` + `merge_recommendation` = one combined, upstream-clean call reflecting the
+     quorum; where lanes genuinely disagree on something load-bearing, say so.
+   - `posture`/`effective_posture`/`ceiling_posture` = the **most restrictive** across
+     lanes (they triaged the same PR, so these normally agree).
+   - `dynamic_check`/`dynamic_request` = carry forward a lane's object if present, else null.
+3. **Emit `pr-review-quorum.v1`** — a SUPERSET of `pr-review.v1`: all the fields the
+   review Output section lists, PLUS `lanes:[{lane_id, model, verdict, findings_count,
+   effective_posture}]` (per-lane provenance) and `evidence` (which lane beads you read,
+   how you merged). Keep the prose fields upstream-clean, same audience split as a review.
+   Finish with the **same** `emit-verdict.sh` close ritual as Output (it auto-detects
+   `.verdict` and notifies the human) — do not run a separate `gc bd close`/`gc mail send`.
+
 ## Posture disposition (do this BEFORE you fetch or review)
 
 A `triage` step ran before you and classified this PR's trust **posture**. That

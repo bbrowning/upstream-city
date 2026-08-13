@@ -1,6 +1,6 @@
 # dev-pack — one engineering-workflow pack: review · bug · feature, worktree-isolated
 
-**PR-review, hard-bug fix, and feature-dev are one workflow with different inputs**
+**PR-review, bug fix, and feature-dev are one workflow with different inputs**
 — decompose → verify → converge → (optionally) act → check, over a per-rig persona
 corpus. This pack hosts all three as sibling lanes over one shared spine, on a
 single rig, with the same "zero chance of stomping on each other" guarantee you'd
@@ -8,10 +8,16 @@ get from N separate containers by hand — but from **native gascity mechanics
 alone** (no phantom `isolation="worktree"` primitive; that does not exist in
 v1.4.0). Each agent slot runs inside its **own git worktree**.
 
+Review and bug carry an orthogonal **opinion-count dial** (`--n`): N=1 is a single
+lane that self-verifies its own keystones; N≥2 fans out N independent opinions
+(different models/vendors) into a synthesis/judge step that takes the best. N is
+*breadth* (how many opinions per stage) — orthogonal to the bug lane's `--max-rounds`
+*depth* (how many convergence iterations those opinions go through).
+
 | Lane | Kick off | What it does |
 |---|---|---|
-| **review** | `gc dev-pack review <PR>` | posture-gated PR review → a structured merge verdict (read-only + one trusted auto-check) |
-| **bug** | `gc dev-pack bug <bead>` | two independent lanes diagnose + act as each other's second opinion until root cause & fix converge; the stronger implements + tests, the other cross-reviews |
+| **review** | `gc dev-pack review <PR> [--n N]` | posture-gated PR review → a structured merge verdict (read-only + one trusted auto-check); N≥2 runs a reviewer quorum → synthesis |
+| **bug** | `gc dev-pack bug <bead> [--n N]` | N=1 solo diagnosis + keystone self-verify; N≥2 independent lanes act as each other's second opinion until root cause & fix converge, then the stronger implements + tests and the other cross-reviews |
 | **feature** | `gc dev-pack feature <bead>` | implement an assignment on a `paude/<bead>` branch, run tests, push |
 
 Helpers: `gc dev-pack materialize <PR>` (durable human checkout) ·
@@ -25,7 +31,7 @@ artifact + output schema + a formula.
 
 > Grounded against **gascity v1.4.0** (installed binary + source). Every
 > mechanism below is verified against live behavior: this pack is built,
-> installed on the `vllm` rig, and has run PR reviews and two-opinion hard-bug
+> installed on the `vllm` rig, and has run PR reviews and two-opinion bug
 > diagnosis end-to-end.
 
 ## The flow at a glance (the "aha")
@@ -161,15 +167,19 @@ skip) and never deletes branches. **Naming constraint:** never name a slot
 pack.toml                             # manifest (schema 2); no [[named_session]] — see note below
 # --- review lane ---
 agents/pr-triage/                     # deterministic-first posture triage (1 slot)
-agents/pr-reviewer/                   # posture-gated reviewer, pooled up to 2 slots (own worktree each)
+agents/pr-reviewer/                   # posture-gated reviewer, pooled up to 2 slots (own worktree each); N=1 review + quorum synthesis
+agents/pr-reviewer-a/                 # review-quorum lane A (1 slot, opus): shares pr-reviewer's prompt
+agents/pr-reviewer-b/                 # review-quorum lane B (1 slot, sonnet): shares pr-reviewer's prompt
 agents/pr-runner/                     # human-approved dynamic-check lane (1 slot)
-formulas/pr-review.toml               # triage → review TASK + pr-review.v1 verdict contract
+formulas/pr-review.toml               # N=1: triage → review TASK + pr-review.v1 verdict contract
+formulas/pr-review-quorum.toml        # N=2: triage → pr-reviewer-a + pr-reviewer-b → synthesis + pr-review-quorum.v1
 formulas/pr-review-dynamic.toml       # human-approved check TASK + pr-review-dynamic.v1 contract
-# --- bug lane (two opinions until convergence) ---
-agents/bug-worker-a/                  # lane A: diagnose / reconsider / implement / cross-review (1 slot)
-agents/bug-worker-b/                  # lane B: same method (shares worker-a's prompt), different model
-agents/bug-coordinator/               # protocol driver (1 slot): convergence call, relays, cap, escalation
-formulas/hard-bug-round.toml          # one round: two lanes + coordinator reconcile fan-in
+# --- bug lane (N-opinion dial: solo self-verify, or opinions until convergence) ---
+agents/bug-worker-a/                  # lane A / sole lane at N=1: diagnose / reconsider / implement / cross-review (1 slot)
+agents/bug-worker-b/                  # lane B (N≥2): same method (shares worker-a's prompt), different model
+agents/bug-coordinator/               # synthesis/judge driver (1 slot): self-verify (N=1) or convergence call + relays (N≥2), cap, escalation
+formulas/hard-bug-round.toml          # N≥2 round: the lanes + coordinator reconcile fan-in
+formulas/hard-bug-round-solo.toml     # N=1 round: one lane + coordinator self-verify synthesis
 formulas/hard-bug-finalize.toml       # implement → cross-review → finalize
 # --- feature lane ---
 agents/feature-dev/                   # single write lane (1 slot): branch/push, never self-close arc
@@ -177,11 +187,11 @@ formulas/feature-dev.toml             # per-run implement TASK + feature-dev.v1 
 # --- shared ---
 orders/fetch-origin.toml              # read-only `git fetch --prune` on a cooldown (warm refs)
 commands/review/                      # `gc dev-pack review <PR>`     — start a PR review
-commands/bug/                         # `gc dev-pack bug <bead>`      — start a two-opinion hard-bug run
+commands/bug/                         # `gc dev-pack bug <bead>`      — start a bug run (--n 1 solo, --n 2 two-opinion)
 commands/feature/                     # `gc dev-pack feature <bead>`  — start a feature implementation
 commands/materialize/                 # `gc dev-pack materialize <PR>`— durable human checkout
 commands/summary/                     # `gc dev-pack summary <bead|PR>`— re-render a verdict readably
-commands/status/                      # `gc dev-pack status <bead>`   — a hard-bug arc's durable state
+commands/status/                      # `gc dev-pack status <bead>`   — a bug arc's durable state
 template-fragments/recovery-header.template.md  # `gc prime` recovery note (every prompt)
 template-fragments/worktree-guard.template.md   # "you're in your own worktree; abort in rig root" guard
 template-fragments/persona-load.template.md     # load base + activated personas; lens-parameterized
@@ -253,8 +263,9 @@ on-demand slot auto-materializes the rig and the session.
    gc reload                     # or gc restart, per your setup
    gc doctor                     # THIS validates the pre_start script exists on
                                  # disk (the pre-start-scripts check) — not gc lint
-   gc formula list               # expect: pr-review, pr-review-dynamic, feature-dev,
-                                 #         hard-bug-round, hard-bug-finalize
+   gc formula list               # expect: pr-review, pr-review-quorum, pr-review-dynamic,
+                                 #         feature-dev, hard-bug-round, hard-bug-round-solo,
+                                 #         hard-bug-finalize
    gc agent list                 # expect: vllm/pr-triage, vllm/pr-reviewer, vllm/pr-runner,
                                  #         vllm/bug-coordinator, vllm/bug-worker-a, vllm/bug-worker-b,
                                  #         vllm/feature-dev
@@ -281,10 +292,16 @@ back. This is the normal flow and needs no command memorization on your part.
 itself), a branch, or a sha:
 
 ```bash
-gc dev-pack review 51296                 # defaults: --rig vllm --base origin/main
+gc dev-pack review 51296                 # defaults: --rig vllm --base origin/main --n 1
 gc dev-pack review my-branch --rig vllm --base v0.6.0
+gc dev-pack review 51296 --n 2 --models opus,sonnet   # a 2-opinion reviewer quorum → synthesis
 gc dev-pack review 51296 --dry-run       # print the gc sling it would run
 ```
+
+At `--n 2` the review lane slings `pr-review-quorum` (triage → two independent
+reviewer lanes → a synthesis step that dedups findings and takes the strictest
+merge call), emitting `pr-review-quorum.v1` — a superset of `pr-review.v1`, so the
+same summary/notify path works. `--models` maps positionally to the lanes.
 
 **Power-user path — direct sling.** The verb above is a thin wrapper around this
 (what the lead uses under the hood):
@@ -492,29 +509,41 @@ worktree**, implements, runs tests, and **pushes** (the durable output). It does
 arc/tracking bead** — that closes on a real checkpoint (PR opened, CI green,
 merged), not on self-report.
 
-## Fix a hard bug (two opinions until convergence)
+## Fix a bug (the N-opinion dial)
 
-Some bugs are subtle enough that one lane's confident-but-wrong diagnosis is the
-real risk. The **bug** lane runs **two independent worker lanes** (different
-models) on the same bug; each produces a root cause + fix sketch and acts as the
-other's **second opinion** ("consider or refute — not a mandate"). A
-**coordinator** relays those opinions and makes the subjective call on when root
-cause, then the fix, have converged; the stronger lane implements + tests, the
-other cross-reviews the diff **and its evidence**. Load-bearing keystones (a token
-id, a config default, or a causal step in the mechanism) must be **verified, not
-guessed** — an unverified keystone caps confidence and hedges the mechanism.
+The **bug** lane carries an opinion-count dial, `--n`:
+
+- **`--n 1` (default) — solo.** One lane produces a root cause + fix sketch and
+  **self-verifies its keystones**; the coordinator's synthesis is a keystone
+  self-verify pass (no second lane to reconcile against). Cheapest; good when a bug
+  is unlikely to hinge on a confident-but-wrong guess.
+- **`--n 2` — two opinions.** Two independent worker lanes (different models) run the
+  same bug and act as each other's **second opinion** ("consider or refute — not a
+  mandate"). The coordinator relays those opinions, makes the subjective call on when
+  root cause then fix have converged, and applies the **correlated-convergence gate**
+  (agreement on a keystone *both* lanes only guessed is not convergence — it bounces a
+  directed verify round). The stronger lane implements + tests; the other cross-reviews
+  the diff **and its evidence**.
+
+Either way, load-bearing keystones (a token id, a config default, or a causal step in
+the mechanism) must be **verified, not guessed** — an unverified keystone caps
+confidence and hedges the mechanism. That self-verify discipline (the "B" seam) holds
+at every N; the correlated-convergence gate (the "C" seam) exists only at N≥2. `--n` is
+*breadth* (opinions per stage); `--max-rounds` is *depth* (convergence iterations).
 
 **Primary path — ask the lead** ("investigate vllm-123"). **Manual path — the
 `bug` command** (rig inferred from the bead prefix; targets filled in for you):
 
 ```bash
-gc dev-pack bug vllm-123                    # Stage-1 report-only (default)
-gc dev-pack bug vllm-123 --loop             # drive the full convergence loop
+gc dev-pack bug vllm-123                    # N=1 solo, Stage-1 report-only (defaults)
+gc dev-pack bug vllm-123 --n 2 --models opus,sonnet   # two cross-model opinions
+gc dev-pack bug vllm-123 --n 2 --loop      # drive the full convergence loop
 gc dev-pack bug vllm-123 --max-rounds 3 --lane-b-model sonnet
-gc dev-pack bug vllm-123 --dry-run          # print the gc sling it would run
+gc dev-pack bug vllm-123 --dry-run         # print the gc sling it would run
 ```
 
-The coordinator re-slings `hard-bug-round` each round and `hard-bug-finalize` to
+The coordinator re-slings the same-arity round formula each round
+(`hard-bug-round-solo` at N=1, `hard-bug-round` at N≥2) and `hard-bug-finalize` to
 implement + cross-review. Track the arc's durable state any time (LLM-free):
 
 ```bash

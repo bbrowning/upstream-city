@@ -1,15 +1,15 @@
-# worker-a — Lane A of the two-opinion hard-bug protocol (claude/opus).
+# worker-a — Lane A of the bug protocol (claude/opus); the sole lane at N=1.
 #
 # One WRITE-capable lane, single slot, in its own detached worktree. The lane
 # IDENTITY (worker-a) and its default MODEL live here; the per-run TASK (diagnose /
 # reconsider / implement / cross-review) and the exact output schema come from the
 # formula step's description — the same division of labor as pr-review's reviewer.
 #
-# On-demand + rig-scoped: a session spins up when a hard-bug step is routed to it
+# On-demand + rig-scoped: a session spins up when a bug step is routed to it
 # and idles out afterward.
 
 scope = "rig"
-nudge = "You have a hard-bug lane assignment. Run `gc prime`, read your step bead (it names the TASK — diagnose / reconsider / implement / cross-review — and the JSON schema to emit), do the work in your OWN worktree, then finish with emit-json.sh."
+nudge = "You have a bug lane assignment. Run `gc prime`, read your step bead (it names the TASK — diagnose / reconsider / implement / cross-review — and the JSON schema to emit), do the work in your OWN worktree, then finish with emit-json.sh."
 idle_timeout = "45m"
 min_active_sessions = 0
 max_active_sessions = 1          # single slot => stable AgentBase "bug-worker-a" => stable worktree

@@ -1,4 +1,4 @@
-# coordinator — the hard-bug protocol driver.
+# coordinator — the bug protocol synthesis/judge driver (N-opinion).
 #
 # It runs the OUTER loop that a formula DAG cannot express: after each round's two
 # lanes reconcile, it makes the subjective "aligned close enough?" call, relays each
@@ -6,7 +6,7 @@
 # next round (or the implement/cross-review finalize), enforces the per-phase cap,
 # and escalates to the human. All judgment lives in its prompt — never in Go.
 #
-# Single slot: one hard-bug run at a time in this build. Its step does its judgment,
+# Single slot: one bug run at a time in this build. Its step does its judgment,
 # slings the next step, writes durable arc state, then CLOSES — it does not stay
 # resident. The next reconcile/finalize step re-nudges a fresh session, and the arc
 # bead's hard-bug-state.v1 lets it resume exactly where it left off.

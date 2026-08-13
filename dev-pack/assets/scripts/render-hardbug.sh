@@ -41,7 +41,7 @@ done
 if [ -z "$VF" ] || [ "$VF" = "-" ]; then
     JSON=$(cat)
 else
-    [ -f "$VF" ] || die "hard-bug file not found: $VF"
+    [ -f "$VF" ] || die "bug file not found: $VF"
     JSON=$(cat "$VF")
 fi
 
@@ -69,25 +69,52 @@ if (.aligned != null) then
   | (.stuck)                      as $stuck
   | (.failure_class // "none")    as $fclass
   | (.failure_reason // "")       as $freason
+  | (.n)                          as $ncount
+  | (($ncount == 1))              as $solo
+  | (if $aligned == "true" then "passed" else "caveat" end) as $selfv
   | (
-      [ ( ["hard-bug \($subj) \($phase) r\($round)",
-           "aligned=\($aligned)", "stronger=\($slane)", "next=\($next)"] | join(" · ") ),
-        "",
-        "## Hard-bug — \($subj)   (\($phase), round \($round))",
-        "aligned: \($aligned)   stronger lane: \($slane)   next: \($next)"
-        + (if ($stuck == true) then "   (stuck)" else "" end) ]
+      ( if $solo
+        then [ ( ["bug \($subj) \($phase) r\($round)",
+                 "solo (N=1)", "self-verify=\($selfv)", "next=\($next)"] | join(" · ") ),
+               "",
+               "## Bug — \($subj)   (\($phase), round \($round))",
+               "opinions: 1 (solo)   self-verify: \($selfv)   next: \($next)" ]
+        else [ ( ["bug \($subj) \($phase) r\($round)",
+                 "aligned=\($aligned)", "stronger=\($slane)", "next=\($next)"] | join(" · ") ),
+               "",
+               "## Bug — \($subj)   (\($phase), round \($round))",
+               "aligned: \($aligned)   stronger lane: \($slane)   next: \($next)"
+               + (if ($stuck == true) then "   (stuck)" else "" end) ]
+        end )
       + (if $fclass != "none" then ["", "⚠ step \($fclass): \($freason)"] else [] end)
-      + (if ($srat|nn) then ["", "Stronger lane", "  \($slane) — \($srat)"] else [] end)
-      + ["", "Divergences"]
-      + (if ((.divergences // []) | length) == 0
-         then ["  (none — the lanes align on this dimension)"]
-         else ( .divergences | to_entries | map(
-                  (.key + 1) as $n | .value as $d |
-                  [ "  \($n). \($d.topic // "(untitled)")" ]
-                  + (if ($d.lane_a_position|nn) then ["     lane A: \($d.lane_a_position)"] else [] end)
-                  + (if ($d.lane_b_position|nn) then ["     lane B: \($d.lane_b_position)"] else [] end)
-                  + (if ($d.why_it_matters|nn) then ["     why it matters: \($d.why_it_matters)"] else [] end)
-                ) | add )
+      + (if (.report != null)
+         then ( .report as $r
+                | ["", "Root cause" + (if ($r.confidence|nn) then " (confidence: \($r.confidence))" else "" end),
+                   "  \($r.root_cause // "?")"]
+                + (if ($r.mechanism|nn) then ["", "Mechanism", "  \($r.mechanism)"] else [] end)
+                + (if ($r.proposed_fix != null)
+                   then ["", "Proposed fix"]
+                        + (if ($r.proposed_fix.summary|nn) then ["  \($r.proposed_fix.summary)"] else [] end)
+                        + (($r.proposed_fix.changes // []) | map("  - \(.file // "?"): \(.what // "?")"))
+                   else [] end)
+                + (if (($r.key_evidence // []) | length) > 0
+                   then ["", "Key evidence"]
+                        + ($r.key_evidence | map("  - \(.ref // "?")" + (if (.note|nn) then " — \(.note)" else "" end)))
+                   else [] end) )
+         else [] end)
+      + (if ($solo | not) and ($srat|nn) then ["", "Stronger lane", "  \($slane) — \($srat)"] else [] end)
+      + (if $solo then []
+         else ["", "Divergences"]
+              + (if ((.divergences // []) | length) == 0
+                 then ["  (none — the lanes align on this dimension)"]
+                 else ( .divergences | to_entries | map(
+                          (.key + 1) as $n | .value as $d |
+                          [ "  \($n). \($d.topic // "(untitled)")" ]
+                          + (if ($d.lane_a_position|nn) then ["     lane A: \($d.lane_a_position)"] else [] end)
+                          + (if ($d.lane_b_position|nn) then ["     lane B: \($d.lane_b_position)"] else [] end)
+                          + (if ($d.why_it_matters|nn) then ["     why it matters: \($d.why_it_matters)"] else [] end)
+                        ) | add )
+                 end)
          end)
       + (if ((.unverified_keystones // []) | length) > 0
          then ["", "Unverified keystones"]
@@ -96,7 +123,7 @@ if (.aligned != null) then
          else [] end)
       + ["", "What happens next"]
       + [ "  " + (
-            if   $next == "report_only"        then "Stage-1 report only — nothing was changed. Review the root cause / divergence above, then re-run with --loop to drive convergence, or take it from here."
+            if   $next == "report_only"        then "Stage-1 report only — nothing was changed. Review the root cause above, then re-run with --loop to " + (if $solo then "act on it" else "drive convergence" end) + ", or take it from here."
             elif $next == "escalate"           then "The lanes did not converge (or are stuck) — this arc is held for you (hold=mayor). Review the divergence above and adjust the direction, or fix it directly."
             elif $next == "relay_next_round"   then "Converging automatically — the coordinator is relaying each lane's position into another round. No action needed."
             elif $next == "advance_phase"      then "Root cause agreed — advancing to the fix phase automatically. No action needed."
@@ -116,10 +143,10 @@ elif (.concurred != null) or (.branch != null) or (.status != null) then
   | (.failure_class // "none")    as $fclass
   | (.failure_reason // "")       as $freason
   | (
-      [ ( ["hard-bug \($subj): \($status)"]
+      [ ( ["bug \($subj): \($status)"]
           + (if ($branch|nn) then [$branch] else [] end) | join(" · ") ),
         "",
-        "## Hard-bug finalize — \($subj)",
+        "## Bug finalize — \($subj)",
         "status: \($status)   concurred: \($concurred)"
         + (if ($branch|nn) then "   branch: \($branch)" else "" end) ]
       + (if $fclass != "none" then ["", "⚠ step \($fclass): \($freason)"] else [] end)
@@ -134,10 +161,10 @@ elif (.concurred != null) or (.branch != null) or (.status != null) then
       | join("\n")
     )
 else
-    # --- unrecognized hard-bug schema: safe generic dump ----------------------
-    [ "hard-bug step (\(.subject // "?"))",
+    # --- unrecognized bug schema: safe generic dump ----------------------
+    [ "bug step (\(.subject // "?"))",
       "",
-      "## Hard-bug step — \(.subject // "?")",
+      "## Bug step — \(.subject // "?")",
       "(unrecognized schema — raw fields below)",
       "" ]
     + ( to_entries | map("  \(.key): \(.value | tojson)") )
