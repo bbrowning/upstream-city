@@ -1,0 +1,24 @@
+# pr-reviewer-gpt56sol-xhigh — a review lane PROFILE (codex gpt-5.6-sol @ xhigh).
+#
+# A SECOND-VENDOR review lane: an OpenAI Codex agent, not Claude. Like the other
+# reviewer profiles it is a single-slot agent that shares pr-reviewer's METHOD (same
+# prompt template) and differs ONLY in the model/effort PINNED via its [[rigs.patches]]
+# option_defaults in city.toml — plus `provider = "codex"` there. This one runs at xhigh
+# (codex's TOP effort — there is no `max`), so it is the apples-to-apples counterpart to
+# the Claude xhigh profiles: `--lanes opus48-xhigh,gpt56sol-xhigh` compares opus 4.8 vs
+# gpt-5.6-sol at MATCHED effort. Single slot so its worktree/HEAD is stable; used SOLO it
+# notifies the human, used as a quorum lane it is stamped gc.review_quorum_lane and stays
+# silent (synthesis notifies once).
+
+scope = "rig"
+nudge = "You have a review lane assignment. Run `gc prime`, read your bead, review the diff, dispose by posture (on a trusted PR auto-run one in-scope check via run-scoped-check.sh), write your pr-review.v1 verdict to gc.output_json, then close the step and notify the human."
+idle_timeout = "30m"
+min_active_sessions = 0
+max_active_sessions = 1
+
+# Share pr-reviewer's method (DRY). adjustFragmentPath resolves this against the pack root.
+prompt_template = "agents/pr-reviewer/prompt.template.md"
+
+# Its OWN detached worktree (single slot → stable {{.AgentBase}} → stable worktree).
+work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
+pre_start = ["{{.CityRoot}}/tools/shared/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]

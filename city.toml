@@ -31,20 +31,18 @@ value = "claude-opus-4-8"
 label = "Opus 4.8 (pinned id)"
 flag_args = ["--model", "claude-opus-4-8"]
 
-# --- Codex (second vendor) — commented activation template -------------------
-# `gc dev-pack review --lineup 'codex:gpt-5.6-sol:high,...'` is REJECTED until codex is
-# wired (run.sh prints these steps). Provider is per-agent, not per-dispatch, so codex
-# needs its own provider block + agents. To activate:
-#   (1) uncomment this block, set a real OPENAI_API_KEY (the `codex` CLI must be on PATH);
-#   (2) add pr-reviewer-codex-a/-b agents (copy dev-pack/agents/pr-reviewer-a, share
-#       pr-reviewer's prompt template) and bind provider="codex" via [[rigs.patches]];
-#   (3) teach commands/review/run.sh to map provider=codex -> those targets.
-# NB: codex effort caps at xhigh (no `max`); its instructions file is AGENTS.md. Valid
-# codex models: gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.3-codex, o3, o4-mini.
-# [providers.codex]
-# base = "builtin:codex"
-# option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
-# env = { OPENAI_API_KEY = "sk-...", OPENAI_BASE_URL = "https://api.openai.com/v1" }
+# --- Codex (second vendor) ---------------------------------------------------
+# The `codex` CLI is installed and ChatGPT-OAuth authenticated (CODEX_HOME/~/.codex),
+# so NO OPENAI_API_KEY/OPENAI_BASE_URL is needed here. builtin:codex ships the model
+# enum (gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.3-codex, o3, o4-mini)
+# and effort choices (low|medium|high|xhigh — NO `max`; instructions file is AGENTS.md).
+# A review lane binds provider="codex" + option_defaults per-agent (see the
+# pr-reviewer-gpt56sol-medium patch below); it is picked up by
+# `gc dev-pack review --lanes <name>` with no run.sh change (the --lanes router is
+# name-based / provider-agnostic).
+[providers.codex]
+base = "builtin:codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
 
 [[rigs]]
 name = "paude"
@@ -125,6 +123,36 @@ env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/w
 [[rigs.patches]]
 agent = "pr-reviewer-sonnet-xhigh"
 option_defaults = { model = "sonnet", effort = "xhigh" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
+
+# The SECOND-VENDOR review profile: OpenAI Codex (gpt-5.6-sol @ medium), not Claude.
+# The ONLY differences from the claude profiles above are `provider = "codex"` and the
+# model/effort; everything else (prompt, worktree, env, notify behaviour) is identical,
+# so it slots into --lanes exactly like the others. Opt-in only — NOT a default lane;
+# reach it with `--lanes gpt56sol-medium` (solo) or `--lanes opus48-xhigh,gpt56sol-medium`
+# (cross-vendor quorum). Same env as the claude reviewers so codex loads the vLLM persona
+# corpus and can run the prepared CPU check. Codex effort caps at xhigh (no `max`).
+[[rigs.patches]]
+agent = "pr-reviewer-gpt56sol-medium"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
+
+# Codex gpt-5.6-sol @ xhigh — the apples-to-apples counterpart to the Claude xhigh
+# profiles, so `--lanes opus48-xhigh,gpt56sol-xhigh` compares opus 4.8 vs gpt-5.6-sol at
+# MATCHED effort (xhigh is codex's top effort — no `max`). Opt-in, same env as the others.
+[[rigs.patches]]
+agent = "pr-reviewer-gpt56sol-xhigh"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
+
+# Codex gpt-5.6-luna @ xhigh — a sibling codex model to gpt-5.6-sol, for a third-vendor
+# opinion. Opt-in, same env as the others.
+[[rigs.patches]]
+agent = "pr-reviewer-gpt56luna-xhigh"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-luna", effort = "xhigh" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 # Human-approved dynamic-check lane. Same env wiring as the reviewer; the gate

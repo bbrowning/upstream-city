@@ -332,7 +332,9 @@ gc dev-pack review 51296 --lanes opus46-xhigh                # N=1 solo on the 4
 Each name resolves to `<rig>/<name>` or the short `<rig>/pr-reviewer-<name>`; an unknown name
 fails loudly with the available list. Discover profiles with `gc agent list | grep pr-reviewer-`.
 Seeded profiles: `opus46-xhigh` (claude-opus-4-6), `opus48-xhigh` (claude-opus-4-8),
-`sonnet-xhigh` (claude-sonnet-5), all at `xhigh`.
+`sonnet-xhigh` (claude-sonnet-5) — all Claude at `xhigh` — plus the codex second vendor:
+`gpt56sol-medium`, `gpt56sol-xhigh` (`gpt-5.6-sol`), and `gpt56luna-xhigh` (`gpt-5.6-luna`),
+see below.
 
 **Add a profile (new model/effort combo).** Create `dev-pack/agents/pr-reviewer-<name>/`
 (copy an existing profile — they all share `pr-reviewer`'s prompt) and a `[[rigs.patches]]`
@@ -347,10 +349,24 @@ silently drops it at launch (a data gap, not a limit; see the recipe in `city.to
 > the model in `option_defaults` (baked into the launch command) is the reliable path today. A
 > gascity fix that reads the override from the trigger bead would restore an arbitrary per-run dial.
 
-**Codex (second vendor)** is not wired yet — provider is per-agent, not per-dispatch. To add a
-codex profile: uncomment `[providers.codex]` in `city.toml` (+ `OPENAI_API_KEY`, `codex` CLI on
-PATH), add a `pr-reviewer-codex-<model>-<effort>` profile agent with `provider = "codex"`, then
-`--lanes` it like any other. (Tracked as `wo-au65.9`.)
+**Codex (second vendor) is wired.** The `gpt56*` profiles are OpenAI Codex agents
+(`provider = "codex"`) — the `codex` CLI is installed and ChatGPT-OAuth authenticated, so **no
+`OPENAI_API_KEY` is needed**. Seeded: `gpt56sol-medium` (`gpt-5.6-sol` @ medium),
+`gpt56sol-xhigh` (`gpt-5.6-sol` @ xhigh), `gpt56luna-xhigh` (`gpt-5.6-luna` @ xhigh — codex tops
+out at `xhigh`, there is no `max`). All are **opt-in** (not default lanes); use one solo or pair it
+in a cross-vendor quorum:
+
+```bash
+gc dev-pack review 51296 --lanes gpt56sol-medium                # N=1 solo on codex
+gc dev-pack review 51296 --lanes opus48-xhigh,gpt56sol-xhigh    # opus 4.8 vs gpt-5.6-sol, matched xhigh
+gc dev-pack review 51296 --lanes gpt56sol-xhigh,gpt56luna-xhigh # two codex models head-to-head
+```
+
+Add another codex combo the same way as any profile — copy a `pr-reviewer-gpt56*/` dir and add a
+`[[rigs.patches]]` with `provider = "codex"` + `option_defaults` (valid codex models are listed in
+`[providers.codex]` in `city.toml`; effort caps at `xhigh`). The commented `bug-worker-b` codex
+patch in `city.toml` is now a true one-liner too, since `[providers.codex]` exists. (Tracked as
+`wo-au65.9`.)
 
 At `--n 2` the review lane slings `pr-review-quorum` (triage → two independent
 reviewer lanes → a synthesis step that dedups findings and takes the strictest
