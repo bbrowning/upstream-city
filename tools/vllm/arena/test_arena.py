@@ -33,7 +33,40 @@ def _write(dirpath, sid, records):
             f.write(json.dumps(r) + "\n")
 
 
+def test_canonical_model():
+    """Specific model id (family + version + codex variant); family derived in queries."""
+    cases = {
+        # anthropic — model ids, profile names, slugs, bare
+        "claude-opus-4-8": "opus-4.8",
+        "claude-opus-4-6 (xhigh)": "opus-4.6",
+        "opus-4.8-xhigh": "opus-4.8",
+        "vllm/pr-reviewer-opus48-xhigh": "opus-4.8",
+        "pr-reviewer-opus46-xhigh": "opus-4.6",
+        "claude-sonnet-5": "sonnet-5",
+        "pr-reviewer-sonnet-xhigh": "sonnet",   # profile carries no version -> family only
+        "sonnet": "sonnet",
+        "claude-haiku-4-5": "haiku-4.5",
+        "fable-5": "fable-5",
+        # codex — sol vs luna vs terra kept DISTINCT (the whole point)
+        "gpt-5.6-sol": "gpt-5.6-sol",
+        "gpt-5.6-luna": "gpt-5.6-luna",
+        "gpt-5.6-terra": "gpt-5.6-terra",
+        "pr-reviewer-gpt56sol-medium": "gpt-5.6-sol",
+        "gpt-5.5": "gpt-5.5",
+        "gpt-5.3-codex": "gpt-5.3-codex",
+        "o4-mini": "o4-mini",
+        "o3": "o3",
+        # unknown / empty
+        "claude": "claude",
+        None: None,
+    }
+    for raw, want in cases.items():
+        got = A.canonical_model(raw)
+        assert got == want, f"canonical_model({raw!r}) = {got!r}, want {want!r}"
+
+
 def main():
+    test_canonical_model()
     with tempfile.TemporaryDirectory() as root:
         A.TRANSCRIPTS = root
         A.WORKTREE_PREFIX = "agent-"

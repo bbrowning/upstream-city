@@ -10,6 +10,7 @@ survive even after the transcripts they came from are purged.
 import glob
 import json
 import os
+import re
 import subprocess
 from collections import defaultdict
 from datetime import datetime
@@ -36,15 +37,51 @@ def parse_ts(s):
         return None
 
 
+def _model_version(rest):
+    """Version right after a family token -> dotted str ('4-8'/'4.8'/'48' -> '4.8',
+    '5' -> '5'), or None. Reads the messy tail of a model id / profile name / slug."""
+    r = rest.lstrip("-. ")
+    m = re.match(r"(\d)[.-](\d)", r)      # 4-8, 4.8
+    if m:
+        return f"{m.group(1)}.{m.group(2)}"
+    m = re.match(r"(\d)(\d)(?!\d)", r)    # 48 -> 4.8 (profile-name form)
+    if m:
+        return f"{m.group(1)}.{m.group(2)}"
+    m = re.match(r"(\d+)", r)             # 5
+    if m:
+        return m.group(1)
+    return None
+
+
 def canonical_model(m):
-    """Normalize any model string to a family: opus/sonnet/haiku/fable/mythos."""
+    """Normalize any model/profile string to a SPECIFIC model id — family + version
+    (+ codex variant): opus-4.8, opus-4.6, sonnet-5, haiku-4.5, fable-5, gpt-5.6-sol,
+    gpt-5.6-luna, gpt-5.3-codex, o4-mini. The vendor FAMILY (opus/sonnet/gpt/o…) is
+    derivable at query time from the leading token, so keep the specific id here and
+    roll up in queries. A bare family with no version stays the family ('sonnet'); an
+    unrecognized string is returned lowercased as-is.
+
+    Inputs are deliberately messy — model ids ('claude-opus-4-8'), profile names
+    ('pr-reviewer-opus48-xhigh', 'pr-reviewer-gpt56sol-medium'), slugs
+    ('opus-4.6-xhigh'), bare families ('sonnet') — so match the family token and read
+    the version from whatever follows it."""
     if not m:
         return None
-    ml = str(m).lower()
-    for fam in ("opus", "sonnet", "haiku", "fable", "mythos"):
-        if fam in ml:
-            return fam
-    return ml
+    s = str(m).lower()
+    for fam in ("opus", "sonnet", "haiku", "fable", "mythos"):   # Anthropic families
+        i = s.find(fam)
+        if i != -1:
+            ver = _model_version(s[i + len(fam):])
+            return f"{fam}-{ver}" if ver else fam
+    g = re.search(r"gpt[- ]?(\d)\.?(\d)?", s)                    # codex: gpt-5.6-sol / gpt56sol
+    if g:
+        ver = g.group(1) + (f".{g.group(2)}" if g.group(2) else "")
+        variant = re.search(r"(sol|terra|luna|codex)", s)
+        return f"gpt-{ver}" + (f"-{variant.group(1)}" if variant else "")
+    o = re.search(r"\b(o[34](?:-mini)?)\b", s)                   # openai reasoning: o3 / o4-mini
+    if o:
+        return o.group(1)
+    return s
 
 
 def git_head():
