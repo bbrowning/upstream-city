@@ -85,8 +85,9 @@ root=$(printf '%s' "$bead_json" | jq -r '.[0].metadata["gc.root_bead_id"] // emp
 base="${GC_DASHBOARD_BASE:-http://127.0.0.1:8372/city/workspace/runs}"
 
 # Subject stays a scannable one-liner (the inbox shows it in full); the body is
-# the full human-readable summary, rendered from the SAME renderer that backs
-# `gc dev-pack summary`.
+# the compact per-finding digest, rendered from the SAME renderer that backs
+# `gc dev-pack summary` (which also defaults to --brief). The body's footer points
+# to `gc dev-pack summary <bead> --full` for the complete verdict on demand.
 if jq -e '.resolutions' "$VF" >/dev/null 2>&1; then
     head=$(jq -r '.head_ref // "?"' "$VF")
     dn=$(jq -r '.disputes_examined // (.resolutions | length) // 0' "$VF")
@@ -102,7 +103,7 @@ else
     oc=$(jq -r '.outcome // "?"' "$VF")
     subj="Dynamic check $head: $oc"
 fi
-body=$("$SCRIPT_DIR/render-verdict.sh" "$VF" --bead "$BEAD" --run-url "${base}/${root}" --rig "${GC_RIG:-}") \
+body=$("$SCRIPT_DIR/render-verdict.sh" "$VF" --bead "$BEAD" --run-url "${base}/${root}" --rig "${GC_RIG:-}" --brief) \
     || { printf '%s\n' "emit-verdict: WARN summary render failed; sending pointer-only body" >&2
          body="(summary render failed — full verdict: gc bd show $BEAD --json)"; }
 

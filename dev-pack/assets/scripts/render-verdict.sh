@@ -23,12 +23,14 @@ VF=""
 BEAD=""
 RUN_URL=""
 RIG=""
+BRIEF=""
 
 die() { printf '%s\n' "render-verdict: $*" >&2; exit 2; }
 usage() {
     printf '%s\n' \
-        "usage: render-verdict.sh [<verdict.json> | -] [--bead <id>] [--run-url <url>] [--rig <name>]" \
-        "reads verdict JSON from the file arg or stdin ('-'); prints a human-readable summary"
+        "usage: render-verdict.sh [<verdict.json> | -] [--bead <id>] [--run-url <url>] [--rig <name>] [--brief]" \
+        "reads verdict JSON from the file arg or stdin ('-'); prints a human-readable summary" \
+        "  --brief   compact per-finding digest (review verdicts only); default is the full view"
 }
 
 while [ $# -gt 0 ]; do
@@ -39,6 +41,7 @@ while [ $# -gt 0 ]; do
         --run-url=*) RUN_URL="${1#*=}"; shift ;;
         --rig)       RIG="${2:?--rig needs a value}"; shift 2 ;;
         --rig=*)     RIG="${1#*=}"; shift ;;
+        --brief)     BRIEF=1; shift ;;
         -h|--help)   usage; exit 0 ;;
         -)           VF="-"; shift ;;
         --)          shift ;;
@@ -60,13 +63,23 @@ printf '%s' "$JSON" | jq -e . >/dev/null 2>&1 || die "input is not valid JSON"
 # quotes (the approve-sling hint) survive; bead/run/rig arrive via --arg.
 PROG=$(cat <<'JQ'
 def nn: . != null and . != "";
-def footer:
+def sevrank: (. // "") as $s | {"blocker":0,"major":1,"minor":2,"nit":3}[$s] // 9;
+def shortmodel: sub("^.*/";"") | sub("^pr-reviewer-";"") | sub("-(xhigh|high|medium|low)$";"");
+def shortverdict: sub("approve_with_nits";"approve-w/nits") | sub("request_changes";"request-changes");
+def render_f:
+  .n as $n | .f as $f |
+  ["  \($n). [\($f.severity // "?")] \($f.title // "(untitled)")"]
+  + (if ($f.file|nn) then ["     \($f.file)" + (if ($f.line|nn) then ":\($f.line)" else "" end)] else [] end)
+  + (if ($f.suggested_fix|nn) then ["     -> \($f.suggested_fix)"] else [] end);
+def footer($brief):
   (if (($bead|length) > 0) or (($run|length) > 0)
    then ["", "—"]
         + (if ($run|length) > 0 then ["run:     \($run)"] else [] end)
         + (if ($bead|length) > 0
-           then ["verdict: gc bd show \($bead) --json   (full JSON)",
-                 "re-read: gc dev-pack summary \($bead)"]
+           then ["verdict: gc bd show \($bead) --json   (full JSON)"]
+                + (if $brief == "1"
+                   then ["full:    gc dev-pack summary \($bead) --full"]
+                   else ["re-read: gc dev-pack summary \($bead)"] end)
            else [] end)
    else [] end);
 
@@ -113,7 +126,7 @@ if (.resolutions != null) then
                      else [] end)
                 ) | add )
          end)
-      + footer
+      + footer("")
       | join("\n")
     )
 elif (.verdict != null) then
@@ -126,43 +139,84 @@ elif (.verdict != null) then
   | (.failure_class // "none")                    as $fclass
   | (.failure_reason // "")                       as $freason
   | (
-      [ ( [$v, $posture, "\($fc) finding(s)"] | join(" · ") )
-        + (if ($mrec|length) > 0 then " · \($mrec)" else "" end),
-        "",
-        "## PR review — \($head)",
-        "verdict: \($v)   posture: \($posture)   findings: \($fc)" ]
-      + (if $fclass != "none" then ["", "⚠ step \($fclass): \($freason)"] else [] end)
-      + (if ($summary|length) > 0 then ["", "Summary", "  \($summary)"] else [] end)
-      + (if ($mrec|length) > 0 then ["", "Merge recommendation", "  \($mrec)"] else [] end)
-      + ["", "Findings"]
-      + (if ((.findings // []) | length) == 0
-         then ["  (none)"]
-         else ( .findings | to_entries | map(
-                  (.key + 1) as $n | .value as $f |
-                  [ "  \($n). [\($f.severity // "?")] \($f.title // "(untitled)")"
-                    + (if ($f.file|nn)
-                       then " — \($f.file)" + (if ($f.line|nn) then ":\($f.line)" else "" end)
-                       else "" end) ]
-                  + (if ($f.detail|nn) then ["     \($f.detail)"] else [] end)
-                  + (if ($f.suggested_fix|nn) then ["     fix: \($f.suggested_fix)"] else [] end)
-                ) | add )
-         end)
-      + (if (.dynamic_check == null) and (.dynamic_request != null) and ((.dynamic_request.command // "")|nn)
-         then ["", "Suggested check (needs your approval):",
-               "  \(.dynamic_request.command)",
-               "  approve: gc sling \(if ($rig|length) > 0 then $rig else "<rig>" end)/pr-runner pr-review-dynamic --formula --var head_ref=\($head) --var command='\(.dynamic_request.command)'"]
-         else [] end)
-      + ( ( if (.dynamic_check != null)
-            then "Dynamic check: \(.dynamic_check.outcome // "?")"
-                 + (if (.dynamic_check.rc != null) then " (rc=\(.dynamic_check.rc))" else "" end)
-            else null end ) as $dcline
-          | ( (.read_only_enforcement // {}) as $roe
-              | if ($roe.clean == false) then "read-only: MUTATIONS DETECTED: \(($roe.mutations_delta // []) | join(", "))"
-                elif ($roe.clean == true) then "read-only: clean"
-                else null end ) as $roline
-          | ( [$dcline, $roline] | map(select(. != null)) ) as $status
-          | if ($status|length) > 0 then ["", ($status | join("   "))] else [] end )
-      + footer
+      ( if $brief == "1" then
+          ( .findings // [] )                                   as $findings
+        | ( .lanes // [] )                                      as $lanes
+        | ( ["blocker","major","minor","nit"]
+            | map( . as $s | ($findings | map(select((.severity // "") == $s)) | length) as $n
+                           | if $n > 0 then "\($n) \($s)" else empty end )
+            | join(" · ") )                                     as $tally
+        | ( ($summary | capture("\\((?<d>[^()]{40,})\\)").d) // ($summary | split(". ")[0]) // "" ) as $ctx0
+        | ( if ($ctx0|length) > 220 then ($ctx0[0:217] + "...") else $ctx0 end ) as $ctx
+        | ( $lanes | map( ((.model // "?") | shortmodel) + " " + ((.verdict // "?") | shortverdict) ) | join(" vs ") ) as $lanestr
+        | ( $findings | sort_by(.severity | sevrank) | to_entries
+            | map( { n: (.key + 1), f: .value, rank: ((.value.severity // "") | sevrank) } ) ) as $sorted
+        | ( $sorted | map(select(.rank <= 1)) )                 as $blockers
+        | ( $sorted | map(select(.rank >= 2)) )                 as $nits
+        | [ "PR \($head) · \($v | ascii_upcase | gsub("_"; " "))"
+            + (if ($tally|length) > 0 then " · \($tally)" else "" end) ]
+          + (if ($ctx|length) > 0 then [$ctx] else [] end)
+          + (if ($lanes|length) > 0
+             then ["Lanes: " + $lanestr
+                   + (if ((.evidence.settle_bead) // "") != "" then " -> settled: \($v)" else "" end)]
+             else [] end)
+          + (if $fclass != "none" then ["", "⚠ step \($fclass): \($freason)"] else [] end)
+          + (if ($sorted | length) == 0
+             then ["", "no findings"]
+             else (if ($blockers|length) > 0 then ["", "BLOCKERS - fix before merge"] + ($blockers | map(render_f) | add) else [] end)
+                + (if ($nits|length) > 0 then ["", "NITS"] + ($nits | map(render_f) | add) else [] end)
+             end)
+          + (if (.dynamic_check == null) and (.dynamic_request != null) and ((.dynamic_request.command // "")|nn)
+             then ["", "suggested check available (see --full)"] else [] end)
+          + ( ( if (.dynamic_check != null)
+                then "Dynamic check: \(.dynamic_check.outcome // "?")"
+                     + (if (.dynamic_check.rc != null) then " (rc=\(.dynamic_check.rc))" else "" end)
+                else null end ) as $dcline
+              | ( (.read_only_enforcement // {}) as $roe
+                  | if ($roe.clean == false) then "read-only: MUTATIONS DETECTED: \(($roe.mutations_delta // []) | join(", "))"
+                    elif ($roe.clean == true) then "read-only: clean"
+                    else null end ) as $roline
+              | ( [$dcline, $roline] | map(select(. != null)) ) as $status
+              | if ($status|length) > 0 then ["", ($status | join("   "))] else [] end )
+        else
+          [ ( [$v, $posture, "\($fc) finding(s)"] | join(" · ") )
+            + (if ($mrec|length) > 0 then " · \($mrec)" else "" end),
+            "",
+            "## PR review — \($head)",
+            "verdict: \($v)   posture: \($posture)   findings: \($fc)" ]
+          + (if $fclass != "none" then ["", "⚠ step \($fclass): \($freason)"] else [] end)
+          + (if ($summary|length) > 0 then ["", "Summary", "  \($summary)"] else [] end)
+          + (if ($mrec|length) > 0 then ["", "Merge recommendation", "  \($mrec)"] else [] end)
+          + ["", "Findings"]
+          + (if ((.findings // []) | length) == 0
+             then ["  (none)"]
+             else ( .findings | to_entries | map(
+                      (.key + 1) as $n | .value as $f |
+                      [ "  \($n). [\($f.severity // "?")] \($f.title // "(untitled)")"
+                        + (if ($f.file|nn)
+                           then " — \($f.file)" + (if ($f.line|nn) then ":\($f.line)" else "" end)
+                           else "" end) ]
+                      + (if ($f.detail|nn) then ["     \($f.detail)"] else [] end)
+                      + (if ($f.suggested_fix|nn) then ["     fix: \($f.suggested_fix)"] else [] end)
+                    ) | add )
+             end)
+          + (if (.dynamic_check == null) and (.dynamic_request != null) and ((.dynamic_request.command // "")|nn)
+             then ["", "Suggested check (needs your approval):",
+                   "  \(.dynamic_request.command)",
+                   "  approve: gc sling \(if ($rig|length) > 0 then $rig else "<rig>" end)/pr-runner pr-review-dynamic --formula --var head_ref=\($head) --var command='\(.dynamic_request.command)'"]
+             else [] end)
+          + ( ( if (.dynamic_check != null)
+                then "Dynamic check: \(.dynamic_check.outcome // "?")"
+                     + (if (.dynamic_check.rc != null) then " (rc=\(.dynamic_check.rc))" else "" end)
+                else null end ) as $dcline
+              | ( (.read_only_enforcement // {}) as $roe
+                  | if ($roe.clean == false) then "read-only: MUTATIONS DETECTED: \(($roe.mutations_delta // []) | join(", "))"
+                    elif ($roe.clean == true) then "read-only: clean"
+                    else null end ) as $roline
+              | ( [$dcline, $roline] | map(select(. != null)) ) as $status
+              | if ($status|length) > 0 then ["", ($status | join("   "))] else [] end )
+        end )
+      + footer($brief)
       | join("\n")
     )
 else
@@ -191,11 +245,11 @@ else
       + (if (.git_clean_after == false) then ["", "read-only: MUTATIONS DETECTED: \((.mutations_delta // []) | join(", "))"]
          elif (.git_clean_after == true) then ["", "read-only: clean"]
          else [] end)
-      + footer
+      + footer("")
       | join("\n")
     )
 end
 JQ
 )
 
-printf '%s\n' "$JSON" | jq -r --arg bead "$BEAD" --arg run "$RUN_URL" --arg rig "$RIG" "$PROG"
+printf '%s\n' "$JSON" | jq -r --arg bead "$BEAD" --arg run "$RUN_URL" --arg rig "$RIG" --arg brief "$BRIEF" "$PROG"

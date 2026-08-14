@@ -20,6 +20,8 @@
 #
 # Options:
 #   --rig <name>   rig context for PR resolution + the approval hint (default: vllm)
+#   --full         show the full verdict (Summary + per-finding detail); default is
+#                  the compact per-finding digest the verdict mail also carries
 #   -h, --help     show this help
 #
 # Env (provided by gc): GC_CITY_PATH, GC_BIN. Optional: GC_DASHBOARD_BASE.
@@ -33,15 +35,19 @@ RESOLVE="$SCRIPT_DIR/../../assets/scripts/resolve-verdict-bead.sh"
 
 RIG="vllm"
 SPEC=""
+FULL=""
 
 usage() {
     printf '%s\n' \
-        "usage: gc dev-pack summary <bead-id | PR-number> [--rig N]" \
+        "usage: gc dev-pack summary <bead-id | PR-number> [--rig N] [--full]" \
         "" \
         "Re-render a stored verdict (pr-review.v1 / pr-review-quorum.v1 /" \
         "pr-review-dynamic.v1 / pr-review-settle.v1) as the same human-readable summary the" \
         "verdict mail carries. Pass the bead id from the mail (gc bd show <bead> --json)," \
-        "or a bare PR number to look it up."
+        "or a bare PR number to look it up." \
+        "" \
+        "Default is a compact per-finding digest; pass --full for the complete verdict" \
+        "(Summary + per-finding detail + merge recommendation)."
 }
 die() { printf '%s\n' "summary: $*" >&2; exit 2; }
 
@@ -49,6 +55,8 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --rig)     RIG="${2:?--rig needs a value}"; shift 2 ;;
         --rig=*)   RIG="${1#*=}"; shift ;;
+        --full)    FULL=1; shift ;;
+        --brief)   FULL=""; shift ;;
         -h|--help) usage; exit 0 ;;
         --)        shift; break ;;
         -*)        die "unknown option '$1'" ;;
@@ -79,4 +87,8 @@ base="${GC_DASHBOARD_BASE:-http://127.0.0.1:8372/city/workspace/runs}"
 RUN_URL=""
 [ -n "$root" ] && RUN_URL="${base}/${root}"
 
-printf '%s' "$VJSON" | "$RENDER" - --bead "$BEAD" --run-url "$RUN_URL" --rig "$RIG"
+if [ -n "$FULL" ]; then
+    printf '%s' "$VJSON" | "$RENDER" - --bead "$BEAD" --run-url "$RUN_URL" --rig "$RIG"
+else
+    printf '%s' "$VJSON" | "$RENDER" - --bead "$BEAD" --run-url "$RUN_URL" --rig "$RIG" --brief
+fi
