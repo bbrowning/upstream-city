@@ -1,0 +1,27 @@
+# pr-chat — interactive follow-up chat on an already-reviewed PR, live in the PR's
+# real worktree. `gc dev-pack ask <PR>` with NO question materializes the PR
+# worktree + the prior-context recap, drops a per-PR rendezvous JSON, and hands
+# your terminal to this agent (via `gc session new`, which attaches by default).
+# It reads the rendezvous on its first turn, cd's into the PR worktree, loads the
+# verdict + prior Q&A, and converses. Detach (Ctrl-b d) any time — the session
+# keeps its full history; `gc dev-pack ask <PR>` (or `gc session attach
+# pr-chat-<N>`) re-attaches. One persistent chat per PR, so several run at once
+# without blocking each other — the point is parallel review throughput.
+#
+# Unlike the pooled workflow lanes, this is NOT a pool agent: no min/max_active_
+# sessions, so it never auto-spawns — it is created on demand by `gc session new
+# <rig>/pr-chat`. And unlike pr-follow-up (one-shot, formula-bound, emits +
+# closes + mails), it is a LIVE conversation: it never emits a result bead,
+# closes anything, or mails — you end it by detaching/closing the session.
+#
+# No work_dir / pre_start (deliberately). A session-created agent has no per-slot
+# {{.AgentBase}} to key a scratch worktree on — every pr-chat session shares the
+# base name `pr-chat`, so a scratch work_dir would COLLIDE across concurrent
+# per-PR chats (the pooled lanes avoid this via {{.AgentBase}}=slot-1/-2). So this
+# agent starts in the rig root and its FIRST action is to cd into the durable,
+# PR-keyed worktree named by the rendezvous file (see the prompt) — the same
+# durable tree `materialize` owns, never the rig checkout. It therefore does NOT
+# use the worktree-guard fragment (which would abort in the rig root).
+scope = "rig"
+description = "Interactive follow-up chat on a reviewed PR, live in the PR's real worktree"
+prompt_template = "agents/pr-chat/prompt.template.md"

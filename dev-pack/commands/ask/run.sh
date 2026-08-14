@@ -1,30 +1,40 @@
 #!/usr/bin/env bash
-# ask — ask a follow-up question about an already-reviewed PR. Resolves the
-# prior verdict (and every follow-up asked since), ensures the PR's code is
-# materialized into a durable worktree, and slings a ONE-SHOT agent into that
-# worktree to answer — no persistent per-PR session.
+# ask — follow up on an already-reviewed PR, in the PR's real code. Resolves the
+# prior verdict (and every follow-up asked since) and materializes the PR into a
+# durable worktree, then EITHER answers one question asynchronously (a question is
+# given) OR drops you into a live interactive chat in that worktree (no question).
 #
-#   gc dev-pack ask <PR-number | bead-id> "<question>" [options]
+#   gc dev-pack ask <PR-number | bead-id> ["<question>"] [options]
+#
+#   gc dev-pack ask 51937 "why this refactor?"   # async: a one-shot agent mails the answer
+#   gc dev-pack ask 51937                         # interactive: attach a live chat on this PR
 #
 # WHY THIS EXISTS: `gc dev-pack materialize` gets you the code, but reading a
-# diff yourself to answer a specific question is a scavenger hunt; attaching to
-# a session interactively works but has no PR code locally and leaves a
-# lingering session per question. This gives you an agent, in the actual code,
-# answering ONE question and mailing the answer back — repeatable, and each
-# round sees every prior round on this PR (see CONTINUITY below).
+# diff yourself is a scavenger hunt. Two shapes, same setup:
+#   - ASYNC (question given): a one-shot agent answers ONE question from the real
+#     code and mails it back — non-blocking, and each round sees every prior round
+#     on this PR (see CONTINUITY). Best for fire-and-forget questions.
+#   - INTERACTIVE (no question): opens a live agent session (`gc session new`,
+#     which attaches your terminal), already cd'd into the PR worktree with the
+#     verdict + prior Q&A loaded. One persistent chat PER PR: detach (Ctrl-b d)
+#     while it thinks, hop to another PR, `gc dev-pack ask <PR>` to come back —
+#     nothing blocks. Best for a back-and-forth deep dive.
 #
-# CONTINUITY ACROSS ROUNDS: there is no kept-alive session. Every round is
-# anchored to the ROOT verdict bead via gc.followup_of metadata; this command
-# walks that chain, gathers every prior round's Q&A (oldest first), and writes
-# it into the worktree as a context file the fresh agent reads before
-# answering. Ask the same PR again next week — it still remembers.
+# CONTINUITY: the async chain is anchored to the ROOT verdict bead via
+# gc.followup_of; this command walks it, gathers every prior round's Q&A (oldest
+# first), and writes it into the worktree as a context file the agent reads first,
+# so a fresh async answer AND the first turn of an interactive chat both start
+# warm. An interactive chat is otherwise EPHEMERAL: its back-and-forth lives only
+# in the (persistent, re-attachable) session and is NOT written back into the
+# async chain — run `ask <PR> "<question>"` for a durable, mailed, chained answer.
 #
 # Args:
 #   <PR-number | bead-id>  a PR number N (resolved to its newest verdict bead),
 #                          or any bead id in the review/follow-up chain (a
 #                          verdict bead, or an earlier follow-up bead — both
 #                          resolve to the same root).
-#   <question>             your question, verbatim.
+#   <question>             OPTIONAL. Given -> async one-shot answer by mail.
+#                          Omitted -> interactive chat session (needs a terminal).
 #
 # Options:
 #   --rig <name>   rig the PR belongs to              (default: vllm)
@@ -34,7 +44,7 @@
 #   --dry-run      print what would run without running it
 #   -h, --help     show this help
 #
-# Env (provided by gc): GC_CITY_PATH, GC_BIN.
+# Env (provided by gc): GC_CITY_PATH, GC_RIG, GC_BIN.
 set -euo pipefail
 
 GC="${GC_BIN:-gc}"
@@ -43,10 +53,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESOLVE="$SCRIPT_DIR/../../assets/scripts/resolve-verdict-bead.sh"
 MATERIALIZE="$SCRIPT_DIR/../materialize/run.sh"
 
-RIG="vllm" ; BASE="origin/main" ; SPEC="" ; QUESTION="" ; FORCE=0 ; DRYRUN=0
+RIG="vllm" ; BASE="origin/main" ; SPEC="" ; QUESTION="" ; FORCE=0 ; DRYRUN=0 ; INTERACTIVE=0
 
 usage() {
-    sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,47p' "$0" | sed 's/^# \{0,1\}//'
 }
 die() { printf '%s\n' "ask: $*" >&2; exit 2; }
 
@@ -72,8 +82,9 @@ while [ $# -gt 0 ]; do
                    else die "unexpected argument '$1'"; fi ;;
     esac
 done
+# No question -> interactive chat session (drop into a live agent on this PR).
 [ -n "$SPEC" ] || { usage >&2; die "missing <PR-number | bead-id>"; }
-[ -n "$QUESTION" ] || { usage >&2; die "missing \"<question>\""; }
+[ -n "$QUESTION" ] || INTERACTIVE=1
 [ -x "$RESOLVE" ] || die "resolver not found/executable: $RESOLVE"
 [ -x "$MATERIALIZE" ] || die "materialize script not found/executable: $MATERIALIZE"
 
@@ -110,8 +121,17 @@ MAT_ARGS=(--rig "$RIG" --base "$BASE" --json)
 if [ "$DRYRUN" -eq 1 ]; then
     printf 'DRY RUN — would run:\n  %s' "$MATERIALIZE"
     for a in "$HEAD_REF" "${MAT_ARGS[@]}"; do printf ' %q' "$a"; done
-    printf '\nDRY RUN — would then sling pr-followup for PR %s in rig %s with question:\n  %s\n' \
-        "$HEAD_REF" "$RIG" "$QUESTION"
+    if [ "$INTERACTIVE" -eq 1 ]; then
+        printf '\nDRY RUN — would write rendezvous:\n  %s\n' \
+            "$CITY/.gc/dev-pack/pr-chat/$RIG/pr-$HEAD_REF.json"
+        printf 'DRY RUN — would then attach an interactive chat for PR %s in rig %s\n' \
+            "$HEAD_REF" "$RIG"
+        printf '  (reuse existing pr-chat-%s if live, else: gc session new %s/pr-chat --alias pr-chat-%s)\n' \
+            "$HEAD_REF" "$RIG" "$HEAD_REF"
+    else
+        printf '\nDRY RUN — would then sling pr-followup for PR %s in rig %s with question:\n  %s\n' \
+            "$HEAD_REF" "$RIG" "$QUESTION"
+    fi
     exit 0
 fi
 
@@ -148,9 +168,46 @@ case "$EXCLUDE" in /*) ;; *) EXCLUDE="$WORKTREE/$EXCLUDE" ;; esac
 mkdir -p "$(dirname "$EXCLUDE")"
 grep -qxF "$CONTEXT_REL" "$EXCLUDE" 2>/dev/null || printf '%s\n' "$CONTEXT_REL" >> "$EXCLUDE"
 
-# --- 5. Sling the one-shot follow-up agent. ----------------------------------
-printf 'ask: slinging follow-up for PR %s in rig %s\n' "$HEAD_REF" "$RIG" >&2
-exec "$GC" --city "$CITY" --rig "$RIG" sling "$RIG/pr-follow-up" pr-followup --formula \
-    --var "pr=$HEAD_REF" --var "base_ref=$BASE" --var "question=$QUESTION" \
-    --var "worktree_path=$WORKTREE" --var "root_bead=$ROOT" --var "context_file=$CONTEXT_FILE" \
-    --title "follow-up: PR $HEAD_REF" --json
+# --- 5a. ASYNC (question given): sling the one-shot follow-up agent. ----------
+if [ "$INTERACTIVE" -eq 0 ]; then
+    printf 'ask: slinging follow-up for PR %s in rig %s\n' "$HEAD_REF" "$RIG" >&2
+    exec "$GC" --city "$CITY" --rig "$RIG" sling "$RIG/pr-follow-up" pr-followup --formula \
+        --var "pr=$HEAD_REF" --var "base_ref=$BASE" --var "question=$QUESTION" \
+        --var "worktree_path=$WORKTREE" --var "root_bead=$ROOT" --var "context_file=$CONTEXT_FILE" \
+        --title "follow-up: PR $HEAD_REF" --json
+fi
+
+# --- 5b. INTERACTIVE (no question): drop into a live per-PR chat session. -----
+# Attaching hands this terminal to the agent (blocks until you detach), so bail
+# early if there is no TTY rather than leaving a half-created session behind.
+{ [ -t 0 ] && [ -t 1 ]; } || \
+    die "interactive mode needs a terminal. Pass a \"<question>\" for the async path, or run from a terminal."
+
+# Rendezvous file: the ONLY per-PR channel into the session — `gc session new`
+# takes no --work-dir/--var/--initial-message, and ambient env doesn't reach the
+# tmux pane. The pr-chat agent reads this on its first turn (path derived from
+# $GC_CITY_PATH + $GC_RIG + the PR number in its own $GC_ALIAS).
+ALIAS="pr-chat-$HEAD_REF"
+RENDEZVOUS="$CITY/.gc/dev-pack/pr-chat/$RIG/pr-$HEAD_REF.json"
+mkdir -p "$(dirname "$RENDEZVOUS")"
+jq -n --arg pr "$HEAD_REF" --arg base "$BASE" --arg wt "$WORKTREE" \
+      --arg ctx "$CONTEXT_FILE" --arg root "$ROOT" \
+  '{pr:$pr, base_ref:$base, worktree_path:$wt, context_file:$ctx, root_bead:$root}' \
+  > "$RENDEZVOUS"
+
+# One persistent chat PER PR: reuse a live/suspended one if it exists (attach
+# resumes it with full history), else create fresh (session new attaches by
+# default). Match on the alias suffix — gascity may qualify the stored alias.
+EXISTING=$("$GC" --city "$CITY" session list --template "$RIG/pr-chat" --state all --json 2>/dev/null \
+    | jq -r --arg a "$ALIAS" '(if type=="array" then . else .sessions end) | [ .[]?
+        | select((.alias // "") | endswith($a))
+        | select(.state == "active" or .state == "suspended") | .id ][0] // empty')
+
+if [ -n "$EXISTING" ]; then
+    printf 'ask: resuming interactive chat for PR %s (%s)\n' "$HEAD_REF" "$EXISTING" >&2
+    exec "$GC" --city "$CITY" session attach "$EXISTING"
+else
+    printf 'ask: opening interactive chat for PR %s in rig %s\n' "$HEAD_REF" "$RIG" >&2
+    exec "$GC" --city "$CITY" --rig "$RIG" session new "$RIG/pr-chat" \
+        --alias "$ALIAS" --title "PR chat: $RIG PR $HEAD_REF"
+fi

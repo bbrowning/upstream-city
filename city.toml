@@ -143,6 +143,16 @@ agent = "pr-follow-up"
 option_defaults = { model = "opus", effort = "high" }
 env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
 
+# `gc dev-pack ask <PR>` (NO question) interactive-chat lane: a live, attached
+# per-PR session (created on demand by `gc session new`, never pooled). Unlike the
+# read-only follow-up above, it MAY run tests on the human's request, so it carries
+# the SAME prepared CPU test-venv wiring as the reviewer (GC_PREPARE_TEST_ENV over
+# the warm uv cache) plus the persona corpus. opus/high for interactive reasoning.
+[[rigs.patches]]
+agent = "pr-chat"
+option_defaults = { model = "opus", effort = "high" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
+
 # Hard-bug lanes: same prepared CPU test-venv wiring as the reviewer, so a lane that
 # needs to run vllm reuses the warm uv cache + the blessed CPU-only recipe
 # (tools/vllm/vllm-testenv.sh, ~seconds warm) instead of a full torch install from

@@ -27,6 +27,14 @@
 #                           creates, not the reviewer's transient per-slot scratch.
 #                           No persistent per-PR session — continuity across rounds
 #                           comes from a rebuilt Q&A transcript, not agent memory.
+#     agents/pr-chat/       interactive follow-up CHAT on an already-reviewed PR:
+#                           `gc dev-pack ask <PR>` with NO question hands your
+#                           terminal to a live agent (via `gc session new`) already
+#                           cd'd into the PR's durable worktree, verdict + prior Q&A
+#                           loaded. NOT pooled — created on demand, one persistent
+#                           session PER PR (detach/re-attach), so several run at once
+#                           without blocking; may run tests on request; ephemeral
+#                           (writes no bead — the session itself is the memory).
 #
 #   bug     — a symptom/bead -> root cause + fix, over N opinions (the fan-out dial,
 #             `--n`). N=1 (default) is a solo lane that self-verifies its keystones;
@@ -75,9 +83,11 @@
 #     materialize <PR>  check a PR out into a DURABLE, human-owned worktree (outside
 #                       .gc/, never reaped) so a person can read/diff/run it.
 #     summary <bead|PR> re-render a stored pr-review / dynamic-check verdict, LLM-free.
-#     ask <bead|PR> "<question>"  one-shot agent answers a follow-up in the PR's
-#                       real code (via materialize) and mails the answer back,
-#                       threaded; each round sees every prior round on the PR.
+#     ask <bead|PR> ["<question>"]  follow up in the PR's real code (via materialize).
+#                       WITH a question: a one-shot agent answers and mails it back,
+#                       threaded; each round sees every prior round on the PR. WITHOUT
+#                       a question: drops you into a live interactive chat session on
+#                       the PR (one persistent chat per PR; `gc session attach`-able).
 #     status <bead>     render a bug arc's durable state (phase/round/status).
 #
 # SHARED SPINE
@@ -118,12 +128,16 @@
 # all agents are rig-scoped (scope="rig"), so they expand once per rig they're
 # attached to (intended: vllm).
 #
-# NOTE — no [[named_session]] blocks: all agents are POOL agents (min/max_active_
-# sessions), auto-discovered from agents/ and expanded by the scope in their own
-# agent.toml; gc lint forbids a named_session that targets a pool-controlled agent.
-# min_active_sessions = 0 makes them on-demand (they materialize when work is slung).
+# NOTE — no [[named_session]] blocks. Every agent EXCEPT pr-chat is a POOL agent
+# (min/max_active_sessions), auto-discovered from agents/ and expanded by the scope
+# in its own agent.toml; min_active_sessions = 0 makes them on-demand (they
+# materialize when work is slung). pr-chat is the one exception: a bare template
+# (no pool fields, so never auto-spawned) created on demand by `gc session new
+# <rig>/pr-chat` for an interactive `ask <PR>` chat — like the city's `lead`, but
+# launched by the command, not reserved via a named_session. gc lint forbids a
+# named_session that targets a *pool-controlled* agent; a bare template is fine.
 
 [pack]
 name = "dev-pack"
 schema = 2
-description = "One engineering-workflow pack, three lanes over a shared spine: posture-gated PR review (triage → review or N-opinion quorum, trusted auto-run + human-approved dynamic-check lane, plus a one-shot `ask` follow-up Q&A lane), bug fix with an N-opinion dial (solo self-verify or two-opinion diagnose → converge → implement → cross-review), and a feature-dev write lane — each isolated in its own git worktree (native work_dir + pre_start), sharing one persona corpus via $GC_PERSONAS."
+description = "One engineering-workflow pack, three lanes over a shared spine: posture-gated PR review (triage → review or N-opinion quorum, trusted auto-run + human-approved dynamic-check lane, plus an `ask` follow-up lane — one-shot Q&A by mail, or a live interactive per-PR chat when no question is given), bug fix with an N-opinion dial (solo self-verify or two-opinion diagnose → converge → implement → cross-review), and a feature-dev write lane — each isolated in its own git worktree (native work_dir + pre_start), sharing one persona corpus via $GC_PERSONAS."
