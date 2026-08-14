@@ -41,6 +41,14 @@ default = "pr-triage"
 description = "Agent that runs the read-only review step. Bare name resolves within the rig; override to a rig-qualified name (e.g. vllm/pr-reviewer) if bare resolution fails."
 default = "pr-reviewer"
 
+[vars.review_model]
+description = "Per-run model override for the review step (emitted as opt_model). Empty defers to the agent's city.toml option_defaults. Reliable only on a single-slot target — the launch command routes an overridden N=1 review to the single-slot pr-reviewer-a; the pooled pr-reviewer default ignores a live opt_model."
+default = ""
+
+[vars.review_effort]
+description = "Per-run effort override for the review step (emitted as opt_effort). Empty defers to option_defaults. Same single-slot caveat as review_model."
+default = ""
+
 [[steps]]
 id = "triage"
 title = "Deterministic pre-scan + posture classification"
@@ -173,7 +181,7 @@ transient` (or `hard`) with a stable `--failure-reason` on an infrastructure
 failure (provider down, rate-limited, repo unreachable). Do not run a separate
 `gc bd close` or `gc mail send`.
 """
-metadata = { "gc.run_target" = "{{review_target}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true" }
+metadata = { "gc.run_target" = "{{review_target}}", "opt_model" = "{{review_model}}", "opt_effort" = "{{review_effort}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true" }
 
 [steps.retry]
 max_attempts = 2

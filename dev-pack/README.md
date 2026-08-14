@@ -16,7 +16,7 @@ lane that self-verifies its own keystones; N≥2 fans out N independent opinions
 
 | Lane | Kick off | What it does |
 |---|---|---|
-| **review** | `gc dev-pack review <PR> [--n N]` | posture-gated PR review → a structured merge verdict (read-only + one trusted auto-check); N≥2 runs a reviewer quorum → synthesis |
+| **review** | `gc dev-pack review <PR> [--n N] [--lineup p:m:e,…]` | posture-gated PR review → a structured merge verdict (read-only + one trusted auto-check); N≥2 runs a reviewer quorum → synthesis; `--lineup` names provider/model/effort per opinion, validated before dispatch |
 | **bug** | `gc dev-pack bug <bead> [--n N]` | N=1 solo diagnosis + keystone self-verify; N≥2 independent lanes act as each other's second opinion until root cause & fix converge, then the stronger implements + tests and the other cross-reviews |
 | **feature** | `gc dev-pack feature <bead>` | implement an assignment on a `paude/<bead>` branch, run tests, push |
 
@@ -215,6 +215,8 @@ assets/scripts/pr-prescan.sh          # deterministic, injection-proof posture c
 assets/scripts/posture-latitude.sh    # pure posture → FETCH/EXEC/GATE table (review)
 assets/scripts/run-scoped-check.sh    # the deterministic EXEC gate for dynamic checks (review)
 assets/scripts/emit-verdict.sh        # review-lane atomic finish: write verdict + close + notify human
+assets/scripts/lineup-options.sh      # `--lineup` fail-fast: valid model/effort per provider (API-first, allowlist fallback)
+assets/valid-options.txt              # offline fallback allowlist for lineup-options.sh (keep in sync on gascity upgrade)
 assets/scripts/emit-followup.sh       # follow-up atomic finish: write answer + chain + close + thread + notify
 assets/scripts/render-verdict.sh      # verdict JSON → human-readable summary (mail body + `summary` cmd)
 assets/scripts/resolve-verdict-bead.sh # PR/bead spec → root verdict bead (shared by `summary` and `ask`)
@@ -312,14 +314,41 @@ itself), a branch, or a sha:
 ```bash
 gc dev-pack review 51296                 # defaults: --rig vllm --base origin/main --n 1
 gc dev-pack review my-branch --rig vllm --base v0.6.0
-gc dev-pack review 51296 --n 2 --models opus,sonnet   # a 2-opinion reviewer quorum → synthesis
-gc dev-pack review 51296 --dry-run       # print the gc sling it would run
+gc dev-pack review 51296 --n 2           # 2-opinion reviewer quorum → synthesis (city.toml lane defaults)
+gc dev-pack review 51296 --dry-run       # validate + print the gc sling it would run
 ```
+
+**Name the reviewer(s) per run — `--lineup`.** Compare two configurations in one shot;
+each comma-separated entry is `provider:model:effort` and the entry **count is N** (1 or 2):
+
+```bash
+gc dev-pack review 51296 --lineup 'claude:opus:xhigh,claude:sonnet:high'          # cross-model
+gc dev-pack review 51296 --lineup 'claude:claude-opus-4-6:high,claude:opus:high'  # opus 4.6 vs 4.8
+gc dev-pack review 51296 --lineup 'claude::max'                                   # N=1, default model @ max
+```
+
+Any field may be blank to defer to that agent's `city.toml` `option_defaults`. Every named
+value is **validated before slinging** against the running binary's real schema
+(`assets/scripts/lineup-options.sh` — API-first, with an offline allowlist fallback), so an
+invalid model/effort fails loudly here instead of gascity's silent launch-path fallback to a
+default. An N=1 run *with* an override routes to the single-slot `pr-reviewer-a` (a pooled
+agent doesn't reliably pick up a per-run option); a bare N=1 stays on the pooled `pr-reviewer`.
+
+**Custom / non-default claude models (e.g. `claude-opus-4-6`).** gascity's builtin model list
+is a curated enum, and a model absent from it is *silently dropped* on launch (no `--model`
+emitted → the CLI's own default runs). It's a data gap, not a limit: declare the ids you want
+once in `city.toml` under `[providers.claude]` with `options_schema_merge = "by_key"` (then
+`gc reload`) — they become selectable **and** validated. See the recipe in `city.toml`.
+
+**Codex (second vendor)** is rejected until wired — provider is per-agent, not per-dispatch, so
+`--lineup 'codex:…'` needs a `[providers.codex]` block + `OPENAI_API_KEY`, `pr-reviewer-codex-a/-b`
+agents, and a `provider=codex` mapping in `commands/review/run.sh`. The command prints these
+steps if you try.
 
 At `--n 2` the review lane slings `pr-review-quorum` (triage → two independent
 reviewer lanes → a synthesis step that dedups findings and takes the strictest
 merge call), emitting `pr-review-quorum.v1` — a superset of `pr-review.v1`, so the
-same summary/notify path works. `--models` maps positionally to the lanes.
+same summary/notify path works.
 
 **Power-user path — direct sling.** The verb above is a thin wrapper around this
 (what the lead uses under the hood):

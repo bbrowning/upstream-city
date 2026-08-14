@@ -1,0 +1,20 @@
+# valid-options.txt — OFFLINE fallback allowlist for lineup-options.sh.
+#
+# Used ONLY when the running binary's API (/v0/city/<city>/providers/public) is
+# unreachable. The API is the drift-free source of truth (it returns the MERGED
+# builtin + city.toml schema); this file is a best-effort backup so `--lineup`
+# still fails fast offline.
+#
+# KEEP IN SYNC on a gascity upgrade (source: gascity internal/worker/builtin/
+# profiles.go) AND whenever you add a custom `by_key` model choice in city.toml
+# (e.g. claude-opus-4-6) — otherwise it validates only when the API is up.
+#
+# Format:  <provider> <key> <value> <value> ...     ('#' lines ignored)
+
+# --- claude: v1.4.0 builtin slugs + city.toml by_key custom ids ---------------
+claude model opus opus-4-7 sonnet sonnet-5 sonnet-4-6 haiku fable-5 claude-opus-4-6 claude-opus-4-8
+claude effort low medium high xhigh max
+
+# --- codex: builtin slugs (effort caps at xhigh — no `max`) -------------------
+codex model gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna gpt-5.5 gpt-5.3-codex o3 o4-mini
+codex effort low medium high xhigh
