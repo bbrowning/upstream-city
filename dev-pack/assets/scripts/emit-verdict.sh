@@ -7,9 +7,11 @@
 #   emit-verdict.sh --bead <id> --verdict-file <path.json> --outcome pass|fail \
 #       [--failure-class none|transient|hard] [--failure-reason STR] [--reason CLOSE_MSG]
 #
-# Schema is auto-detected from the verdict JSON: `.verdict` present -> pr-review.v1
-# (review); else -> pr-review-dynamic.v1 (dynamic check). Notification content is
-# DERIVED from the verdict JSON, so the human always gets the actual results.
+# Schema is auto-detected from the verdict JSON (by shape): `.resolutions` present ->
+# pr-review-settle.v1 (divergence settle); else `.verdict` present -> pr-review.v1 /
+# pr-review-quorum.v1 (review); else -> pr-review-dynamic.v1 (dynamic check).
+# Notification content is DERIVED from the verdict JSON via render-verdict.sh (the same
+# renderer `gc dev-pack summary` uses), so the human always gets the actual results.
 #
 # NOTIFICATION IS OPERATOR POLICY, not the pack's: the mail goes to $GC_PR_NOTIFY_TO
 # (default "human"). Set GC_PR_NOTIFY_TO="" (e.g. in a [[rigs.patches]] env block on
@@ -54,7 +56,9 @@ fi
 
 # --- CLOSE the step ----------------------------------------------------------
 if [ -z "$REASON" ]; then
-    if jq -e '.verdict' "$VF" >/dev/null 2>&1; then
+    if jq -e '.resolutions' "$VF" >/dev/null 2>&1; then
+        REASON="settle: $(jq -r '.disputes_examined // (.resolutions | length) // 0' "$VF") dispute(s) — $(jq -r '[.resolutions[]?.resolution] | map(select(. == "resolved")) | length' "$VF") resolved"
+    elif jq -e '.verdict' "$VF" >/dev/null 2>&1; then
         REASON="review: $(jq -r '.verdict // "?"' "$VF") ($(jq -r '.findings_count // 0' "$VF") findings)"
     else
         REASON="dynamic check: $(jq -r '.outcome // "?"' "$VF")"
@@ -83,7 +87,12 @@ base="${GC_DASHBOARD_BASE:-http://127.0.0.1:8372/city/workspace/runs}"
 # Subject stays a scannable one-liner (the inbox shows it in full); the body is
 # the full human-readable summary, rendered from the SAME renderer that backs
 # `gc dev-pack summary`.
-if jq -e '.verdict' "$VF" >/dev/null 2>&1; then
+if jq -e '.resolutions' "$VF" >/dev/null 2>&1; then
+    head=$(jq -r '.head_ref // "?"' "$VF")
+    dn=$(jq -r '.disputes_examined // (.resolutions | length) // 0' "$VF")
+    rn=$(jq -r '[.resolutions[]?.resolution] | map(select(. == "resolved")) | length' "$VF")
+    subj="PR settle $head: $dn dispute(s) — $rn resolved"
+elif jq -e '.verdict' "$VF" >/dev/null 2>&1; then
     head=$(jq -r '.head_ref // "?"' "$VF")
     v=$(jq -r '.verdict // "?"' "$VF")
     fc=$(jq -r '.findings_count // 0' "$VF")

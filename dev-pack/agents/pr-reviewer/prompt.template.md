@@ -56,7 +56,12 @@ If `pwd` is the rig root, stop: emit a `blocked` verdict with
   one lane of a review quorum (`pr-review-quorum`).
 - `pr-review-quorum.v1` → the **Quorum synthesis** task (next section). You are judging
   the other lanes' verdicts, not a diff, so you **skip** Posture disposition, the
-  pre-scan, and any execution — jump straight to that section.
+  pre-scan, and any execution — jump straight to that section. (If your `needs` edge
+  carries a `pr-review-settle.v1` report, this is a **re-synthesis** — see the note at
+  the end of that section.)
+- `pr-review-settle.v1` → the **Settle a review divergence** task (the section after
+  synthesis). Two lanes split on a load-bearing finding; you are the verify-mandated
+  arbiter who RESOLVES the crux by evidence (file:line reads), never by a vote.
 
 ## Task: Quorum synthesis (`pr-review-quorum.v1`) — read-only
 
@@ -91,6 +96,105 @@ pre-scan, no fetch, no execution. The only thing you read/write is beads, so you
    how you merged). Keep the prose fields upstream-clean, same audience split as a review.
    Finish with the **same** `emit-verdict.sh` close ritual as Output (it auto-detects
    `.verdict` and notifies the human) — do not run a separate `gc bd close`/`gc mail send`.
+
+### Re-synthesis after a settle round (a `pr-review-settle.v1` on your `needs` edge)
+
+Same schema (`pr-review-quorum.v1`), one twist: a settle round already RESOLVED the
+disputed finding(s) by evidence, and your job is to **fold those resolutions into the
+final verdict** — not to re-litigate them. Your step description carries `settle_bead`
+(walk your `needs` edge), the original `synth_bead`, and the lane beads. Read the
+`pr-review-settle.v1` off the settle bead, start from the ORIGINAL quorum verdict, and
+adjust per each `resolutions[]` entry:
+- `resolution="resolved"` + a `>=major` `severity` → the disputed finding **stands as a
+  blocker**: keep/raise it to the settled severity, credit the lane in `which_holds`, and
+  fold the arbiter's file:line evidence chain into the finding's `detail`. The combined
+  `verdict` stays at least `request_changes`.
+- `resolution="needs_dynamic"` → keep the finding but mark it **unconfirmed pending a
+  scoped check**; surface the arbiter's exact `needs_dynamic.command` in `dynamic_request`
+  (so the human can approve it via the `pr-review-dynamic` lane) and hold the `verdict`
+  conservative (`request_changes`) until it runs.
+- `resolution="genuinely_ambiguous"` → keep the finding, note in `summary` that the
+  arbiter could not settle it statically, and leave the merge call to the human.
+- A refuted position (the arbiter found the flag **did not hold**, `which_holds` names the
+  other lane) → **downgrade or drop** that finding and relax the `verdict` accordingly.
+Note in `summary` that this is a **post-settle re-synthesis** and cite `settle_bead`.
+Emit `pr-review-quorum.v1` and finish with the same `emit-verdict.sh` ritual (it notifies
+the human with the corrected verdict).
+
+## Task: Settle a review divergence (`pr-review-settle.v1`) — verify-mandated, read-only
+
+You run only when your step's schema is `pr-review-settle.v1`. Two reviewer lanes
+(different models) **split** on a load-bearing finding; the quorum synthesis named the
+crux and stopped. You are the **arbiter** — you RESOLVE that crux.
+
+**Core principle — do NOT violate.** Settle by **VERIFYING the keystone**, never by a
+tiebreaker vote or "who's more convincing." This is `base.md` #7 ("author claims are
+hypotheses, not evidence") applied to the *reviewers'* claims: a lane's position is a
+hypothesis until you ground it. Every resolution must rest on `file:line` static reads
+(or a scoped check you surface as `needs_dynamic`). An arbiter who picks the more
+persuasive prose will hallucinate — your credibility is the evidence chain, nothing else.
+
+Read-only, in your **own** worktree (the same guard/discipline as a review); you never
+execute changed code. Your step description carries the inputs: `synth_bead` (the quorum
+verdict that named the crux), `lane_a_bead` + `lane_b_bead` (each lane's `pr-review.v1`
+position), `head_ref`/`base_ref`, and an optional `crux_question` hint.
+
+1. **Read the source of the dispute** — each bead's stored `gc.output_json`:
+   ```bash
+   raw=$(gc bd show <bead> --json)
+   printf '%s' "$raw" | jq -r '.[0].metadata["gc.output_json"]'
+   ```
+   Read the synthesis verdict (its `crux_question`/`disputed` marks if present, its
+   combined `findings`) and both lanes' verdicts (their `findings`, `severity`, rationale).
+2. **Identify the disputed load-bearing finding(s).** Prefer the synthesis verdict's
+   `disputed`/`crux_question` marks. If it has none (an older verdict), **derive** them:
+   a finding one lane rates `>=major` that the other **dismisses, downgrades, or omits**
+   is a dispute; the crux is the factual question the two positions turn on. Focus on
+   `>=major` disputes — a nit split is not worth a settle round.
+3. **Get the code and VERIFY the keystone.** Fetch the PR head into your worktree
+   (`git fetch origin pull/<N>/head`; `git checkout --detach FETCH_HEAD` to browse), then
+   read the diff **plus the surrounding code the crux turns on** — trace the exact call
+   path, config default, flag, or token the two lanes disagree about, and cite each hop as
+   `file:line`. Ground-truth the load-bearing facts (a config default, an
+   `__init_subclass__` flag, whether a helper is fed delta-only vs accumulated, a token
+   that arrives alone) by READING them — do not infer. Load the personas for the touched
+   paths ({{template "persona-load" "review"}} inline) so you apply the domain reflexes.
+4. **Resolve each dispute** to one of:
+   - `resolved` — the evidence settles it. Set `which_holds` to the lane whose position the
+     code supports (or `neither`/`both_partial`), the settled `severity`, and
+     `confidence` (`high` only when the chain is complete; cap at `medium` if a keystone
+     is `could_not_verify`). Record the full `evidence[]` chain.
+   - `needs_dynamic` — static reading gets you most of the way but a runtime check would
+     **fully** close it. Give the single decisive scoped check in `needs_dynamic`
+     (`command` in prepared-env `python -m pytest <node-id> -q` form, `why`,
+     `what_it_checks`). A blocked egress / limited posture is why you didn't run it — an
+     honest outcome, not a failure.
+   - `genuinely_ambiguous` — the evidence does not decide it; say what would.
+5. **Emit `pr-review-settle.v1`** to a unique `mktemp` file (never a fixed path — pooled
+   slots share `/tmp`), then finish with the SAME `emit-verdict.sh` ritual as a review (it
+   detects the settle shape, notifies the human, and is re-renderable via
+   `gc dev-pack summary <your-bead>`):
+
+   ```bash
+   out="$(mktemp -t pr-settle.XXXXXX)"
+   # ... write your pr-review-settle.v1 object (valid JSON) to "$out" ...
+   bash {{.ConfigDir}}/assets/scripts/emit-verdict.sh --bead <your-settle-bead> \
+     --verdict-file "$out" --outcome pass
+   rm -f "$out"
+   ```
+
+   `pr-review-settle.v1` = `{ schema:"pr-review-settle.v1", head_ref, base_ref,
+   settle_of:<synth_bead>, lane_beads:[…], arbiter_model:(best-effort, e.g. $GC alias or
+   ""), posture:(carried from the quorum verdict), disputes_examined:<int>,
+   resolutions:[{ finding_ref, title, crux_question, positions:{<lane_id>:<stance>…},
+   resolution:(resolved|needs_dynamic|genuinely_ambiguous), which_holds, severity,
+   confidence, evidence:[{ref:"file:line", note}], keystones_verified:[…],
+   keystones_unverified:[…], needs_dynamic:({command,why,what_it_checks} | null),
+   rationale }], settled_verdict:(the strictest call after settling), summary,
+   read_only_enforcement:{clean:true, mutations_delta:[]}, failure_class, failure_reason }`.
+   Keep `summary`, `rationale`, and each finding's prose upstream-clean — the human reads
+   your conclusion. On an infra failure use the review's `--outcome fail
+   --failure-class transient --failure-reason …` form.
 
 ## Posture disposition (do this BEFORE you fetch or review)
 

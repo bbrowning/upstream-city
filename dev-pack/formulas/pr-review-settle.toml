@@ -1,0 +1,161 @@
+description = """
+The review divergence SETTLE round — resolve a disputed load-bearing finding by
+EVIDENCE, then re-synthesize.
+
+When a review quorum's lanes DIVERGE on a `>=major` finding, `pr-review-quorum`'s
+synthesis takes the strictest call, NAMES the crux, and stops — handing the dispute to a
+human. This formula settles that crux automatically: a verify-mandated **arbiter** (a
+3rd, ideally independent, model) reads the synthesis + both lanes' verdicts, VERIFIES the
+keystone the two positions turn on by `file:line` static reads (escalating to a scoped
+check as `needs_dynamic` when static can't fully close), and emits a `pr-review-settle.v1`
+resolution per disputed finding. Then a **re-synthesis** step folds those resolutions into
+an updated `pr-review-quorum.v1` verdict (confirmed disputed-major stays a blocker;
+refuted -> downgrade/drop; needs-dynamic -> surface the exact approved check).
+
+## Core principle (do not violate)
+Settle by VERIFYING the keystone, never by a tiebreaker vote. This is `base.md` #7
+("author claims are hypotheses, not evidence") applied to the REVIEWERS' claims — an
+arbiter that picks "who's more convincing" will hallucinate. Every resolution is grounded
+in `file:line` (static read) or a scoped check (dynamic). Same lesson as the hard-bug
+verification-gap fix: agreement (or a louder claim) on an unverified keystone is NOT a
+resolution.
+
+## Phasing (Phase 1)
+This is the manual entry point (`gc dev-pack settle <PR>`). `pr-review-quorum` marks
+divergence + the crux but with `enable_settle=false` (the default) does NOT auto-sling
+this — it is report-only. Promote to auto-on-divergence once trusted (Phase 2), exactly
+how the hard-bug lane staged `enable_loop`. Bounded: one settle round, then escalate to a
+human (review disputes are few + factual, unlike hard-bug's until-convergence loop).
+
+## Reuse
+Arbiter + lane targets are formula vars — a 3rd vendor drops in via `--arbiter <profile>`
+(any reviewer profile) or a city.toml patch, no formula edit. The arbiter SHARES the
+reviewer's method (the `pr-review-settle.v1` task is schema-dispatched in the reviewer
+prompt), so it reuses the reviewer's worktree/fetch/persona/emit machinery. The lane
+beads are relayed as vars (like hard-bug's `prior_peer_bead_*`) because they come from a
+DIFFERENT formula instance and are not on this run's `needs` edge.
+"""
+formula = "pr-review-settle"
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[vars]
+[vars.head_ref]
+description = "The PR under settle: a PR number N (agents fetch origin pull/N/head), a branch, or a sha. Carried from the quorum verdict being settled."
+default = "HEAD"
+
+[vars.base_ref]
+description = "Baseline ref the diff is compared against (the merge target)."
+default = "origin/main"
+
+[vars.synth_bead]
+description = "The quorum SYNTHESIS verdict bead (pr-review-quorum.v1) being settled — the arbiter reads it for the combined findings + the named crux. Required."
+required = true
+
+[vars.lane_a_bead]
+description = "Reviewer lane A's verdict bead (pr-review.v1) — lane A's position on the dispute. Relayed as a var (it is not on this run's needs edge). Empty = the arbiter walks synth_bead's deps to find the lanes itself."
+default = ""
+
+[vars.lane_b_bead]
+description = "Reviewer lane B's verdict bead (pr-review.v1) — lane B's position. Empty = arbiter derives from synth_bead's deps."
+default = ""
+
+[vars.crux_question]
+description = "Optional hint: the factual question the lanes split on (the synthesis names it). Empty = the arbiter derives the crux from the lane verdicts."
+default = ""
+
+[vars.arbiter_target]
+description = "Agent that arbitrates — a verify-mandated reviewer PROFILE whose model/effort come from its OWN city.toml option_defaults. Default pr-arbiter (opus @ xhigh). `gc dev-pack settle --arbiter <profile>` picks any reviewer profile for a genuine 3rd-vendor opinion (correctness is the evidence chain, not model identity)."
+default = "pr-arbiter"
+
+[vars.arbiter_provider]
+description = "Provider hint for the arbiter (dashboard/provenance only; runtime provider comes from the agent config)."
+default = "claude"
+
+[vars.resynth_target]
+description = "Agent that re-synthesizes the settle resolutions into the updated quorum verdict. Reuses the quorum synthesis role (pr-reviewer)."
+default = "pr-reviewer"
+
+[vars.enable_settle]
+description = "Mirror of the pr-review-quorum dial (false = report-only, the quorum does NOT auto-sling this). Informational here — the manual `gc dev-pack settle` always runs the arbiter. Kept so the auto-sling path (Phase 2) forwards a consistent record."
+default = "false"
+
+[[steps]]
+id = "arbitrate"
+title = "Arbiter: settle the review divergence by evidence"
+description = """
+You are the verify-mandated ARBITER settling a divergence in the review of
+`{{base_ref}}...{{head_ref}}`. Two reviewer lanes split on a load-bearing finding; the
+quorum synthesis named the crux and stopped. RESOLVE it — by EVIDENCE, never a vote. Work
+read-only in your own isolated worktree (never the shared rig root).
+
+Follow the **Settle a review divergence (`pr-review-settle.v1`)** task in your reviewer
+method exactly (it is schema-dispatched there). Your inputs (read each via
+`gc bd show <bead> --json | jq -r '.[0].metadata["gc.output_json"]'`):
+- Quorum synthesis verdict: `{{synth_bead}}` — the combined findings + the named crux
+  (its `crux_question`/`disputed` marks if present).
+- Lane A position: `{{lane_a_bead}}`  ·  Lane B position: `{{lane_b_bead}}`.
+  If EITHER is empty, walk `{{synth_bead}}`'s dependency edge and take the deps stamped
+  `gc.review_quorum_lane` as the lanes.
+- Crux hint (may be empty — derive it yourself then): `{{crux_question}}`.
+
+Then, per your method:
+1. Identify the disputed `>=major` finding(s) — prefer the synthesis's `disputed`/
+   `crux_question` marks; else derive them (a finding one lane rates `>=major` that the
+   other dismisses/downgrades/omits).
+2. Fetch the PR head into your worktree and VERIFY the keystone by reading the exact call
+   path / config default / flag / token the two positions turn on — cite every hop as
+   `file:line`. Ground-truth load-bearing facts by READING, never inferring.
+3. Resolve each dispute to `resolved` (which_holds + severity + confidence + evidence[]) /
+   `needs_dynamic` (the single decisive scoped check) / `genuinely_ambiguous`. Cap
+   confidence at `medium` for any keystone you could not verify.
+
+Emit the full `pr-review-settle.v1` object (the exact shape your method specifies) and
+finish atomically — `emit-verdict.sh` detects the settle shape, notifies the human, and
+makes it re-renderable via `gc dev-pack summary <your-bead>`:
+  bash {{.ConfigDir}}/assets/scripts/emit-verdict.sh --bead <your-settle-bead> \\
+    --verdict-file "$out" --outcome pass
+On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
+"""
+metadata = { "gc.run_target" = "{{arbiter_target}}", "gc.provider" = "{{arbiter_provider}}", "gc.review_settle_role" = "arbiter", "gc.settle_of" = "{{synth_bead}}", "gc.output_json_schema" = "pr-review-settle.v1", "gc.output_json_required" = "true" }
+
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"
+
+[[steps]]
+id = "re-synthesize"
+title = "Re-synthesis: fold the settle resolutions into the final verdict"
+needs = ["arbitrate"]
+description = """
+You are the post-settle RE-SYNTHESIS for the review of `{{base_ref}}...{{head_ref}}`. A
+settle round just RESOLVED the disputed finding(s) by evidence; fold those resolutions
+into the final quorum verdict — do not re-litigate them. This is a read-only judging task
+(you read beads, not the diff): follow the **Re-synthesis after a settle round** note in
+your reviewer method (Quorum synthesis section).
+
+Read (via `gc bd show <bead> --json | jq -r '.[0].metadata["gc.output_json"]'`):
+- The settle report on your `needs` edge — `settle_bead` = the `arbitrate` step's
+  `pr-review-settle.v1` (walk `gc bd show <your-bead> --json` deps).
+- The ORIGINAL quorum verdict `{{synth_bead}}` (your starting point) and the lane beads
+  `{{lane_a_bead}}` / `{{lane_b_bead}}` (empty = read them off `{{synth_bead}}`'s deps).
+
+Start from the original verdict and adjust per each `resolutions[]` entry (resolved
+`>=major` -> stays/raised to a blocker with the arbiter's evidence folded into `detail`;
+needs_dynamic -> keep as unconfirmed, surface the exact check in `dynamic_request`, hold
+`verdict` at `request_changes`; refuted -> downgrade/drop the finding and relax `verdict`;
+genuinely_ambiguous -> keep + note for the human). Note in `summary` that this is a
+post-settle re-synthesis and cite the settle bead.
+
+Emit `pr-review-quorum.v1` (a SUPERSET of `pr-review.v1`, so the existing
+render/notify/`gc dev-pack summary` path works unchanged) and finish atomically:
+  bash {{.ConfigDir}}/assets/scripts/emit-verdict.sh --bead <your-step-bead> \\
+    --verdict-file "$out" --outcome pass
+On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
+"""
+metadata = { "gc.run_target" = "{{resynth_target}}", "gc.review_settle_role" = "resynthesis", "gc.settle_of" = "{{synth_bead}}", "gc.output_json_schema" = "pr-review-quorum.v1", "gc.output_json_required" = "true" }
+
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"

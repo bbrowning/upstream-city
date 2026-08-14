@@ -68,6 +68,14 @@ default = ""
 description = "Agent that synthesizes the lane verdicts into the combined quorum verdict."
 default = "pr-reviewer"
 
+[vars.enable_settle]
+description = "false = report-only (synthesis MARKS a load-bearing divergence + names the crux but does NOT auto-sling the settle round — a human runs `gc dev-pack settle <PR>`, Phase 1); true = synthesis plays coordinator and auto-slings `pr-review-settle` when a disputed >=major finding exists (Phase 2, promote once trusted). Mirrors the hard-bug `enable_loop` dial."
+default = "false"
+
+[vars.settle_target]
+description = "Arbiter target forwarded to `pr-review-settle` when enable_settle=true (a verify-mandated reviewer profile). Empty defers to the settle formula's default (pr-arbiter)."
+default = ""
+
 [[steps]]
 id = "triage"
 title = "Deterministic pre-scan + posture classification"
@@ -202,10 +210,20 @@ Combine them:
   lanes (they triaged the same PR, so these normally agree).
 - `dynamic_check` / `dynamic_request` = carry forward a lane's object if present, else null.
 
+MARK DIVERGENCE (so a settle round — manual now, auto later — has a crux to resolve).
+As you merge, flag genuine lane disagreement structurally, not just in prose:
+- On each finding a lane rated `>=major` that another lane **dismissed, downgraded, or
+  omitted**, set `disputed=true` and `crux_question` = the single factual question the two
+  positions turn on (e.g. "is `supports_required_and_named` True for engine-backed Hermes
+  when strict tool calling is disabled?"). A mere nit split is NOT a dispute.
+- At top level set `has_disputed_major` (bool) and `crux_question` (the load-bearing one,
+  or ""). These are ADDITIVE fields; the existing renderer ignores them.
+
 Emit `pr-review-quorum.v1` = a SUPERSET of `pr-review.v1` — all the fields above (so the
 existing renderer/notify/summary work unchanged) PLUS:
 - `lanes`: `[{lane_id, model, verdict, findings_count, effective_posture}]` — per-lane
   provenance so a human can see who found what.
+- `has_disputed_major`, `crux_question`, and per-finding `disputed`/`crux_question` (above).
 - `evidence`: which lane beads you read and how you merged (internal provenance).
 - `read_only_enforcement`: `{clean:true, mutations_delta:[]}` (you only read beads).
 
@@ -213,6 +231,26 @@ Finish atomically (emit-verdict.sh auto-detects `.verdict` -> review-shaped noti
   bash {{.ConfigDir}}/assets/scripts/emit-verdict.sh --bead <your-step-bead> \\
     --verdict-file "$out" --outcome pass
 On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
+
+SETTLE ROUND (the divergence dial), AFTER you close above:
+- `enable_settle={{enable_settle}}` is **false** (Phase 1, report-only): STOP. Do not
+  sling anything. If `has_disputed_major` is true, note in your `summary`/
+  `merge_recommendation` that a human can settle it with
+  `gc dev-pack settle {{head_ref}}` — the verdict already carries the crux.
+- `enable_settle` is **true** (Phase 2): if `has_disputed_major`, play coordinator and
+  sling ONE settle round (bounded — one round, then it escalates to a human), relaying the
+  lane beads (they are on YOUR `needs` edge) and the crux:
+  ```bash
+  gc sling {{.Rig}}/pr-arbiter pr-review-settle --formula \\
+    --var head_ref={{head_ref}} --var base_ref={{base_ref}} \\
+    --var synth_bead=<your-synthesis-bead> \\
+    --var lane_a_bead=<lane-a-bead> --var lane_b_bead=<lane-b-bead> \\
+    --var crux_question="<the load-bearing crux>" \\
+    --var resynth_target={{synthesis_target}} \\
+    $( [ -n "{{settle_target}}" ] && printf -- '--var arbiter_target=%s' "{{settle_target}}" ) \\
+    --title "pr-review-settle: {{head_ref}}"
+  ```
+  (No disputed `>=major`? Do not sling — nothing to settle.)
 """
 metadata = { "gc.run_target" = "{{synthesis_target}}", "gc.review_quorum_role" = "synthesis", "gc.output_json_schema" = "pr-review-quorum.v1", "gc.output_json_required" = "true" }
 

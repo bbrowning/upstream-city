@@ -27,6 +27,13 @@
 #                           creates, not the reviewer's transient per-slot scratch.
 #                           No persistent per-PR session — continuity across rounds
 #                           comes from a rebuilt Q&A transcript, not agent memory.
+#     agents/pr-arbiter/    the review-divergence SETTLE lane (1 slot): when two
+#                           reviewer lanes split on a load-bearing finding, it RESOLVES
+#                           the crux by file:line evidence (never a vote — base.md #7
+#                           applied to the reviewers' claims), read-only in its own
+#                           worktree. Shares pr-reviewer's METHOD (the pr-review-settle.v1
+#                           task is schema-dispatched there), so any reviewer profile can
+#                           arbitrate via `gc dev-pack settle --arbiter <profile>`.
 #     agents/pr-chat/       interactive follow-up CHAT on an already-reviewed PR:
 #                           `gc dev-pack ask <PR>` with NO question hands your
 #                           terminal to a live agent (via `gc session new`) already
@@ -63,6 +70,13 @@
 #     formulas/pr-review.toml         N=1 review: triage -> review + pr-review.v1 verdict.
 #     formulas/pr-review-quorum.toml  N>=2 review: triage -> N reviewer lanes ->
 #                                     synthesis + pr-review-quorum.v1 (superset verdict).
+#                                     Synthesis MARKS a load-bearing divergence + the crux;
+#                                     with enable_settle=true it auto-slings the settle
+#                                     round (default false = report-only, Phase 1).
+#     formulas/pr-review-settle.toml  the divergence SETTLE round: a verify-mandated
+#                                     arbiter resolves the disputed finding by file:line
+#                                     evidence -> pr-review-settle.v1, then a re-synthesis
+#                                     folds the resolutions into the final quorum verdict.
 #     formulas/pr-review-dynamic.toml human-slung approval lane: run one approved
 #                                     check + pr-review-dynamic.v1 contract.
 #     formulas/pr-followup.toml       per-question follow-up: one answer +
@@ -82,7 +96,9 @@
 #     feature <bead>    start a feature implementation.
 #     materialize <PR>  check a PR out into a DURABLE, human-owned worktree (outside
 #                       .gc/, never reaped) so a person can read/diff/run it.
-#     summary <bead|PR> re-render a stored pr-review / dynamic-check verdict, LLM-free.
+#     settle <PR|bead>  resolve a DIVERGED quorum by evidence: a verify-mandated arbiter
+#                       settles the disputed finding (file:line, never a vote) + re-synthesizes.
+#     summary <bead|PR> re-render a stored pr-review / dynamic-check / settle verdict, LLM-free.
 #     ask <bead|PR> ["<question>"]  follow up in the PR's real code (via materialize).
 #                       WITH a question: a one-shot agent answers and mails it back,
 #                       threaded; each round sees every prior round on the PR. WITHOUT

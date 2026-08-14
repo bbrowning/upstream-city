@@ -1,0 +1,34 @@
+# pr-arbiter — the review-divergence SETTLE lane (the verify-mandated 3rd opinion).
+#
+# When two reviewer lanes split on a load-bearing finding, `pr-review-settle` routes the
+# `arbitrate` step here. The arbiter RESOLVES the crux by EVIDENCE (file:line static
+# reads, or a scoped check surfaced as needs_dynamic) — never by a tiebreaker vote. It is
+# read-only (like a review, minus even the one trusted auto-run: it never executes changed
+# code; a runtime check is surfaced as needs_dynamic for the human's pr-review-dynamic
+# lane).
+#
+# It SHARES the reviewer's METHOD (same prompt template) — the "Settle a review
+# divergence (pr-review-settle.v1)" task is schema-dispatched there, alongside review and
+# quorum synthesis. So ANY reviewer profile can act as an arbiter (`gc dev-pack settle
+# --arbiter <profile>`); this dedicated profile is just the DEFAULT arbiter target, its
+# model/effort pinned via its own city.toml option_defaults (the reliable launch path,
+# wo-au65.7). For the diversity lever, point --arbiter at a model distinct from BOTH lanes
+# (e.g. a second vendor) — but correctness comes from the evidence chain, not model
+# identity, so a strong verify-mandated model is the priority.
+#
+# Single slot so its worktree/HEAD is stable. NOT a quorum lane (never stamped
+# gc.review_quorum_lane), so emit-verdict.sh lets it notify the human directly.
+
+scope = "rig"
+nudge = "You have a settle assignment. Run `gc prime`, read your bead (schema pr-review-settle.v1), read the synthesis + both lane verdicts, VERIFY the disputed keystone by file:line reads (never a vote), write your pr-review-settle.v1 report to gc.output_json, then close the step and notify the human."
+idle_timeout = "30m"
+min_active_sessions = 0
+max_active_sessions = 1
+
+# Share pr-reviewer's method (DRY). adjustFragmentPath resolves this against the pack root.
+prompt_template = "agents/pr-reviewer/prompt.template.md"
+
+# Its OWN detached worktree (single slot → stable {{.AgentBase}} → stable worktree) so it
+# can fetch the PR head and read the code the crux turns on.
+work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
+pre_start = ["{{.CityRoot}}/tools/shared/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]

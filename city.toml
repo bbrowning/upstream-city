@@ -155,6 +155,20 @@ provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "xhigh" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
+# Review-divergence SETTLE lane (the verify-mandated arbiter for `gc dev-pack settle`).
+# The DEFAULT arbiter target; `--arbiter <profile>` can point at any reviewer profile for
+# a genuine 3rd-vendor opinion. opus @ xhigh: settling the crux is a deep static trace
+# (the manual PR 51937 arbiter run crossed ~8 files with exact line numbers), and the
+# arbiter is verify-mandated (correctness = the evidence chain, not model identity), so the
+# strongest reasoning model is the priority over independence. Same GC_PERSONAS corpus as
+# the reviewer + GC_PR_TRUSTED_AUTHORS (it re-derives posture for its FETCH latitude); no
+# GC_PREPARE_TEST_ENV — the arbiter is read-only and never executes changed code (a runtime
+# check is surfaced as needs_dynamic for the human's pr-review-dynamic lane).
+[[rigs.patches]]
+agent = "pr-arbiter"
+option_defaults = { model = "opus", effort = "xhigh" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
+
 # Human-approved dynamic-check lane. Same env wiring as the reviewer; the gate
 # (run-scoped-check.sh --min-ceiling limited) still floors it on the fresh ceiling.
 # Carries $GC_PERSONAS for parity/forward-readiness; the runner prompt does not

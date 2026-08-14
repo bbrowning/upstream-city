@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# summary — re-render a stored PR-review (pr-review.v1) or dynamic-check
-# (pr-review-dynamic.v1) verdict as a human-readable summary, on demand.
+# summary — re-render a stored PR-review (pr-review.v1 / pr-review-quorum.v1),
+# dynamic-check (pr-review-dynamic.v1), or divergence-settle (pr-review-settle.v1)
+# verdict as a human-readable summary, on demand.
 #
 #   gc dev-pack summary <bead-id | PR-number> [options]
 #
@@ -37,9 +38,10 @@ usage() {
     printf '%s\n' \
         "usage: gc dev-pack summary <bead-id | PR-number> [--rig N]" \
         "" \
-        "Re-render a stored verdict (pr-review.v1 / pr-review-dynamic.v1) as the same" \
-        "human-readable summary the verdict mail carries. Pass the bead id from the" \
-        "mail (gc bd show <bead> --json), or a bare PR number to look it up."
+        "Re-render a stored verdict (pr-review.v1 / pr-review-quorum.v1 /" \
+        "pr-review-dynamic.v1 / pr-review-settle.v1) as the same human-readable summary the" \
+        "verdict mail carries. Pass the bead id from the mail (gc bd show <bead> --json)," \
+        "or a bare PR number to look it up."
 }
 die() { printf '%s\n' "summary: $*" >&2; exit 2; }
 

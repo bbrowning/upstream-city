@@ -1,0 +1,1 @@
+description = "Settle a DIVERGED PR-review quorum: dispatch a verify-mandated arbiter that resolves the disputed load-bearing finding(s) by file:line evidence (never a vote), then re-synthesizes the final verdict. Runs on a past quorum verdict for a PR number or bead id (Phase-1 manual entry point for the settle round)"
