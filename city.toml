@@ -95,30 +95,35 @@ option_defaults = { model = "opus", effort = "xhigh" }
 # $GC_PERSONAS.
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
-# Review quorum lanes (gc dev-pack review --n 2). Distinct single-slot agents so the
-# two lanes get a genuine cross-model split from THEIR option_defaults (a per-step
-# opt_model does not reliably override a pooled agent's default — tracked as a
-# follow-up). Lane A mirrors the reviewer (opus); lane B is a genuinely independent
-# second take (sonnet). Same env as pr-reviewer so both load personas + can run the
-# prepared CPU check. A real second vendor for lane B is the one-line change here
-# (provider = "codex" + option_defaults.model = "gpt-5-codex" + a [providers.codex]
-# block). This a/b pair caps the review quorum at N=2.
-# Lanes must not mail the human — a quorum review notifies exactly ONCE, from the
-# SYNTHESIS step (pr-reviewer). That is enforced in emit-verdict.sh itself: it skips
-# notify for any bead stamped gc.review_quorum_lane (which these lanes are), so it needs
-# no env/reload. We deliberately do NOT also set GC_PR_NOTIFY_TO="" here: the metadata
-# skip is the real mechanism, and leaving notify enabled lets `gc dev-pack review
-# --lineup` reuse these single-slot lanes as the reliable model/effort-override
-# reviewer for a SOLO (N=1) run — whose bead is NOT quorum-stamped, so it notifies once.
+# Review lane PROFILES (gc dev-pack review --lanes A,B  and the default --n 2).
+# Each profile is a distinct single-slot reviewer agent that shares pr-reviewer's
+# METHOD and differs ONLY in a pinned model/effort. Model/effort come from THIS
+# option_defaults block, which is baked into the launch command (the reliable path) —
+# NOT from a per-run opt_model, which gascity does not apply at launch (wo-au65.7). So
+# to compare models per run you pick two profiles by name; to add a combo, add a profile
+# agent (dev-pack/agents/pr-reviewer-<name>/) + a patch here, then `gc reload`.
+# claude-opus-4-6 / claude-opus-4-8 are custom ids made valid by the [providers.claude]
+# `by_key` block above; "sonnet" is the builtin slug (= claude-sonnet-5).
+# Same env as pr-reviewer so every profile loads personas + can run the prepared CPU
+# check. These lanes must not mail the human — a quorum notifies exactly ONCE from the
+# SYNTHESIS step (pr-reviewer); emit-verdict.sh enforces that by skipping notify for any
+# bead stamped gc.review_quorum_lane (which lane beads are), so no notify env is needed
+# and a profile used SOLO (N=1, not quorum-stamped) still notifies once.
+# effort=xhigh is data-driven: opus/high demonstrably MISSED the inkling THINK_END
+# regression in PR 47562 (beads f41i, 8pr1) while opus/xhigh caught it as a blocker
+# (wcq4 x2) — effort, not model, was decisive. See tools/vllm/arena/decisions.jsonl.
 [[rigs.patches]]
-agent = "pr-reviewer-a"
-# effort=xhigh for the same data-driven reason as pr-reviewer above — opus needs xhigh
-# to reliably catch the inkling-class regression (the quorum's opus lane at high missed it).
-option_defaults = { model = "opus", effort = "xhigh" }
+agent = "pr-reviewer-opus46-xhigh"
+option_defaults = { model = "claude-opus-4-6", effort = "xhigh" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 [[rigs.patches]]
-agent = "pr-reviewer-b"
+agent = "pr-reviewer-opus48-xhigh"
+option_defaults = { model = "claude-opus-4-8", effort = "xhigh" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
+
+[[rigs.patches]]
+agent = "pr-reviewer-sonnet-xhigh"
 option_defaults = { model = "sonnet", effort = "xhigh" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 

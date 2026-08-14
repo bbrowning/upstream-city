@@ -36,32 +36,32 @@ default = "pr-triage"
 description = "Durable identity for reviewer lane A (survives slot churn)."
 default = "reviewer-a"
 [vars.lane_a_target]
-description = "Agent target for reviewer lane A — a distinct single-slot agent (pr-reviewer-a) so the two lanes run different models from their own option_defaults (a pooled agent's opt_model override is unreliable)."
-default = "pr-reviewer-a"
+description = "Agent target for reviewer lane A — a single-slot reviewer PROFILE whose model/effort come from its OWN city.toml option_defaults (the reliable launch path). `gc dev-pack review --lanes` selects profiles by name."
+default = "pr-reviewer-opus48-xhigh"
 [vars.lane_a_provider]
 description = "Provider hint for lane A (dashboard/provenance only; runtime provider comes from the agent config)."
 default = "claude"
 [vars.lane_a_model]
-description = "Per-run model override for lane A (emitted as opt_model). Empty defers to the agent's city.toml option_defaults."
+description = "Per-run model override for lane A (emitted as opt_model). INERT AT LAUNCH — gascity does not apply opt_model at dispatch (wo-au65.7); use a model-pinned profile via --lanes instead. Kept for when that gap is fixed. Empty by default."
 default = ""
 [vars.lane_a_effort]
-description = "Per-run effort override for lane A (emitted as opt_effort). Empty defers to the agent's city.toml option_defaults."
+description = "Per-run effort override for lane A (emitted as opt_effort). INERT AT LAUNCH (wo-au65.7) — use a profile's option_defaults. Empty by default."
 default = ""
 
 [vars.lane_b_id]
 description = "Durable identity for reviewer lane B."
 default = "reviewer-b"
 [vars.lane_b_target]
-description = "Agent target for reviewer lane B — a distinct single-slot agent (pr-reviewer-b, sonnet by default). To use a real second vendor, point its city.toml patch at a codex-backed config."
-default = "pr-reviewer-b"
+description = "Agent target for reviewer lane B — a single-slot reviewer PROFILE (sonnet by default). Add codex profiles to compare a second vendor once [providers.codex] is wired."
+default = "pr-reviewer-sonnet-xhigh"
 [vars.lane_b_provider]
 description = "Provider hint for lane B."
 default = "claude"
 [vars.lane_b_model]
-description = "Per-run model override for lane B (emitted as opt_model). Empty defers to the agent's city.toml option_defaults."
+description = "Per-run model override for lane B (emitted as opt_model). INERT AT LAUNCH (wo-au65.7) — use a model-pinned profile via --lanes. Empty by default."
 default = ""
 [vars.lane_b_effort]
-description = "Per-run effort override for lane B (emitted as opt_effort). Empty defers to the agent's city.toml option_defaults."
+description = "Per-run effort override for lane B (emitted as opt_effort). INERT AT LAUNCH (wo-au65.7). Empty by default."
 default = ""
 
 [vars.synthesis_target]

@@ -42,11 +42,11 @@ description = "Agent that runs the read-only review step. Bare name resolves wit
 default = "pr-reviewer"
 
 [vars.review_model]
-description = "Per-run model override for the review step (emitted as opt_model). Empty defers to the agent's city.toml option_defaults. Reliable only on a single-slot target — the launch command routes an overridden N=1 review to the single-slot pr-reviewer-a; the pooled pr-reviewer default ignores a live opt_model."
+description = "Per-run model override for the review step (emitted as opt_model). INERT AT LAUNCH — gascity does not apply opt_model at dispatch (wo-au65.7); for a solo review at a specific model, route review_target to a model-pinned profile via `gc dev-pack review --lanes <profile>`. Empty by default."
 default = ""
 
 [vars.review_effort]
-description = "Per-run effort override for the review step (emitted as opt_effort). Empty defers to option_defaults. Same single-slot caveat as review_model."
+description = "Per-run effort override for the review step (emitted as opt_effort). INERT AT LAUNCH (wo-au65.7) — use a model-pinned profile via --lanes. Empty by default."
 default = ""
 
 [[steps]]

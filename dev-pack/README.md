@@ -181,12 +181,13 @@ pack.toml                             # manifest (schema 2); no [[named_session]
 # --- review lane ---
 agents/pr-triage/                     # deterministic-first posture triage (1 slot)
 agents/pr-reviewer/                   # posture-gated reviewer, pooled up to 2 slots (own worktree each); N=1 review + quorum synthesis
-agents/pr-reviewer-a/                 # review-quorum lane A (1 slot, opus): shares pr-reviewer's prompt
-agents/pr-reviewer-b/                 # review-quorum lane B (1 slot, sonnet): shares pr-reviewer's prompt
+agents/pr-reviewer-opus46-xhigh/      # review lane PROFILE (1 slot): claude-opus-4-6 @ xhigh; shares pr-reviewer's prompt
+agents/pr-reviewer-opus48-xhigh/      # review lane PROFILE (1 slot): claude-opus-4-8 @ xhigh; shares pr-reviewer's prompt
+agents/pr-reviewer-sonnet-xhigh/      # review lane PROFILE (1 slot): sonnet @ xhigh; shares pr-reviewer's prompt
 agents/pr-runner/                     # human-approved dynamic-check lane (1 slot)
 agents/pr-follow-up/                  # one-shot follow-up Q&A on a reviewed PR (1 slot)
 formulas/pr-review.toml               # N=1: triage → review TASK + pr-review.v1 verdict contract
-formulas/pr-review-quorum.toml        # N=2: triage → pr-reviewer-a + pr-reviewer-b → synthesis + pr-review-quorum.v1
+formulas/pr-review-quorum.toml        # N=2: triage → two reviewer PROFILE lanes → synthesis + pr-review-quorum.v1
 formulas/pr-review-dynamic.toml       # human-approved check TASK + pr-review-dynamic.v1 contract
 formulas/pr-followup.toml             # per-question follow-up TASK + pr-followup.v1 contract
 # --- bug lane (N-opinion dial: solo self-verify, or opinions until convergence) ---
@@ -215,7 +216,7 @@ assets/scripts/pr-prescan.sh          # deterministic, injection-proof posture c
 assets/scripts/posture-latitude.sh    # pure posture → FETCH/EXEC/GATE table (review)
 assets/scripts/run-scoped-check.sh    # the deterministic EXEC gate for dynamic checks (review)
 assets/scripts/emit-verdict.sh        # review-lane atomic finish: write verdict + close + notify human
-assets/scripts/lineup-options.sh      # `--lineup` fail-fast: valid model/effort per provider (API-first, allowlist fallback)
+assets/scripts/lineup-options.sh      # valid model/effort values per provider (API-first, allowlist fallback) — validate a new profile's option_defaults
 assets/valid-options.txt              # offline fallback allowlist for lineup-options.sh (keep in sync on gascity upgrade)
 assets/scripts/emit-followup.sh       # follow-up atomic finish: write answer + chain + close + thread + notify
 assets/scripts/render-verdict.sh      # verdict JSON → human-readable summary (mail body + `summary` cmd)
@@ -314,36 +315,42 @@ itself), a branch, or a sha:
 ```bash
 gc dev-pack review 51296                 # defaults: --rig vllm --base origin/main --n 1
 gc dev-pack review my-branch --rig vllm --base v0.6.0
-gc dev-pack review 51296 --n 2           # 2-opinion reviewer quorum → synthesis (city.toml lane defaults)
+gc dev-pack review 51296 --n 2           # 2-opinion quorum → synthesis (default profiles: opus48-xhigh + sonnet-xhigh)
 gc dev-pack review 51296 --dry-run       # validate + print the gc sling it would run
 ```
 
-**Name the reviewer(s) per run — `--lineup`.** Compare two configurations in one shot;
-each comma-separated entry is `provider:model:effort` and the entry **count is N** (1 or 2):
+**Compare models per run — `--lanes` + reviewer profiles.** A *profile* is a single-slot
+reviewer agent with a model+effort **pinned via its `city.toml` `option_defaults`** — the
+reliable launch path (gascity does *not* apply a per-run `opt_model` at launch — `wo-au65.7`).
+`--lanes` names which profiles run; the **count is N** (1 or 2):
 
 ```bash
-gc dev-pack review 51296 --lineup 'claude:opus:xhigh,claude:sonnet:high'          # cross-model
-gc dev-pack review 51296 --lineup 'claude:claude-opus-4-6:high,claude:opus:high'  # opus 4.6 vs 4.8
-gc dev-pack review 51296 --lineup 'claude::max'                                   # N=1, default model @ max
+gc dev-pack review 51296 --lanes opus46-xhigh,opus48-xhigh   # compare opus 4.6 vs 4.8
+gc dev-pack review 51296 --lanes opus46-xhigh                # N=1 solo on the 4.6 profile
 ```
 
-Any field may be blank to defer to that agent's `city.toml` `option_defaults`. Every named
-value is **validated before slinging** against the running binary's real schema
-(`assets/scripts/lineup-options.sh` — API-first, with an offline allowlist fallback), so an
-invalid model/effort fails loudly here instead of gascity's silent launch-path fallback to a
-default. An N=1 run *with* an override routes to the single-slot `pr-reviewer-a` (a pooled
-agent doesn't reliably pick up a per-run option); a bare N=1 stays on the pooled `pr-reviewer`.
+Each name resolves to `<rig>/<name>` or the short `<rig>/pr-reviewer-<name>`; an unknown name
+fails loudly with the available list. Discover profiles with `gc agent list | grep pr-reviewer-`.
+Seeded profiles: `opus46-xhigh` (claude-opus-4-6), `opus48-xhigh` (claude-opus-4-8),
+`sonnet-xhigh` (claude-sonnet-5), all at `xhigh`.
 
-**Custom / non-default claude models (e.g. `claude-opus-4-6`).** gascity's builtin model list
-is a curated enum, and a model absent from it is *silently dropped* on launch (no `--model`
-emitted → the CLI's own default runs). It's a data gap, not a limit: declare the ids you want
-once in `city.toml` under `[providers.claude]` with `options_schema_merge = "by_key"` (then
-`gc reload`) — they become selectable **and** validated. See the recipe in `city.toml`.
+**Add a profile (new model/effort combo).** Create `dev-pack/agents/pr-reviewer-<name>/`
+(copy an existing profile — they all share `pr-reviewer`'s prompt) and a `[[rigs.patches]]`
+in `city.toml` pinning `option_defaults = { model = "…", effort = "…" }` + the reviewer env,
+then `gc reload`. A **custom claude id** (e.g. `claude-opus-4-6`) must first be registered in
+`city.toml` under `[providers.claude]` via `options_schema_merge = "by_key"` — otherwise gascity
+silently drops it at launch (a data gap, not a limit; see the recipe in `city.toml`).
 
-**Codex (second vendor)** is rejected until wired — provider is per-agent, not per-dispatch, so
-`--lineup 'codex:…'` needs a `[providers.codex]` block + `OPENAI_API_KEY`, `pr-reviewer-codex-a/-b`
-agents, and a `provider=codex` mapping in `commands/review/run.sh`. The command prints these
-steps if you try.
+> Why profiles, not a per-run `--model` flag? gascity resolves per-dispatch `opt_model`/`opt_effort`
+> only from an `in_progress` bead, but the routed step bead is still `open` when the agent
+> launches, so the override is dropped and the agent's `option_defaults` win (`wo-au65.7`). Pinning
+> the model in `option_defaults` (baked into the launch command) is the reliable path today. A
+> gascity fix that reads the override from the trigger bead would restore an arbitrary per-run dial.
+
+**Codex (second vendor)** is not wired yet — provider is per-agent, not per-dispatch. To add a
+codex profile: uncomment `[providers.codex]` in `city.toml` (+ `OPENAI_API_KEY`, `codex` CLI on
+PATH), add a `pr-reviewer-codex-<model>-<effort>` profile agent with `provider = "codex"`, then
+`--lanes` it like any other. (Tracked as `wo-au65.9`.)
 
 At `--n 2` the review lane slings `pr-review-quorum` (triage → two independent
 reviewer lanes → a synthesis step that dedups findings and takes the strictest

@@ -9,23 +9,22 @@
 # merge call). The verdict lands in the human inbox (`gc mail check`) and can be
 # re-rendered later with `gc dev-pack summary <bead|PR>`.
 #
-# --lineup names the provider/model/effort PER OPINION on the command line, so one run
-# can compare two configurations (e.g. opus-4-6 vs opus, or two effort levels). The
-# entry COUNT sets N. Any field left blank defers to that agent's city.toml
-# option_defaults. Every named value is validated against the RUNNING binary's real
-# schema BEFORE slinging (see assets/scripts/lineup-options.sh) — gascity silently drops
-# an unknown model on the launch path, so we fail loudly here instead.
+# --lanes selects which reviewer PROFILE(s) run the review, by name. A profile is a
+# single-slot reviewer agent with a model/effort pinned via its city.toml option_defaults
+# (the reliable launch path — gascity does NOT apply a per-run opt_model at launch,
+# wo-au65.7). The number of profiles you name is N. So one run can compare two models by
+# naming two profiles. Discover profiles with `gc agent list | grep pr-reviewer-`.
 #
 # Env (provided by gc): GC_CITY_PATH, GC_BIN.
 set -euo pipefail
 
 GC="${GC_BIN:-gc}"
 CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LINEUP_OPTS="$SCRIPT_DIR/../../assets/scripts/lineup-options.sh"
 
 RIG="vllm" ; BASE="origin/main" ; SPEC="" ; DRYRUN="no"
-N="" ; LINEUP=""
+N="" ; LANES=""
+# Default quorum lanes when --lanes is not given (must be existing profiles).
+DEFAULT_LANE_A="pr-reviewer-opus48-xhigh" ; DEFAULT_LANE_B="pr-reviewer-sonnet-xhigh"
 
 usage() {
     cat <<'EOF'
@@ -36,28 +35,41 @@ Sling the review formula (N=1 -> pr-review, N=2 -> pr-review-quorum) to <rig>/pr
   --rig NAME       rig the PR belongs to            (default: vllm)
   --base REF       baseline the diff is against      (default: origin/main)
   --n N            opinion count / fan-out: 1 (single reviewer, default) or 2 (quorum).
-                   Ignored/cross-checked when --lineup is given (its entry count sets N).
-  --lineup SPEC    per-opinion 'provider:model:effort' entries, comma-separated; the
-                   entry count IS N (1 or 2). Any field may be blank -> defers to the
-                   agent's city.toml option_defaults. Every value is validated up front.
-                     provider : claude   (codex needs a one-time setup — see README)
-                     model    : a valid slug OR a full id declared in city.toml, e.g.
-                                opus | opus-4-7 | sonnet | sonnet-5 | sonnet-4-6 |
-                                haiku | fable-5 | claude-opus-4-6   (NB: no bare opus-4-6)
-                     effort   : low | medium | high | xhigh | max
+                   Cross-checked against --lanes when both are given.
+  --lanes A[,B]    reviewer PROFILE(s) to run, by name; the count IS N (1 or 2). Each
+                   name resolves to an agent: '<name>' or the short 'pr-reviewer-<name>'.
+                   A profile pins a model+effort via its city.toml option_defaults, so
+                   naming two profiles compares two models in one run. Unknown names
+                   fail loudly (with the available list).
                    examples:
-                     --lineup 'claude:opus:xhigh,claude:sonnet:high'   # 2-way compare
-                     --lineup 'claude:claude-opus-4-6:high,claude:opus:high'
-                     --lineup 'claude::max'                            # N=1, default model, max effort
+                     --lanes opus46-xhigh,opus48-xhigh     # compare opus 4.6 vs 4.8
+                     --lanes opus46-xhigh                  # N=1 solo on the 4.6 profile
+                   (no --lanes: --n 1 -> pooled pr-reviewer defaults; --n 2 -> the two
+                   default profiles opus48-xhigh + sonnet-xhigh.)
   --dry-run        validate + print the gc sling command without running it
   -h, --help
 
-Custom claude models (e.g. claude-opus-4-6): declare them once in city.toml under
-[providers.claude] via `options_schema_merge = "by_key"` (then `gc reload`). They then
-become selectable AND validated here. See city.toml for the recipe.
+Add a profile (new model/effort combo): create dev-pack/agents/pr-reviewer-<name>/
+(copy an existing one) + a [[rigs.patches]] in city.toml pinning option_defaults, then
+`gc reload`. Custom claude ids (e.g. claude-opus-4-6) must first be registered in
+city.toml under [providers.claude] via options_schema_merge="by_key".
 EOF
 }
 die() { printf '%s\n' "review: $*" >&2; exit 2; }
+
+# --- agent lookup (cached) ---------------------------------------------------
+AGENTS_CACHE=""
+load_agents() { [ -n "$AGENTS_CACHE" ] || AGENTS_CACHE="$("$GC" --city "$CITY" agent list 2>/dev/null | awk '{print $1}')"; }
+agent_exists() { load_agents; printf '%s\n' "$AGENTS_CACHE" | grep -qx "$1"; }
+available_profiles() { load_agents; printf '%s\n' "$AGENTS_CACHE" | grep -E "^$RIG/pr-reviewer-" | sed "s#^$RIG/##" | paste -sd',' - | sed 's/,/, /g'; }
+RESOLVED=""
+resolve_lane() {  # $1=name -> sets RESOLVED to a rig-qualified agent, or dies
+    local e="$1" cand
+    for cand in "$RIG/$e" "$RIG/pr-reviewer-$e"; do
+        if agent_exists "$cand"; then RESOLVED="$cand"; return 0; fi
+    done
+    die "unknown lane profile '$e'. Available: $(available_profiles). (Add one: dev-pack/agents/pr-reviewer-<name>/ + a city.toml patch, then gc reload.)"
+}
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -67,8 +79,8 @@ while [ $# -gt 0 ]; do
         --base=*)    BASE="${1#*=}"; shift ;;
         --n)         N="${2:?}"; shift 2 ;;
         --n=*)       N="${1#*=}"; shift ;;
-        --lineup)    LINEUP="${2:?}"; shift 2 ;;
-        --lineup=*)  LINEUP="${1#*=}"; shift ;;
+        --lanes)     LANES="${2:?}"; shift 2 ;;
+        --lanes=*)   LANES="${1#*=}"; shift ;;
         --dry-run)   DRYRUN="yes"; shift ;;
         -h|--help)   usage; exit 0 ;;
         --)          shift; break ;;
@@ -79,56 +91,16 @@ done
 [ $# -eq 0 ] || { [ -z "$SPEC" ] && SPEC="$1"; }
 [ -n "$SPEC" ] || { usage >&2; die "missing <PR-number | ref>"; }
 
-# --- valid-option lookup + validation (memoized for one provider at a time) ---
-_OPT_PROV="" ; _OPT_MODELS="" ; _OPT_EFFORTS=""
-load_provider_opts() {  # $1=provider
-    local p="$1" out key rest
-    [ "$_OPT_PROV" = "$p" ] && return 0
-    out="$(bash "$LINEUP_OPTS" "$p")" \
-        || die "cannot resolve options for provider '$p' (API down AND not in the offline allowlist)"
-    _OPT_MODELS="" ; _OPT_EFFORTS=""
-    while IFS=' ' read -r key rest; do
-        case "$key" in model) _OPT_MODELS="$rest" ;; effort) _OPT_EFFORTS="$rest" ;; esac
-    done <<<"$out"
-    _OPT_PROV="$p"
-}
-validate_provider() {  # $1=provider
-    case "$1" in
-        claude) : ;;
-        codex)  die "provider 'codex' is not wired yet. To enable claude-vs-codex: (1) uncomment [providers.codex] in city.toml + set OPENAI_API_KEY (codex CLI on PATH); (2) add pr-reviewer-codex-a/-b agents (copy pr-reviewer-a); (3) extend this command to map provider=codex. See city.toml + dev-pack/README.md." ;;
-        *)      die "unknown provider '$1' (supported: claude)" ;;
-    esac
-}
-validate_field() {  # $1=provider $2=model|effort $3=value
-    local p="$1" key="$2" val="$3" set=""
-    [ -n "$val" ] || return 0    # blank -> defer to option_defaults
-    load_provider_opts "$p"
-    case "$key" in model) set="$_OPT_MODELS" ;; effort) set="$_OPT_EFFORTS" ;; esac
-    case " $set " in
-        *" $val "*) return 0 ;;
-        *) die "'$val' is not a valid $p $key (valid: ${set// /, })" ;;
-    esac
-}
-
-# --- resolve N + per-opinion config from --lineup -----------------------------
-declare -a EP EM EE   # per-entry provider / model / effort
-if [ -n "$LINEUP" ]; then
-    IFS=',' read -r -a ENTRIES <<<"$LINEUP" || true
-    LN=${#ENTRIES[@]}
+# --- resolve N + lane targets from --lanes -----------------------------------
+declare -a LT   # resolved rig-qualified lane targets
+if [ -n "$LANES" ]; then
+    IFS=',' read -r -a LE <<<"$LANES" || true
+    LN=${#LE[@]}
     if [ -n "$N" ] && [ "$N" != "$LN" ]; then
-        die "--n ($N) disagrees with --lineup entry count ($LN); omit --n or make them match"
+        die "--n ($N) disagrees with --lanes count ($LN); omit --n or make them match"
     fi
     N="$LN"
-    idx=0
-    for entry in "${ENTRIES[@]}"; do
-        IFS=':' read -r p m e _ <<<"$entry" || true
-        [ -n "$p" ] || p="claude"
-        validate_provider "$p"
-        validate_field "$p" model "$m"
-        validate_field "$p" effort "$e"
-        EP[$idx]="$p"; EM[$idx]="$m"; EE[$idx]="$e"
-        idx=$((idx + 1))
-    done
+    i=0; for e in "${LE[@]}"; do resolve_lane "$e"; LT[$i]="$RESOLVED"; i=$((i + 1)); done
 else
     [ -n "$N" ] || N=1
 fi
@@ -141,37 +113,27 @@ esac
 
 # --- build the sling argv -----------------------------------------------------
 if [ "$N" = "1" ]; then
-    RTARGET="$RIG/pr-reviewer" ; RMODEL="" ; REFFORT=""
-    if [ -n "$LINEUP" ]; then
-        RMODEL="${EM[0]}" ; REFFORT="${EE[0]}"
-        # A per-run model/effort override is only reliable on a single-slot agent (a warm
-        # pooled pr-reviewer session isn't relaunched per bead). Route an overridden solo
-        # review to pr-reviewer-a (single slot); it still notifies the human because the
-        # pr-review formula does NOT stamp gc.review_quorum_lane.
-        if [ -n "$RMODEL" ] || [ -n "$REFFORT" ]; then RTARGET="$RIG/pr-reviewer-a"; fi
-    fi
+    # Solo review. With a named profile, route to that single-slot agent (reliable
+    # model/effort via its option_defaults); otherwise the pooled pr-reviewer default.
+    if [ -n "$LANES" ]; then RTARGET="${LT[0]}"; else RTARGET="$RIG/pr-reviewer"; fi
     set -- "$RIG/pr-reviewer" pr-review --formula \
         --var "head_ref=$SPEC" --var "base_ref=$BASE" \
-        --var "review_target=$RTARGET"
-    if [ -n "$RMODEL" ]; then set -- "$@" --var "review_model=$RMODEL"; fi
-    if [ -n "$REFFORT" ]; then set -- "$@" --var "review_effort=$REFFORT"; fi
-    set -- "$@" --title "pr-review: $SPEC" --json
+        --var "review_target=$RTARGET" \
+        --title "pr-review: $SPEC" --json
 else
+    # Quorum. Named profiles pick the two lanes; otherwise the two default profiles.
+    if [ -n "$LANES" ]; then AT="${LT[0]}"; BT="${LT[1]}"; else
+        AT="$RIG/$DEFAULT_LANE_A" ; BT="$RIG/$DEFAULT_LANE_B"
+        agent_exists "$AT" || die "default lane '$AT' not found — run 'gc reload'? Or pass --lanes A,B (available: $(available_profiles))."
+        agent_exists "$BT" || die "default lane '$BT' not found — run 'gc reload'? Or pass --lanes A,B (available: $(available_profiles))."
+    fi
     set -- "$RIG/pr-reviewer" pr-review-quorum --formula \
         --var "head_ref=$SPEC" --var "base_ref=$BASE" \
         --var "triage_target=$RIG/pr-triage" \
-        --var "lane_a_target=$RIG/pr-reviewer-a" \
-        --var "lane_b_target=$RIG/pr-reviewer-b" \
-        --var "synthesis_target=$RIG/pr-reviewer"
-    # Pin a lane's model/effort only when explicitly set; empty defers to the agent's
-    # city.toml option_defaults. `if` (not `&&`) so a false test doesn't trip `set -e`.
-    if [ -n "$LINEUP" ]; then
-        if [ -n "${EM[0]}" ]; then set -- "$@" --var "lane_a_model=${EM[0]}"; fi
-        if [ -n "${EE[0]}" ]; then set -- "$@" --var "lane_a_effort=${EE[0]}"; fi
-        if [ -n "${EM[1]}" ]; then set -- "$@" --var "lane_b_model=${EM[1]}"; fi
-        if [ -n "${EE[1]}" ]; then set -- "$@" --var "lane_b_effort=${EE[1]}"; fi
-    fi
-    set -- "$@" --title "pr-review-quorum: $SPEC" --json
+        --var "lane_a_target=$AT" \
+        --var "lane_b_target=$BT" \
+        --var "synthesis_target=$RIG/pr-reviewer" \
+        --title "pr-review-quorum: $SPEC" --json
 fi
 
 if [ "$DRYRUN" = "yes" ]; then
