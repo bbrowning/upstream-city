@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import arena_common as A
 import backfill_bug_lane
+import backfill_review_quorum
 import eval_to_arena
 
 LOCK = os.path.join(A.ARENA_DIR, ".refresh.lock")
@@ -38,6 +39,7 @@ LOG = os.path.join(A.ARENA_DIR, "refresh.log")
 # gain N>=2 comparisons — the trigger, lock, and log all come for free.
 PROJECTORS = [
     ("bug-lane", lambda out, quiet: backfill_bug_lane.project(out=out, quiet=quiet)),
+    ("review-quorum", lambda out, quiet: backfill_review_quorum.project(out=out, quiet=quiet)),
     ("eval", lambda out, quiet: eval_to_arena.project(out=out, quiet=quiet)),
 ]
 

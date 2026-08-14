@@ -30,6 +30,9 @@ engine** (`vllm/parser/engine/`). How you think — reflexes, highest-value firs
    token ids; a text/substring fallback must be justified by the model's actual output
    (special tokens aren't guaranteed, tokenizers vary; ids ≠ names). Flag text-based
    detection where token-id would be robust, and hybrids that don't say why they need to be.
+   Registering `token_id_terminals` is a no-op where the tokenizer lacks the single-token id
+   (engine falls back to the text lexer) and hardening where it has it (blocks prose/injected
+   lookalikes) — so `token_id_terminals={}` is a choice to justify, not a neutral default.
    *When a token id or special-token name is the load-bearing unknown* — a rejected/leaked id
    in a log, an EOS/BOS/wrapper terminal you're reasoning about — **resolve it against the
    model's `tokenizer_config.json`; never infer it from parser code, the wire format, or a

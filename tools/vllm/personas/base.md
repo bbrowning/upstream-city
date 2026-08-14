@@ -28,3 +28,13 @@ Cross-cutting reflexes — the non-obvious vLLM-specific ones worth carrying eve
 6. **Competing in-flight fixes.** Check whether another open or merged PR edits the same
    function/hunk/area a different way — piecemeal merges conflict and entrench divergent
    designs even when each PR is individually correct.
+
+7. **Author claims are hypotheses, not evidence.** A stated rationale — above all one
+   justifying the *less* robust choice or dropping a check ("matching token-ids would starve
+   text", "X can't happen", "Y regresses") — must be demonstrated (a test that fails without
+   it, cited real model output, a repro), not asserted. A code comment or PR description that
+   *states* the rationale is the claim itself, not evidence for it — don't credit it without a
+   test/repro/cited output. An untested counterfactual doesn't
+   clear the bar; absent evidence the more robust / status-quo behavior is the default and
+   the burden is on the change. (vLLM PRs span every quality level; many rationales are
+   AI-generated and unevidenced.)
