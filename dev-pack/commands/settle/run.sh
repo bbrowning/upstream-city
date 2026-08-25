@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # settle — resolve a DIVERGED PR-review quorum by evidence (the settle round).
 #
-#   gc dev-pack settle <PR-number | bead-id> [options]
+#   gc dev-pack settle <PR-number | rig#PR | bead-id> [options]
 #
 #   gc dev-pack settle 51937                       # settle the newest quorum verdict for PR 51937
 #   gc dev-pack settle 51937 --arbiter gpt56luna-xhigh   # use a 3rd-vendor arbiter
@@ -21,7 +21,7 @@
 # `enable_settle` dial on `pr-review-quorum`; today it is report-only + this command.)
 #
 # Args:
-#   <PR-number | bead-id>   a PR number N (resolved to its newest quorum verdict bead),
+#   <PR-number | rig#PR | bead-id>  a PR number N (resolved to its newest quorum verdict bead),
 #                           or a quorum/review verdict bead id used directly.
 #
 # Options:
@@ -41,10 +41,12 @@ GC="${GC_BIN:-gc}"
 CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESOLVE="$SCRIPT_DIR/../../assets/scripts/resolve-verdict-bead.sh"
+NORMALIZE="$SCRIPT_DIR/../../assets/scripts/normalize-pr-target.sh"
 
 RIG="vllm" ; BASE="" ; SPEC="" ; ARBITER="" ; DRYRUN="no"
+RIG_EXPLICIT=0
 
-usage() { sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'; }
 die() { printf '%s\n' "settle: $*" >&2; exit 2; }
 
 # --- agent lookup (cached) ---------------------------------------------------
@@ -63,8 +65,8 @@ resolve_arbiter() {  # $1=name -> sets RESOLVED to a rig-qualified agent, or die
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --rig)       RIG="${2:?}"; shift 2 ;;
-        --rig=*)     RIG="${1#*=}"; shift ;;
+        --rig)       RIG="${2:?}"; RIG_EXPLICIT=1; shift 2 ;;
+        --rig=*)     RIG="${1#*=}"; RIG_EXPLICIT=1; shift ;;
         --base)      BASE="${2:?}"; shift 2 ;;
         --base=*)    BASE="${1#*=}"; shift ;;
         --arbiter)   ARBITER="${2:?}"; shift 2 ;;
@@ -77,8 +79,14 @@ while [ $# -gt 0 ]; do
     esac
 done
 [ $# -eq 0 ] || { [ -z "$SPEC" ] && SPEC="$1"; }
-[ -n "$SPEC" ] || { usage >&2; die "missing <PR-number | bead-id>"; }
+[ -n "$SPEC" ] || { usage >&2; die "missing <PR-number | rig#PR | bead-id>"; }
 [ -x "$RESOLVE" ] || die "resolver not found/executable: $RESOLVE"
+[ -x "$NORMALIZE" ] || die "target normalizer not found/executable: $NORMALIZE"
+NORM_ARGS=(--rig "$RIG")
+[ "$RIG_EXPLICIT" -eq 1 ] && NORM_ARGS+=(--rig-explicit)
+NORM=$("$NORMALIZE" "$SPEC" "${NORM_ARGS[@]}") || exit $?
+SPEC=$(printf '%s' "$NORM" | jq -r '.spec')
+RIG=$(printf '%s' "$NORM" | jq -r '.rig')
 
 # --- 1. Resolve the quorum SYNTHESIS verdict bead ----------------------------
 SYNTH=$("$RESOLVE" "$SPEC" --rig "$RIG") || exit $?
@@ -113,6 +121,8 @@ fi
 
 HEAD_REF=$(printf '%s' "$VJSON" | jq -r '.head_ref // empty')
 [ -n "$HEAD_REF" ] || die "verdict on '$SYNTH' has no head_ref — cannot settle"
+HEAD_NORM=$("$NORMALIZE" "$HEAD_REF" --rig "$RIG" --rig-explicit) || exit $?
+HEAD_REF=$(printf '%s' "$HEAD_NORM" | jq -r '.spec')
 # base_ref precedence: explicit --base > the verdict's own base_ref > origin/main.
 if [ -z "$BASE" ]; then BASE=$(printf '%s' "$VJSON" | jq -r '.base_ref // "origin/main"'); fi
 CRUX=$(printf '%s' "$VJSON" | jq -r '.crux_question // empty')

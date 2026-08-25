@@ -21,6 +21,7 @@ set -euo pipefail
 
 GC="${GC_BIN:-gc}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NORMALIZE="$SCRIPT_DIR/normalize-pr-target.sh"
 BEAD="" ; VF="" ; OUTCOME="pass" ; FCLASS="none" ; FREASON="" ; REASON=""
 
 die() { printf '%s\n' "emit-verdict: $*" >&2; exit 2; }
@@ -47,6 +48,15 @@ done
 [ -n "$BEAD" ] || die "usage: --bead is required"
 [ -n "$VF" ] && [ -f "$VF" ] || die "usage: --verdict-file must be an existing file"
 OUT=$(jq -c . "$VF") || die "verdict file is not valid JSON: $VF"
+# Treat agent-produced JSON as an untrusted handoff too. This guarantees newly
+# stored verdicts and notification hints never reintroduce a compound PR alias.
+head=$(printf '%s' "$OUT" | jq -r '.head_ref // empty')
+if [ -n "$head" ]; then
+    [ -x "$NORMALIZE" ] || die "target normalizer not found/executable: $NORMALIZE"
+    HN=$("$NORMALIZE" "$head" --rig "${GC_RIG:-vllm}" --rig-explicit) || exit $?
+    head=$(printf '%s' "$HN" | jq -r '.spec')
+    OUT=$(printf '%s' "$OUT" | jq -c --arg head "$head" '.head_ref = $head')
+fi
 
 # --- write metadata (MERGE — never --metadata '{…}', which wipes routing keys) ---
 "$GC" bd update "$BEAD" --set-metadata "gc.output_json=$OUT" --set-metadata "gc.outcome=$OUTCOME"
@@ -88,22 +98,22 @@ base="${GC_DASHBOARD_BASE:-http://127.0.0.1:8372/city/workspace/runs}"
 # the compact per-finding digest, rendered from the SAME renderer that backs
 # `gc dev-pack summary` (which also defaults to --brief). The body's footer points
 # to `gc dev-pack summary <bead> --full` for the complete verdict on demand.
-if jq -e '.resolutions' "$VF" >/dev/null 2>&1; then
-    head=$(jq -r '.head_ref // "?"' "$VF")
+if printf '%s' "$OUT" | jq -e '.resolutions' >/dev/null 2>&1; then
+    head=$(printf '%s' "$OUT" | jq -r '.head_ref // "?"')
     dn=$(jq -r '.disputes_examined // (.resolutions | length) // 0' "$VF")
     rn=$(jq -r '[.resolutions[]?.resolution] | map(select(. == "resolved")) | length' "$VF")
     subj="PR settle $head: $dn dispute(s) — $rn resolved"
-elif jq -e '.verdict' "$VF" >/dev/null 2>&1; then
-    head=$(jq -r '.head_ref // "?"' "$VF")
+elif printf '%s' "$OUT" | jq -e '.verdict' >/dev/null 2>&1; then
+    head=$(printf '%s' "$OUT" | jq -r '.head_ref // "?"')
     v=$(jq -r '.verdict // "?"' "$VF")
     fc=$(jq -r '.findings_count // 0' "$VF")
     subj="PR review $head: $v — $fc finding(s)"
 else
-    head=$(jq -r '.head_ref // "?"' "$VF")
+    head=$(printf '%s' "$OUT" | jq -r '.head_ref // "?"')
     oc=$(jq -r '.outcome // "?"' "$VF")
     subj="Dynamic check $head: $oc"
 fi
-body=$("$SCRIPT_DIR/render-verdict.sh" "$VF" --bead "$BEAD" --run-url "${base}/${root}" --rig "${GC_RIG:-}" --brief) \
+body=$(printf '%s' "$OUT" | "$SCRIPT_DIR/render-verdict.sh" - --bead "$BEAD" --run-url "${base}/${root}" --rig "${GC_RIG:-}" --brief) \
     || { printf '%s\n' "emit-verdict: WARN summary render failed; sending pointer-only body" >&2
          body="(summary render failed — full verdict: gc bd show $BEAD --json)"; }
 

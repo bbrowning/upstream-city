@@ -77,6 +77,9 @@ done
 [ -n "$MIN_CEILING" ] || die "usage: --min-ceiling is required (limited|trusted)"
 [ "${#CMD[@]}" -gt 0 ] || die "usage: a command is required after '--'"
 case "$MIN_CEILING" in limited|trusted) ;; *) die "--min-ceiling must be limited|trusted" ;; esac
+[ -x "$HERE/normalize-pr-target.sh" ] || die "target normalizer not found/executable: $HERE/normalize-pr-target.sh"
+HEAD_NORM=$("$HERE/normalize-pr-target.sh" "$HEAD" --rig "${GC_RIG:-vllm}" --rig-explicit) || exit $?
+HEAD=$(printf '%s' "$HEAD_NORM" | jq -r '.spec')
 
 rank() { case "$1" in block) echo 0;; restricted) echo 1;; limited) echo 2;; trusted) echo 3;; *) echo 3;; esac; }
 

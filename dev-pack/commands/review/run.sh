@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # review — kick off a posture-gated PR review without hand-typing the sling.
 #
-#   gc dev-pack review <PR-number | ref> [options]
+#   gc dev-pack review <PR-number | rig#PR | ref> [options]
 #
 # The opinion count N is the fan-out dial. --n 1 (default) slings the pr-review formula
 # (triage -> single posture-gated read-only review). --n 2 slings pr-review-quorum
@@ -20,8 +20,11 @@ set -euo pipefail
 
 GC="${GC_BIN:-gc}"
 CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NORMALIZE="$SCRIPT_DIR/../../assets/scripts/normalize-pr-target.sh"
 
 RIG="vllm" ; BASE="origin/main" ; SPEC="" ; DRYRUN="no"
+RIG_EXPLICIT=0
 N="" ; LANES=""
 # Default solo profile and quorum lanes when --lanes is not given (must be existing profiles).
 DEFAULT_SOLO_LANE="pr-reviewer-gpt56luna-xhigh"
@@ -29,7 +32,7 @@ DEFAULT_LANE_A="pr-reviewer-sonnet-xhigh" ; DEFAULT_LANE_B="pr-reviewer-gpt56lun
 
 usage() {
     cat <<'EOF'
-usage: gc dev-pack review <PR-number | ref> [options]
+usage: gc dev-pack review <PR-number | rig#PR | ref> [options]
 
 Sling the review formula (N=1 -> pr-review, N=2 -> pr-review-quorum) to <rig>/pr-review-synthesizer.
 
@@ -74,8 +77,8 @@ resolve_lane() {  # $1=name -> sets RESOLVED to a rig-qualified agent, or dies
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --rig)       RIG="${2:?}"; shift 2 ;;
-        --rig=*)     RIG="${1#*=}"; shift ;;
+        --rig)       RIG="${2:?}"; RIG_EXPLICIT=1; shift 2 ;;
+        --rig=*)     RIG="${1#*=}"; RIG_EXPLICIT=1; shift ;;
         --base)      BASE="${2:?}"; shift 2 ;;
         --base=*)    BASE="${1#*=}"; shift ;;
         --n)         N="${2:?}"; shift 2 ;;
@@ -90,7 +93,13 @@ while [ $# -gt 0 ]; do
     esac
 done
 [ $# -eq 0 ] || { [ -z "$SPEC" ] && SPEC="$1"; }
-[ -n "$SPEC" ] || { usage >&2; die "missing <PR-number | ref>"; }
+[ -n "$SPEC" ] || { usage >&2; die "missing <PR-number | rig#PR | ref>"; }
+[ -x "$NORMALIZE" ] || die "target normalizer not found/executable: $NORMALIZE"
+NORM_ARGS=(--rig "$RIG")
+[ "$RIG_EXPLICIT" -eq 1 ] && NORM_ARGS+=(--rig-explicit)
+NORM=$("$NORMALIZE" "$SPEC" "${NORM_ARGS[@]}") || exit $?
+SPEC=$(printf '%s' "$NORM" | jq -r '.spec')
+RIG=$(printf '%s' "$NORM" | jq -r '.rig')
 
 # --- resolve N + lane targets from --lanes -----------------------------------
 declare -a LT   # resolved rig-qualified lane targets

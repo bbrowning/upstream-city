@@ -3,7 +3,7 @@
 # dynamic-check (pr-review-dynamic.v1), or divergence-settle (pr-review-settle.v1)
 # verdict as a human-readable summary, on demand.
 #
-#   gc dev-pack summary <bead-id | PR-number> [options]
+#   gc dev-pack summary <bead-id | PR-number | rig#PR> [options]
 #
 # WHY THIS EXISTS: the verdict mail is ephemeral (retention-swept), and reading
 # the bead directly gives you raw JSON. This is the durable, LLM-free companion
@@ -32,10 +32,12 @@ CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RENDER="$SCRIPT_DIR/../../assets/scripts/render-verdict.sh"
 RESOLVE="$SCRIPT_DIR/../../assets/scripts/resolve-verdict-bead.sh"
+NORMALIZE="$SCRIPT_DIR/../../assets/scripts/normalize-pr-target.sh"
 
 RIG="vllm"
 SPEC=""
 FULL=""
+RIG_EXPLICIT=0
 
 usage() {
     printf '%s\n' \
@@ -53,8 +55,8 @@ die() { printf '%s\n' "summary: $*" >&2; exit 2; }
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --rig)     RIG="${2:?--rig needs a value}"; shift 2 ;;
-        --rig=*)   RIG="${1#*=}"; shift ;;
+        --rig)     RIG="${2:?--rig needs a value}"; RIG_EXPLICIT=1; shift 2 ;;
+        --rig=*)   RIG="${1#*=}"; RIG_EXPLICIT=1; shift ;;
         --full)    FULL=1; shift ;;
         --brief)   FULL=""; shift ;;
         -h|--help) usage; exit 0 ;;
@@ -64,9 +66,15 @@ while [ $# -gt 0 ]; do
     esac
 done
 [ $# -eq 0 ] || { [ -z "$SPEC" ] && SPEC="$1"; }
-[ -n "$SPEC" ] || { usage >&2; die "missing <bead-id | PR-number>"; }
+[ -n "$SPEC" ] || { usage >&2; die "missing <bead-id | PR-number | rig#PR>"; }
 [ -x "$RENDER" ] || die "renderer not found/executable: $RENDER"
 [ -x "$RESOLVE" ] || die "resolver not found/executable: $RESOLVE"
+[ -x "$NORMALIZE" ] || die "target normalizer not found/executable: $NORMALIZE"
+NORM_ARGS=(--rig "$RIG")
+[ "$RIG_EXPLICIT" -eq 1 ] && NORM_ARGS+=(--rig-explicit)
+NORM=$("$NORMALIZE" "$SPEC" "${NORM_ARGS[@]}") || exit $?
+SPEC=$(printf '%s' "$NORM" | jq -r '.spec')
+RIG=$(printf '%s' "$NORM" | jq -r '.rig')
 
 # Resolve the target bead (PR number -> newest verdict bead, or a bead id used
 # as-is). Shared with `gc dev-pack ask`, which also walks follow-up chains.
@@ -81,6 +89,12 @@ SHOW=$("$GC" --city "$CITY" --rig "$RIG" bd show "$BEAD" --json 2>/dev/null) \
 VJSON=$(printf '%s' "$SHOW" | jq -r '.[0].metadata["gc.output_json"] // empty')
 [ -n "$VJSON" ] \
     || die "bead '$BEAD' has no gc.output_json verdict (not a finished review / dynamic-check step?)"
+HEAD_REF=$(printf '%s' "$VJSON" | jq -r '.head_ref // empty')
+if [ -n "$HEAD_REF" ]; then
+    HEAD_NORM=$("$NORMALIZE" "$HEAD_REF" --rig "$RIG" --rig-explicit) || exit $?
+    HEAD_REF=$(printf '%s' "$HEAD_NORM" | jq -r '.spec')
+    VJSON=$(printf '%s' "$VJSON" | jq -c --arg head "$HEAD_REF" '.head_ref = $head')
+fi
 
 root=$(printf '%s' "$SHOW" | jq -r '.[0].metadata["gc.root_bead_id"] // empty')
 base="${GC_DASHBOARD_BASE:-http://127.0.0.1:8372/city/workspace/runs}"

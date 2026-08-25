@@ -4,7 +4,7 @@
 # durable worktree, then EITHER answers one question asynchronously (a question is
 # given) OR drops you into a live interactive chat in that worktree (no question).
 #
-#   gc dev-pack ask <PR-number | bead-id> ["<question>"] [options]
+#   gc dev-pack ask <PR-number | rig#PR | bead-id> ["<question>"] [options]
 #
 #   gc dev-pack ask 51937 "why this refactor?"   # async: a one-shot agent mails the answer
 #   gc dev-pack ask 51937                         # interactive: attach a live chat on this PR
@@ -29,7 +29,7 @@
 # async chain — run `ask <PR> "<question>"` for a durable, mailed, chained answer.
 #
 # Args:
-#   <PR-number | bead-id>  a PR number N (resolved to its newest verdict bead),
+#   <PR-number | rig#PR | bead-id>  a PR number N (resolved to its newest verdict bead),
 #                          or any bead id in the review/follow-up chain (a
 #                          verdict bead, or an earlier follow-up bead — both
 #                          resolve to the same root).
@@ -52,8 +52,10 @@ CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESOLVE="$SCRIPT_DIR/../../assets/scripts/resolve-verdict-bead.sh"
 MATERIALIZE="$SCRIPT_DIR/../materialize/run.sh"
+NORMALIZE="$SCRIPT_DIR/../../assets/scripts/normalize-pr-target.sh"
 
 RIG="vllm" ; BASE="origin/main" ; SPEC="" ; QUESTION="" ; FORCE=0 ; DRYRUN=0 ; INTERACTIVE=0
+RIG_EXPLICIT=0
 
 usage() {
     sed -n '2,47p' "$0" | sed 's/^# \{0,1\}//'
@@ -62,8 +64,8 @@ die() { printf '%s\n' "ask: $*" >&2; exit 2; }
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --rig)     RIG="${2:?--rig needs a value}"; shift 2 ;;
-        --rig=*)   RIG="${1#*=}"; shift ;;
+        --rig)     RIG="${2:?--rig needs a value}"; RIG_EXPLICIT=1; shift 2 ;;
+        --rig=*)   RIG="${1#*=}"; RIG_EXPLICIT=1; shift ;;
         --base)    BASE="${2:?--base needs a value}"; shift 2 ;;
         --base=*)  BASE="${1#*=}"; shift ;;
         --force)   FORCE=1; shift ;;
@@ -83,10 +85,16 @@ while [ $# -gt 0 ]; do
     esac
 done
 # No question -> interactive chat session (drop into a live agent on this PR).
-[ -n "$SPEC" ] || { usage >&2; die "missing <PR-number | bead-id>"; }
+[ -n "$SPEC" ] || { usage >&2; die "missing <PR-number | rig#PR | bead-id>"; }
 [ -n "$QUESTION" ] || INTERACTIVE=1
 [ -x "$RESOLVE" ] || die "resolver not found/executable: $RESOLVE"
 [ -x "$MATERIALIZE" ] || die "materialize script not found/executable: $MATERIALIZE"
+[ -x "$NORMALIZE" ] || die "target normalizer not found/executable: $NORMALIZE"
+NORM_ARGS=(--rig "$RIG")
+[ "$RIG_EXPLICIT" -eq 1 ] && NORM_ARGS+=(--rig-explicit)
+NORM=$("$NORMALIZE" "$SPEC" "${NORM_ARGS[@]}") || exit $?
+SPEC=$(printf '%s' "$NORM" | jq -r '.spec')
+RIG=$(printf '%s' "$NORM" | jq -r '.rig')
 
 # --- 1. Resolve the ROOT verdict bead (PR number, verdict bead, or a follow-up
 #        bead anywhere in the chain — resolve-verdict-bead.sh walks up to root).
@@ -98,6 +106,10 @@ ROOT_VJSON=$(printf '%s' "$ROOT_SHOW" | jq -r '.[0].metadata["gc.output_json"] /
 [ -n "$ROOT_VJSON" ] || die "root bead '$ROOT' has no gc.output_json verdict — not a finished review?"
 HEAD_REF=$(printf '%s' "$ROOT_VJSON" | jq -r '.head_ref // empty')
 [ -n "$HEAD_REF" ] || die "root bead '$ROOT' verdict has no head_ref — cannot materialize"
+# Historical verdicts may contain the old compound alias. Normalize again at
+# the stored-verdict -> materialize/sling boundary.
+HEAD_NORM=$("$NORMALIZE" "$HEAD_REF" --rig "$RIG" --rig-explicit) || exit $?
+HEAD_REF=$(printf '%s' "$HEAD_NORM" | jq -r '.spec')
 
 printf 'ask: PR/ref %s -> root verdict bead %s\n' "$HEAD_REF" "$ROOT" >&2
 

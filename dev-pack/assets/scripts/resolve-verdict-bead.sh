@@ -14,8 +14,11 @@ set -euo pipefail
 
 GC="${GC_BIN:-gc}"
 CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NORMALIZE="$SCRIPT_DIR/normalize-pr-target.sh"
 RIG="vllm"
 SPEC=""
+RIG_EXPLICIT=0
 
 usage() {
     printf '%s\n' \
@@ -28,8 +31,8 @@ die() { printf '%s\n' "resolve-verdict-bead: $*" >&2; exit 2; }
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --rig)     RIG="${2:?--rig needs a value}"; shift 2 ;;
-        --rig=*)   RIG="${1#*=}"; shift ;;
+        --rig)     RIG="${2:?--rig needs a value}"; RIG_EXPLICIT=1; shift 2 ;;
+        --rig=*)   RIG="${1#*=}"; RIG_EXPLICIT=1; shift ;;
         -h|--help) usage; exit 0 ;;
         --)        shift; break ;;
         -*)        die "unknown option '$1'" ;;
@@ -38,9 +41,16 @@ while [ $# -gt 0 ]; do
 done
 [ $# -eq 0 ] || { [ -z "$SPEC" ] && SPEC="$1"; }
 [ -n "$SPEC" ] || { usage >&2; die "missing <bead-id | PR-number>"; }
+[ -x "$NORMALIZE" ] || die "target normalizer not found/executable: $NORMALIZE"
+NORM_ARGS=(--rig "$RIG")
+[ "$RIG_EXPLICIT" -eq 1 ] && NORM_ARGS+=(--rig-explicit)
+NORM=$("$NORMALIZE" "$SPEC" "${NORM_ARGS[@]}") || exit $?
+SPEC=$(printf '%s' "$NORM" | jq -r '.spec')
+RIG=$(printf '%s' "$NORM" | jq -r '.rig')
 
 # A bare integer is a PR number: find the ROOT verdict bead (either schema)
-# whose gc.output_json.head_ref matches it. A quorum run (N>=2) leaves THREE
+# whose canonical gc.output_json.head_ref matches it (also accepting the exact
+# same-rig legacy <rig>#N form). A quorum run (N>=2) leaves THREE
 # kinds of pr-review*.v1 beads for the same PR — a reviewer-a lane, a
 # reviewer-b lane, and the synthesis — and lanes are closed by the very same
 # emit-verdict.sh as the synthesis, so "canon" (closed with a review: close
@@ -64,13 +74,13 @@ if printf '%s' "$SPEC" | grep -qE '^[0-9]+$'; then
                 --metadata-field "gc.output_json_schema=pr-review.v1" -n 0 2>/dev/null || true
             "$GC" --city "$CITY" --rig "$RIG" bd list --all --json \
                 --metadata-field "gc.output_json_schema=pr-review-quorum.v1" -n 0 2>/dev/null || true
-        } | jq -s 'add // []' | jq -c --arg n "$N" '
+        } | jq -s 'add // []' | jq -c --arg n "$N" --arg rig "$RIG" '
             [ .[]?
               | . as $b
               | ($b.metadata["gc.output_json"] // "" | fromjson?) as $vj
               | select($vj != null
-                       and (($vj.head_ref // "") | tostring
-                            | test("(^|[^0-9])" + $n + "([^0-9]|$)")))
+                       and ((($vj.head_ref // "") | tostring) as $head
+                            | ($head == $n or $head == ($rig + "#" + $n))))
               | {id: $b.id,
                  ts: ($b.closed_at // $b.updated_at // $b.created_at // ""),
                  canon: (($b.close_reason // "") | test("^(review|dynamic check):")),

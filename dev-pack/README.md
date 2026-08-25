@@ -756,18 +756,16 @@ mine → distill → `learn` invariant-corpus pipeline, now archived at `//tools
 
 ## Growing up (later)
 
-- **Rig-carrying PR specifiers for `review` (+ `materialize`).** Today a bare PR
-  number is rig-less, so `review` defaults `--rig vllm` and other rigs need an
-  explicit `--rig` (`gc dev-pack review --rig vllm 49227`). Make these "just work"
-  without `--rig`:
-  - `vllm#49227` — `<rig>#<PR>` form: split on `#`, validate the rig exists, use it.
+- **GitHub URL PR specifiers.** Rig-carrying shorthand is supported across the
+  PR commands today: `vllm#49227` is normalized to bare PR `49227` plus rig
+  `vllm` before lookup, workflow rendering, or git. A conflicting `--rig` and
+  malformed aliases fail synchronously. A future extension can also accept:
   - `https://github.com/vllm-project/vllm/pull/49227` — a GitHub PR URL: parse
     `owner/repo` + PR number, then map `owner/repo` → the local rig by matching each
     rig's `origin` remote (`gc rig list --json` + `git -C <rig-root> remote get-url
     origin`); fall back to `--rig` / the default only if no remote matches.
   Keep the current bare-number + `--rig` path working; `--rig` stays the explicit
-  override. Same parsing belongs in `commands/review/run.sh` and
-  `commands/materialize/run.sh` (both take a rig-less PR today).
+  override.
 - **Inline bug/feature description → auto-create the bead.** Today `bug` / `feature`
   require a pre-existing bead id, so you must remember the `gc bd create` incantation
   first. Let the verbs accept a free-text description and create the tracking bead

@@ -1,1 +1,1 @@
-description = "Check out a PR (or any ref) into a durable, human-owned worktree for review"
+description = "Check out a PR, rig#PR alias, or ref into a durable, human-owned worktree for review"

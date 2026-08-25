@@ -23,6 +23,8 @@
 set -euo pipefail
 
 GC="${GC_BIN:-gc}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NORMALIZE="$SCRIPT_DIR/normalize-pr-target.sh"
 BEAD="" ; ROOT="" ; AF="" ; OUTCOME="pass" ; FCLASS="none" ; FREASON="" ; REASON=""
 
 die() { printf '%s\n' "emit-followup: $*" >&2; exit 2; }
@@ -52,6 +54,13 @@ done
 [ -n "$ROOT" ] || die "usage: --root-bead is required"
 [ -n "$AF" ] && [ -f "$AF" ] || die "usage: --answer-file must be an existing file"
 OUT=$(jq -c . "$AF") || die "answer file is not valid JSON: $AF"
+pr=$(printf '%s' "$OUT" | jq -r '.pr // empty')
+if [ -n "$pr" ]; then
+    [ -x "$NORMALIZE" ] || die "target normalizer not found/executable: $NORMALIZE"
+    PN=$("$NORMALIZE" "$pr" --rig "${GC_RIG:-vllm}" --rig-explicit) || exit $?
+    pr=$(printf '%s' "$PN" | jq -r '.spec')
+    OUT=$(printf '%s' "$OUT" | jq -c --arg pr "$pr" '.pr = $pr')
+fi
 
 # --- guard: --bead must be the caller's own step bead, never the workflow root
 # or the (unrelated) --root-bead verdict bead. Both mistakes have happened: the
@@ -82,9 +91,9 @@ fi
 TO="${GC_PR_NOTIFY_TO-human}"
 [ -z "$TO" ] && exit 0   # notification disabled by the operator
 
-pr=$(jq -r '.pr // "?"' "$AF")
-question=$(jq -r '.question // "?"' "$AF")
-answer=$(jq -r '.answer // "(no answer recorded)"' "$AF")
+pr=$(printf '%s' "$OUT" | jq -r '.pr // "?"')
+question=$(printf '%s' "$OUT" | jq -r '.question // "?"')
+answer=$(printf '%s' "$OUT" | jq -r '.answer // "(no answer recorded)"')
 
 subj="Follow-up on PR ${pr}: ${question:0:60}"
 body=$(printf 'Q: %s\n\nA:\n%s\n\n---\nAsk another: gc dev-pack ask %s "<question>"\nFull record: gc bd show %s --json\n' \

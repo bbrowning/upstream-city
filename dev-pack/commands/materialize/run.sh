@@ -3,7 +3,7 @@
 # worktree so a person can read, diff, and (env permitting) run its code AFTER
 # an agent review has landed a verdict.
 #
-#   gc dev-pack materialize <PR-number | ref> [options]
+#   gc dev-pack materialize <PR-number | rig#PR | ref> [options]
 #
 # WHY THIS EXISTS: the reviewer/triage agents work in per-SLOT worktrees
 # (.gc/worktrees/<rig>/<slot>) that are transient SCRATCH — a slot is reused
@@ -15,8 +15,9 @@
 # it *would* run; this gives you a tree to run it in.
 #
 # Args:
-#   <PR-number | ref>   a PR number N (fetched as origin pull/N/head), or any
-#                       branch/tag/sha reachable via `git fetch origin <ref>`.
+#   <PR-number | rig#PR | ref>  a PR number N (fetched as origin pull/N/head),
+#                       a rig-carrying PR alias, or any branch/tag/sha reachable
+#                       via `git fetch origin <ref>`.
 #
 # Options:
 #   --rig <name>    rig to materialize from             (default: vllm)
@@ -33,6 +34,8 @@ set -euo pipefail
 
 GC="${GC_BIN:-gc}"
 CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NORMALIZE="$SCRIPT_DIR/../../assets/scripts/normalize-pr-target.sh"
 
 RIG="vllm"
 BASE="origin/main"
@@ -40,15 +43,16 @@ FORCE=0
 REMOVE=0
 JSONOUT=0
 SPEC=""
+RIG_EXPLICIT=0
 
 usage() {
-    sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --rig)     RIG="${2:?--rig needs a value}"; shift 2 ;;
-        --rig=*)   RIG="${1#*=}"; shift ;;
+        --rig)     RIG="${2:?--rig needs a value}"; RIG_EXPLICIT=1; shift 2 ;;
+        --rig=*)   RIG="${1#*=}"; RIG_EXPLICIT=1; shift ;;
         --base)    BASE="${2:?--base needs a value}"; shift 2 ;;
         --base=*)  BASE="${1#*=}"; shift ;;
         --force)   FORCE=1; shift ;;
@@ -64,10 +68,17 @@ done
 [ $# -eq 0 ] || { [ -z "$SPEC" ] && SPEC="$1"; }
 
 if [ -z "$SPEC" ]; then
-    echo "materialize: missing <PR-number | ref>" >&2
-    echo "usage: gc dev-pack materialize <PR-number | ref> [--rig N] [--base R] [--force] [--remove]" >&2
+    echo "materialize: missing <PR-number | rig#PR | ref>" >&2
+    echo "usage: gc dev-pack materialize <PR-number | rig#PR | ref> [--rig N] [--base R] [--force] [--remove]" >&2
     exit 2
 fi
+
+[ -x "$NORMALIZE" ] || { echo "materialize: target normalizer not found/executable: $NORMALIZE" >&2; exit 2; }
+NORM_ARGS=(--rig "$RIG")
+[ "$RIG_EXPLICIT" -eq 1 ] && NORM_ARGS+=(--rig-explicit)
+NORM=$("$NORMALIZE" "$SPEC" "${NORM_ARGS[@]}") || exit $?
+SPEC=$(printf '%s' "$NORM" | jq -r '.spec')
+RIG=$(printf '%s' "$NORM" | jq -r '.rig')
 
 # --- Resolve the rig root the same way the fetch order does (no hardcoded path). -
 RIGS_JSON=$("$GC" --city "$CITY" rig list --json 2>/dev/null) || {

@@ -1,1 +1,1 @@
-description = "Follow up on a reviewed PR in its real code: resolves the prior verdict (and every follow-up asked since) and materializes the PR into a durable worktree. With a question, a one-shot agent answers from the code and mails it back; with NO question, drops you into a live interactive chat session on that PR (one persistent chat per PR)"
+description = "Follow up on a reviewed PR (including rig#PR) in its real code, asynchronously or in an interactive per-PR chat"

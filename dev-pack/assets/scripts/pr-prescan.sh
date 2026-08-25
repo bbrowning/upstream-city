@@ -21,6 +21,11 @@ set -euo pipefail
 
 HEAD_REF="${1:?usage: pr-prescan.sh <head_ref> [base_ref]}"
 BASE_REF="${2:-origin/main}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NORMALIZE="$SCRIPT_DIR/normalize-pr-target.sh"
+[ -x "$NORMALIZE" ] || { echo "pr-prescan: target normalizer not found/executable: $NORMALIZE" >&2; exit 2; }
+HEAD_NORM=$("$NORMALIZE" "$HEAD_REF" --rig "${GC_RIG:-vllm}" --rig-explicit) || exit $?
+HEAD_REF=$(printf '%s' "$HEAD_NORM" | jq -r '.spec')
 
 # --- posture algebra --------------------------------------------------------
 rank() { case "$1" in block) echo 0;; restricted) echo 1;; limited) echo 2;; trusted) echo 3;; *) echo 3;; esac; }
