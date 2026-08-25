@@ -1,5 +1,5 @@
 [workspace]
-provider = "claude"
+provider = "codex"
 
 [providers]
 [providers.claude]
@@ -21,7 +21,7 @@ flag_args = ["--model", "claude-opus-4-8"]
 
 [providers.codex]
 base = "builtin:codex"
-option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
+option_defaults = { model = "gpt-5.6-luna", effort = "high" }
 
 [[rigs]]
 name = "paude"
@@ -36,26 +36,31 @@ includes = ["dev-pack"]
 
 [[rigs.patches]]
 agent = "pr-triage"
-option_defaults = { model = "opus", effort = "high" }
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
 env = { GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 [[rigs.patches]]
 agent = "pr-reviewer"
+provider = "claude"
 option_defaults = { model = "opus", effort = "xhigh" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 [[rigs.patches]]
 agent = "pr-reviewer-opus46-xhigh"
+provider = "claude"
 option_defaults = { model = "claude-opus-4-6", effort = "xhigh" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 [[rigs.patches]]
 agent = "pr-reviewer-opus48-xhigh"
+provider = "claude"
 option_defaults = { model = "claude-opus-4-8", effort = "xhigh" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 [[rigs.patches]]
 agent = "pr-reviewer-sonnet-xhigh"
+provider = "claude"
 option_defaults = { model = "sonnet", effort = "xhigh" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
@@ -79,22 +84,26 @@ env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/w
 
 [[rigs.patches]]
 agent = "pr-arbiter"
-option_defaults = { model = "opus", effort = "xhigh" }
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
 env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 [[rigs.patches]]
 agent = "pr-runner"
-option_defaults = { model = "opus", effort = "high" }
+provider = "codex"
+option_defaults = { model = "gpt-5.6-luna", effort = "high" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 [[rigs.patches]]
 agent = "pr-follow-up"
-option_defaults = { model = "opus", effort = "high" }
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "high" }
 env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
 
 [[rigs.patches]]
 agent = "pr-chat"
-option_defaults = { model = "opus", effort = "high" }
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "high" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
 
 [[rigs.patches]]
@@ -104,6 +113,11 @@ env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/w
 [[rigs.patches]]
 agent = "bug-worker-b"
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
+
+[[rigs.patches]]
+agent = "feature-dev"
+provider = "claude"
+option_defaults = { model = "opus", effort = "high" }
 
 [[named_session]]
 name = "lead"

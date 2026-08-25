@@ -66,12 +66,12 @@ description = "Optional hint: the factual question the lanes split on (the synth
 default = ""
 
 [vars.arbiter_target]
-description = "Agent that arbitrates — a verify-mandated reviewer PROFILE whose model/effort come from its OWN city.toml option_defaults. Default pr-arbiter (opus @ xhigh). `gc dev-pack settle --arbiter <profile>` picks any reviewer profile for a genuine 3rd-vendor opinion (correctness is the evidence chain, not model identity)."
+description = "Agent that arbitrates — a verify-mandated reviewer PROFILE whose model/effort come from its OWN city.toml option_defaults. Default pr-arbiter (gpt-5.6-sol @ xhigh). `gc dev-pack settle --arbiter <profile>` picks any reviewer profile for a genuine 3rd-vendor opinion (correctness is the evidence chain, not model identity)."
 default = "pr-arbiter"
 
 [vars.arbiter_provider]
 description = "Provider hint for the arbiter (dashboard/provenance only; runtime provider comes from the agent config)."
-default = "claude"
+default = "codex"
 
 [vars.resynth_target]
 description = "Agent that re-synthesizes the settle resolutions into the updated quorum verdict. Reuses the quorum synthesis role (pr-reviewer)."

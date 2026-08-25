@@ -73,7 +73,7 @@ All `[[rigs.patches]]` attach to the vllm rig. Common env sets referenced below:
 
 | agent | model / effort | env | notes |
 |---|---|---|---|
-| `pr-triage` | opus / high | trusted-authors only | Backstopped by the deterministic prescan + reviewer re-derivation, so it stays lean. |
+| `pr-triage` | **codex** gpt-5.6-sol / medium | trusted-authors only | Deterministic pre-scan sets the hard ceiling; medium effort handles the remaining posture judgment. |
 | `pr-reviewer` | opus / **xhigh** | TEST-VENV + trusted-authors | The verdict I act on, so it gets the deeper pass. `effort=xhigh` is data-driven — see the effort note below. |
 | `pr-reviewer-opus46-xhigh` | claude-opus-4-6 / xhigh | TEST-VENV + trusted-authors | Review lane PROFILE (see below). |
 | `pr-reviewer-opus48-xhigh` | claude-opus-4-8 / xhigh | TEST-VENV + trusted-authors | Review lane PROFILE. |
@@ -81,10 +81,10 @@ All `[[rigs.patches]]` attach to the vllm rig. Common env sets referenced below:
 | `pr-reviewer-gpt56sol-medium` | **codex** gpt-5.6-sol / medium | TEST-VENV + trusted-authors | Second-vendor profile; opt-in. |
 | `pr-reviewer-gpt56sol-xhigh` | **codex** gpt-5.6-sol / xhigh | TEST-VENV + trusted-authors | Apples-to-apples vs Claude xhigh (xhigh is codex's top effort). |
 | `pr-reviewer-gpt56luna-xhigh` | **codex** gpt-5.6-luna / xhigh | TEST-VENV + trusted-authors | Third-vendor opinion; opt-in. |
-| `pr-arbiter` | opus / xhigh | personas + trusted-authors (no test-venv) | Settle-round arbiter (read-only, never executes changed code). |
-| `pr-runner` | opus / high | TEST-VENV + trusted-authors | Human-approved dynamic-check lane. |
-| `pr-follow-up` | opus / high | personas only | `gc dev-pack ask` read-only follow-up (no execution latitude in v1). |
-| `pr-chat` | opus / high | TEST-VENV (no trusted-authors) | `gc dev-pack ask <PR>` with no question: live attached per-PR chat; MAY run tests on request. |
+| `pr-arbiter` | **codex** gpt-5.6-sol / xhigh | personas + trusted-authors (no test-venv) | Settle-round arbiter (read-only, never executes changed code). |
+| `pr-runner` | **codex** gpt-5.6-luna / high | TEST-VENV + trusted-authors | Human-approved dynamic-check lane. |
+| `pr-follow-up` | **codex** gpt-5.6-sol / high | personas only | `gc dev-pack ask` read-only follow-up (no execution latitude in v1). |
+| `pr-chat` | **codex** gpt-5.6-sol / high | TEST-VENV (no trusted-authors) | `gc dev-pack ask <PR>` with no question: live attached per-PR chat; MAY run tests on request. |
 | `bug-worker-a` | default (unset) | TEST-VENV (no trusted-authors) | Hard-bug lane A. |
 | `bug-worker-b` | default (unset) | TEST-VENV (no trusted-authors) | Hard-bug lane B. |
 
@@ -122,7 +122,7 @@ can run the prepared CPU check.
 
 The default arbiter for `gc dev-pack settle` (the verify-mandated tie-breaker
 for a diverged review quorum). `--arbiter <profile>` can point it at any reviewer
-profile for a genuine 3rd-vendor opinion. opus/xhigh: settling the crux is a deep
+profile for a genuine 3rd-vendor opinion. gpt-5.6-sol/xhigh: settling the crux is a deep
 static trace (the manual PR 51937 arbiter run crossed ~8 files with exact line
 numbers), and the arbiter is verify-mandated (correctness = the evidence chain,
 not model identity), so the strongest reasoning model is the priority over
