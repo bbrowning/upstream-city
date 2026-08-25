@@ -23,8 +23,9 @@ CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
 
 RIG="vllm" ; BASE="origin/main" ; SPEC="" ; DRYRUN="no"
 N="" ; LANES=""
-# Default quorum lanes when --lanes is not given (must be existing profiles).
-DEFAULT_LANE_A="pr-reviewer-opus48-xhigh" ; DEFAULT_LANE_B="pr-reviewer-sonnet-xhigh"
+# Default solo profile and quorum lanes when --lanes is not given (must be existing profiles).
+DEFAULT_SOLO_LANE="pr-reviewer-gpt56luna-xhigh"
+DEFAULT_LANE_A="pr-reviewer-sonnet-xhigh" ; DEFAULT_LANE_B="pr-reviewer-gpt56luna-xhigh"
 
 usage() {
     cat <<'EOF'
@@ -44,8 +45,8 @@ Sling the review formula (N=1 -> pr-review, N=2 -> pr-review-quorum) to <rig>/pr
                    examples:
                      --lanes opus46-xhigh,opus48-xhigh     # compare opus 4.6 vs 4.8
                      --lanes opus46-xhigh                  # N=1 solo on the 4.6 profile
-                   (no --lanes: --n 1 -> pooled pr-reviewer defaults; --n 2 -> the two
-                   default profiles opus48-xhigh + sonnet-xhigh.)
+                   (no --lanes: --n 1 -> gpt56luna-xhigh; --n 2 -> the two default
+                   profiles sonnet-xhigh + gpt56luna-xhigh.)
   --dry-run        validate + print the gc sling command without running it
   -h, --help
 
@@ -113,9 +114,12 @@ esac
 
 # --- build the sling argv -----------------------------------------------------
 if [ "$N" = "1" ]; then
-    # Solo review. With a named profile, route to that single-slot agent (reliable
-    # model/effort via its option_defaults); otherwise the pooled pr-reviewer default.
-    if [ -n "$LANES" ]; then RTARGET="${LT[0]}"; else RTARGET="$RIG/pr-reviewer"; fi
+    # Solo review. Route to a model-pinned profile so the provider/model/effort are
+    # applied reliably at launch (gas city does not apply opt_model at dispatch).
+    if [ -n "$LANES" ]; then RTARGET="${LT[0]}"; else
+        RTARGET="$RIG/$DEFAULT_SOLO_LANE"
+        agent_exists "$RTARGET" || die "default solo lane '$RTARGET' not found — run 'gc reload'? Or pass --lanes A (available: $(available_profiles))."
+    fi
     set -- "$RIG/pr-reviewer" pr-review --formula \
         --var "head_ref=$SPEC" --var "base_ref=$BASE" \
         --var "review_target=$RTARGET" \

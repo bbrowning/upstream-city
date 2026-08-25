@@ -37,7 +37,7 @@ description = "Durable identity for reviewer lane A (survives slot churn)."
 default = "reviewer-a"
 [vars.lane_a_target]
 description = "Agent target for reviewer lane A — a single-slot reviewer PROFILE whose model/effort come from its OWN city.toml option_defaults (the reliable launch path). `gc dev-pack review --lanes` selects profiles by name."
-default = "pr-reviewer-opus48-xhigh"
+default = "pr-reviewer-sonnet-xhigh"
 [vars.lane_a_provider]
 description = "Provider hint for lane A (dashboard/provenance only; runtime provider comes from the agent config)."
 default = "claude"
@@ -52,11 +52,11 @@ default = ""
 description = "Durable identity for reviewer lane B."
 default = "reviewer-b"
 [vars.lane_b_target]
-description = "Agent target for reviewer lane B — a single-slot reviewer PROFILE (sonnet by default). Add codex profiles to compare a second vendor once [providers.codex] is wired."
-default = "pr-reviewer-sonnet-xhigh"
+description = "Agent target for reviewer lane B — a single-slot Codex reviewer PROFILE (gpt-5.6-luna @ xhigh by default)."
+default = "pr-reviewer-gpt56luna-xhigh"
 [vars.lane_b_provider]
 description = "Provider hint for lane B."
-default = "claude"
+default = "codex"
 [vars.lane_b_model]
 description = "Per-run model override for lane B (emitted as opt_model). INERT AT LAUNCH (wo-au65.7) — use a model-pinned profile via --lanes. Empty by default."
 default = ""

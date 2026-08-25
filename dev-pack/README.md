@@ -313,9 +313,9 @@ back. This is the normal flow and needs no command memorization on your part.
 itself), a branch, or a sha:
 
 ```bash
-gc dev-pack review 51296                 # defaults: --rig vllm --base origin/main --n 1
+gc dev-pack review 51296                 # defaults: --rig vllm --base origin/main --n 1, gpt-5.6-luna @ xhigh
 gc dev-pack review my-branch --rig vllm --base v0.6.0
-gc dev-pack review 51296 --n 2           # 2-opinion quorum → synthesis (default profiles: opus48-xhigh + sonnet-xhigh)
+gc dev-pack review 51296 --n 2           # 2-opinion quorum → synthesis (default profiles: sonnet-xhigh + gpt56luna-xhigh)
 gc dev-pack review 51296 --dry-run       # validate + print the gc sling it would run
 ```
 
