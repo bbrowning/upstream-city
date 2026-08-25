@@ -96,7 +96,7 @@ Task by phase (see your worker method for the full playbook):
   verification_plan.
 
 Emit `hard-bug-diagnosis.v1` to gc.output_json, then finish:
-  bash {{.ConfigDir}}/assets/scripts/emit-json.sh --bead <your-step-bead> \\
+  bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-step-bead> \\
     --json-file "$out" --schema hard-bug-diagnosis.v1 --outcome pass
 On a retryable infra failure: --outcome fail --failure-class transient --failure-reason "…".
 """

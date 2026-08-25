@@ -68,7 +68,7 @@ a failure, so do not retry or fail the step over it. Record the real outcome in
 
 Emit `hard-bug-implement.v1` (branch, pushed, head_sha, base, summary, …) to
 gc.output_json, then finish:
-  bash {{.ConfigDir}}/assets/scripts/emit-json.sh --bead <your-step-bead> \\
+  bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-step-bead> \\
     --json-file "$out" --schema hard-bug-implement.v1 --outcome pass
 Contract failure (rig-root worktree, under-specified, or the fix genuinely fails its
 own tests): --outcome fail --failure-class hard --failure-reason "…".
@@ -98,7 +98,7 @@ the corrected behavior — re-run them if feasible (`concurs_with_evidence`). Ve
 concur / request_changes / blocked.
 
 Emit `hard-bug-crossreview.v1` to gc.output_json, then finish:
-  bash {{.ConfigDir}}/assets/scripts/emit-json.sh --bead <your-step-bead> \\
+  bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-step-bead> \\
     --json-file "$out" --schema hard-bug-crossreview.v1 --outcome pass
 """
 metadata = { "gc.run_target" = "{{reviewer_target}}", "gc.output_json_schema" = "hard-bug-crossreview.v1", "gc.output_json_required" = "true" }

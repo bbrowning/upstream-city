@@ -178,7 +178,7 @@ position), `head_ref`/`base_ref`, and an optional `crux_question` hint.
    ```bash
    out="$(mktemp -t pr-settle.XXXXXX)"
    # ... write your pr-review-settle.v1 object (valid JSON) to "$out" ...
-   bash {{.ConfigDir}}/assets/scripts/emit-verdict.sh --bead <your-settle-bead> \
+   bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-settle-bead> \
      --verdict-file "$out" --outcome pass
    rm -f "$out"
    ```
@@ -222,7 +222,7 @@ shared `gc.root_bead_id` and pick the one whose `gc.output_json_schema` is
 deterministic pre-scan in your own worktree and take the stricter of the two:
 
 ```bash
-bash {{.ConfigDir}}/assets/scripts/pr-prescan.sh <head_ref> <base_ref>   # emits ceiling_posture + facts
+bash "$GC_CITY_PATH/dev-pack/assets/scripts/pr-prescan.sh" <head_ref> <base_ref>   # emits ceiling_posture + facts
 ```
 
 `effective_posture = min(triage.posture, your_rescan.ceiling_posture)`
@@ -234,7 +234,7 @@ the ceiling, and say so in your verdict.
 you may do, and obey it:
 
 ```bash
-eval "$(bash {{.ConfigDir}}/assets/scripts/posture-latitude.sh "$effective_posture")"
+eval "$(bash "$GC_CITY_PATH/dev-pack/assets/scripts/posture-latitude.sh" "$effective_posture")"
 # sets FETCH (none|metadata|allowlist), EXEC (deny|allow), GATE (none|human|blocked)
 ```
 
@@ -268,7 +268,7 @@ eval "$(bash {{.ConfigDir}}/assets/scripts/posture-latitude.sh "$effective_postu
   4. Run it (your bead's description carries `head_ref`/`base_ref`), pinning the head
      sha so the gate refuses if the tree is not actually at head:
      ```bash
-     bash {{.ConfigDir}}/assets/scripts/run-scoped-check.sh \
+     bash "$GC_CITY_PATH/dev-pack/assets/scripts/run-scoped-check.sh" \
        --head <head_ref> --base <base_ref> --min-ceiling trusted \
        --expect-head-sha "$head_sha" \
        -- python -m pytest <test-node-id> -q
@@ -368,7 +368,7 @@ can never be a forgotten trailing step:
 
 ```bash
 # Your own review bead id is in your gc context (gc prime / your assignment).
-bash {{.ConfigDir}}/assets/scripts/emit-verdict.sh --bead <your-review-bead> \
+bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-review-bead> \
   --verdict-file "$verdict_file" --outcome pass
 rm -f "$verdict_file"
 ```
@@ -382,7 +382,7 @@ If you were blocked by infrastructure (provider down, repo unreachable), finish
 with the **same** command but pass the failure so a retry is sane:
 
 ```bash
-bash {{.ConfigDir}}/assets/scripts/emit-verdict.sh --bead <your-review-bead> \
+bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-review-bead> \
   --verdict-file "$verdict_file" --outcome fail \
   --failure-class transient --failure-reason "<stable reason>"   # or --failure-class hard
 ```

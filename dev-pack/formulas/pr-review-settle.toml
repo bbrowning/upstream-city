@@ -114,7 +114,7 @@ Then, per your method:
 Emit the full `pr-review-settle.v1` object (the exact shape your method specifies) and
 finish atomically — `emit-verdict.sh` detects the settle shape, notifies the human, and
 makes it re-renderable via `gc dev-pack summary <your-bead>`:
-  bash {{.ConfigDir}}/assets/scripts/emit-verdict.sh --bead <your-settle-bead> \\
+  bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-settle-bead> \\
     --verdict-file "$out" --outcome pass
 On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
 """
@@ -150,7 +150,7 @@ post-settle re-synthesis and cite the settle bead.
 
 Emit `pr-review-quorum.v1` (a SUPERSET of `pr-review.v1`, so the existing
 render/notify/`gc dev-pack summary` path works unchanged) and finish atomically:
-  bash {{.ConfigDir}}/assets/scripts/emit-verdict.sh --bead <your-step-bead> \\
+  bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-step-bead> \\
     --verdict-file "$out" --outcome pass
 On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
 """

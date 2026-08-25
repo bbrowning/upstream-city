@@ -67,7 +67,7 @@ method for detail:
    number N: `git fetch origin pull/N/head`).
 3. Run the approved command through the gate — it re-derives the ceiling and
    refuses if it dropped below `limited`:
-   `{{.ConfigDir}}/assets/scripts/run-scoped-check.sh --head {{head_ref}} --base {{base_ref}} --min-ceiling limited -- {{command}}`
+   `bash "$GC_CITY_PATH/dev-pack/assets/scripts/run-scoped-check.sh" --head {{head_ref}} --base {{base_ref}} --min-ceiling limited -- {{command}}`
    If `expect_head_sha` was provided (`{{expect_head_sha}}`), add
    `--expect-head-sha {{expect_head_sha}}` before the `--`. If `{{command}}` is
    empty, do nothing and report `skipped` with

@@ -41,7 +41,7 @@ If `pwd` is the rig root, stop: emit a `blocked`-style result with
 2. **Run it through the gate** — pass the approved command verbatim after `--`
    (add `--expect-head-sha` when the bead provides one):
    ```bash
-   bash {{.ConfigDir}}/assets/scripts/run-scoped-check.sh \
+   bash "$GC_CITY_PATH/dev-pack/assets/scripts/run-scoped-check.sh" \
      --head <head_ref> --base <base_ref> --min-ceiling limited \
      [--expect-head-sha <expect_head_sha>] \
      -- <the approved command>
@@ -74,7 +74,7 @@ atomically:
 ```bash
 result_file="$(mktemp -t pr-review-dynamic.XXXXXX)"
 # ... write your pr-review-dynamic.v1 object (valid JSON) to "$result_file" ...
-bash {{.ConfigDir}}/assets/scripts/emit-verdict.sh --bead <your-bead> \
+bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-bead> \
   --verdict-file "$result_file" --outcome pass
 rm -f "$result_file"
 ```

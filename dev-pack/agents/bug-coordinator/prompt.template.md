@@ -181,7 +181,7 @@ finalize) — then close your step:
 ```bash
 out="$(mktemp -t hb-reconcile.XXXXXX)"
 # ... write your hard-bug-reconcile.v1 object (valid JSON) to "$out" ...
-bash {{.ConfigDir}}/assets/scripts/emit-json.sh --bead <your-reconcile-bead> \
+bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-reconcile-bead> \
   --json-file "$out" --schema hard-bug-reconcile.v1 --outcome pass
 rm -f "$out"
 ```
@@ -196,10 +196,10 @@ reads the divergence + what to do next, not raw JSON). It goes to the HUMAN
 what to do with it:**
 
 ```bash
-bash {{.ConfigDir}}/assets/scripts/emit-json.sh --bead <your-reconcile-bead> \
+bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-reconcile-bead> \
   --json-file "$out" --schema hard-bug-reconcile.v1 --outcome pass \
   --notify "${GC_HARDBUG_NOTIFY_TO:-human}" \
-  --render {{.ConfigDir}}/assets/scripts/render-hardbug.sh \
+  --render "$GC_CITY_PATH/dev-pack/assets/scripts/render-hardbug.sh" \
   --subject "<subject>"
 ```
 where `<subject>` speaks the run's N: at **N>=2** use
@@ -337,7 +337,7 @@ status:(done|reopened|escalated), next_action, summary, failure_class, failure_r
 and close your step with `emit-json.sh --schema hard-bug-final.v1` (write it to a
 unique `mktemp` file, as in Reconcile). On a terminal
 outcome (`done` or `escalated`), fold `--notify "${GC_HARDBUG_NOTIFY_TO:-human}"
---render {{.ConfigDir}}/assets/scripts/render-hardbug.sh
+--render "$GC_CITY_PATH/dev-pack/assets/scripts/render-hardbug.sh"
 --subject "bug <bug_bead>: <done|escalated> — <branch/summary>"` into that same
 close so the human is notified atomically with a prose body (never a separate `gc mail
 send`, never the `lead`). On `reopened` (re-entering the fix phase), do not notify.

@@ -46,7 +46,7 @@ and `failure_reason=work_dir-misresolved-to-rig-root`.
 ### 1. Run the deterministic pre-scan — it sets your ceiling
 
 ```bash
-{{.ConfigDir}}/assets/scripts/pr-prescan.sh <head_ref> <base_ref>
+bash "$GC_CITY_PATH/dev-pack/assets/scripts/pr-prescan.sh" <head_ref> <base_ref>
 ```
 
 This script is the **injection-proof hard floor**. It greps the diff and reads

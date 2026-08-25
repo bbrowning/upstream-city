@@ -199,7 +199,7 @@ metadata MERGE — never the destructive `--metadata '{…}'`):
 ```bash
 out="$(mktemp -t hb-output.XXXXXX)"   # <schema> is the schema your step named
 # ... write your task's JSON object (valid JSON) to "$out" ...
-bash {{.ConfigDir}}/assets/scripts/emit-json.sh --bead <your-step-bead> \
+bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-step-bead> \
   --json-file "$out" --schema <schema> --outcome pass
 rm -f "$out"
 ```

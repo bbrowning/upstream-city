@@ -259,6 +259,14 @@ on-demand slot auto-materializes the rig and the session.
    ```bash
    cp -rf dev-pack <city>/dev-pack
    ```
+
+   Workflow prompts and formula task descriptions invoke pack scripts through
+   `$GC_CITY_PATH/dev-pack/assets/scripts/...`. Gas City injects
+   `GC_CITY_PATH` into every managed session, including sessions whose current
+   directory is an isolated rig worktree. Do not use `{{.ConfigDir}}` inside a
+   prompt template: `ConfigDir` is a session-setup field, not a prompt-context
+   field, so it renders empty there and produces the invalid `/assets/scripts`
+   path. The `dev-pack:script-path-contract` doctor check enforces this contract.
 2. Attach it to the **`vllm` rig** in `city.toml` via that rig's `includes`
    list (the `Rig` struct has **no `pack` field** — rig-scoped attach is
    `includes` for a local folder / URL, or an `[rigs.imports]` table for named
