@@ -74,7 +74,7 @@ All `[[rigs.patches]]` attach to the vllm rig. Common env sets referenced below:
 | agent | model / effort | env | notes |
 |---|---|---|---|
 | `pr-triage` | **codex** gpt-5.6-sol / medium | trusted-authors only | Deterministic pre-scan sets the hard ceiling; medium effort handles the remaining posture judgment. |
-| `pr-reviewer` | opus / **xhigh** | TEST-VENV + trusted-authors | The verdict I act on, so it gets the deeper pass. `effort=xhigh` is data-driven — see the effort note below. |
+| `pr-review-synthesizer` | **codex** gpt-5.6-sol / medium | TEST-VENV + trusted-authors | Quorum synthesis and direct-formula fallback; the opinion lanes carry the deeper review effort. |
 | `pr-reviewer-opus46-xhigh` | claude-opus-4-6 / xhigh | TEST-VENV + trusted-authors | Review lane PROFILE (see below). |
 | `pr-reviewer-opus48-xhigh` | claude-opus-4-8 / xhigh | TEST-VENV + trusted-authors | Review lane PROFILE. |
 | `pr-reviewer-sonnet-xhigh` | sonnet / xhigh | TEST-VENV + trusted-authors | Review lane PROFILE. |
@@ -99,7 +99,7 @@ model — was the decisive factor.** See the per-lane breakdown in
 ### Review lane PROFILES
 
 The `pr-reviewer-*` profiles are distinct single-slot reviewer agents that share
-`pr-reviewer`'s **method** and differ ONLY in a pinned model/effort. Model/effort
+the synthesizer's **method** and differ ONLY in a pinned model/effort. Model/effort
 come from each profile's `option_defaults` (baked into the launch command — the
 reliable path), **not** from a per-run `opt_model`, which gascity does not apply
 at launch (bead wo-au65.7). So to compare models per run you pick two profiles by
@@ -107,14 +107,15 @@ name (`gc dev-pack review --lanes A,B`, default `--n 2`); to add a combo, add a
 profile agent (`dev-pack/agents/pr-reviewer-<name>/`) + a patch, then `gc reload`.
 
 Quorum notify contract: these lanes must **not** mail the human — a quorum
-notifies exactly ONCE from the SYNTHESIS step (`pr-reviewer`). `emit-verdict.sh`
+notifies exactly ONCE from the SYNTHESIS step (`pr-review-synthesizer`). `emit-verdict.sh`
 enforces this by skipping notify for any bead stamped `gc.review_quorum_lane`
 (which lane beads are), so no notify env is needed, and a profile used SOLO
 (N=1, not quorum-stamped) still notifies once.
 
-The codex profiles (`gpt56sol-medium`, `gpt56sol-xhigh`, `gpt56luna-xhigh`) are
-**opt-in only** — not default lanes. Reach them with `--lanes gpt56sol-medium`
-(solo) or `--lanes opus48-xhigh,gpt56sol-medium` (cross-vendor quorum). They
+The Codex profiles (`gpt56sol-medium`, `gpt56sol-xhigh`, `gpt56luna-xhigh`) are
+available as pinned lanes. The default solo lane is `gpt56luna-xhigh`; the default
+quorum pairs `sonnet-xhigh` with `gpt56luna-xhigh`. Reach other combinations with
+`--lanes gpt56sol-medium` (solo) or `--lanes opus48-xhigh,gpt56sol-medium` (cross-vendor quorum). They
 carry the same env as the Claude reviewers so codex loads the persona corpus and
 can run the prepared CPU check.
 

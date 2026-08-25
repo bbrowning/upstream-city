@@ -31,7 +31,7 @@ usage() {
     cat <<'EOF'
 usage: gc dev-pack review <PR-number | ref> [options]
 
-Sling the review formula (N=1 -> pr-review, N=2 -> pr-review-quorum) to <rig>/pr-reviewer.
+Sling the review formula (N=1 -> pr-review, N=2 -> pr-review-quorum) to <rig>/pr-review-synthesizer.
 
   --rig NAME       rig the PR belongs to            (default: vllm)
   --base REF       baseline the diff is against      (default: origin/main)
@@ -120,7 +120,7 @@ if [ "$N" = "1" ]; then
         RTARGET="$RIG/$DEFAULT_SOLO_LANE"
         agent_exists "$RTARGET" || die "default solo lane '$RTARGET' not found — run 'gc reload'? Or pass --lanes A (available: $(available_profiles))."
     fi
-    set -- "$RIG/pr-reviewer" pr-review --formula \
+    set -- "$RIG/pr-review-synthesizer" pr-review --formula \
         --var "head_ref=$SPEC" --var "base_ref=$BASE" \
         --var "review_target=$RTARGET" \
         --title "pr-review: $SPEC" --json
@@ -131,12 +131,12 @@ else
         agent_exists "$AT" || die "default lane '$AT' not found — run 'gc reload'? Or pass --lanes A,B (available: $(available_profiles))."
         agent_exists "$BT" || die "default lane '$BT' not found — run 'gc reload'? Or pass --lanes A,B (available: $(available_profiles))."
     fi
-    set -- "$RIG/pr-reviewer" pr-review-quorum --formula \
+    set -- "$RIG/pr-review-synthesizer" pr-review-quorum --formula \
         --var "head_ref=$SPEC" --var "base_ref=$BASE" \
         --var "triage_target=$RIG/pr-triage" \
         --var "lane_a_target=$AT" \
         --var "lane_b_target=$BT" \
-        --var "synthesis_target=$RIG/pr-reviewer" \
+        --var "synthesis_target=$RIG/pr-review-synthesizer" \
         --title "pr-review-quorum: $SPEC" --json
 fi
 

@@ -66,7 +66,7 @@ default = ""
 
 [vars.synthesis_target]
 description = "Agent that synthesizes the lane verdicts into the combined quorum verdict."
-default = "pr-reviewer"
+default = "pr-review-synthesizer"
 
 [vars.enable_settle]
 description = "false = report-only (synthesis MARKS a load-bearing divergence + names the crux but does NOT auto-sling the settle round — a human runs `gc dev-pack settle <PR>`, Phase 1); true = synthesis plays coordinator and auto-slings `pr-review-settle` when a disputed >=major finding exists (Phase 2, promote once trusted). Mirrors the hard-bug `enable_loop` dial."

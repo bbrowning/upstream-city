@@ -156,7 +156,7 @@ set -- "$ATARGET" pr-review-settle --formula \
     --var "lane_a_bead=$LANE_A" --var "lane_b_bead=$LANE_B" \
     --var "crux_question=$CRUX" \
     --var "arbiter_target=$ATARGET" \
-    --var "resynth_target=$RIG/pr-reviewer" \
+    --var "resynth_target=$RIG/pr-review-synthesizer" \
     --title "pr-review-settle: $HEAD_REF" --json
 
 if [ "$DRYRUN" = "yes" ]; then

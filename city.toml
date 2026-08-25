@@ -41,9 +41,9 @@ option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
 env = { GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 [[rigs.patches]]
-agent = "pr-reviewer"
-provider = "claude"
-option_defaults = { model = "opus", effort = "xhigh" }
+agent = "pr-review-synthesizer"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 [[rigs.patches]]

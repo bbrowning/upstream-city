@@ -74,8 +74,8 @@ description = "Provider hint for the arbiter (dashboard/provenance only; runtime
 default = "codex"
 
 [vars.resynth_target]
-description = "Agent that re-synthesizes the settle resolutions into the updated quorum verdict. Reuses the quorum synthesis role (pr-reviewer)."
-default = "pr-reviewer"
+description = "Agent that re-synthesizes the settle resolutions into the updated quorum verdict. Reuses the quorum synthesis role (pr-review-synthesizer)."
+default = "pr-review-synthesizer"
 
 [vars.enable_settle]
 description = "Mirror of the pr-review-quorum dial (false = report-only, the quorum does NOT auto-sling this). Informational here — the manual `gc dev-pack settle` always runs the arbiter. Kept so the auto-sling path (Phase 2) forwards a consistent record."

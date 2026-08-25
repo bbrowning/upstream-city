@@ -18,8 +18,8 @@
 #             fetch/execute latitude by it. Read-only EXCEPT one in-scope check it
 #             may auto-run on a `trusted` PR (via run-scoped-check.sh).
 #     agents/pr-triage/     deterministic-first posture triage (1 slot).
-#     agents/pr-reviewer/   posture-gated reviewer, pooled up to 2 slots
-#                           (pr-reviewer-1, pr-reviewer-2), each in its OWN worktree.
+#     agents/pr-review-synthesizer/   posture-gated review orchestrator/synthesizer
+#                           (pr-review-synthesizer-1, pr-review-synthesizer-2), each in its OWN worktree.
 #     agents/pr-runner/     human-approved dynamic-check lane (1 slot): runs one
 #                           operator-approved check on a `limited` PR, gated the same.
 #     agents/pr-follow-up/  one-shot, read-only follow-up Q&A on an already-reviewed
@@ -31,7 +31,7 @@
 #                           reviewer lanes split on a load-bearing finding, it RESOLVES
 #                           the crux by file:line evidence (never a vote — base.md #7
 #                           applied to the reviewers' claims), read-only in its own
-#                           worktree. Shares pr-reviewer's METHOD (the pr-review-settle.v1
+#                           worktree. Shares the review METHOD (the pr-review-settle.v1
 #                           task is schema-dispatched there), so any reviewer profile can
 #                           arbitrate via `gc dev-pack settle --arbiter <profile>`.
 #     agents/pr-chat/       interactive follow-up CHAT on an already-reviewed PR:

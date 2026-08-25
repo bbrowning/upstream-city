@@ -1,4 +1,4 @@
-# Reviewer — posture-gated PR reviewer: read-only, PLUS one gated exception.
+# Review synthesizer/orchestrator — posture-gated review workflow target.
 #
 # On a `trusted` PR (deterministic ceiling == trusted) it may auto-run exactly ONE
 # in-scope check on the changed code, via assets/scripts/run-scoped-check.sh (which
@@ -7,8 +7,8 @@
 # (for vLLM, built by //tools/vllm/vllm-testenv.sh and wired via this rig's
 # [[rigs.patches]] env); absent that, the check reports could_not_verify.
 #
-# On-demand and rig-scoped: a session spins up when a `pr-review` formula step
-# (or a direct review bead) is routed to it, and idles out afterward.
+# On-demand and rig-scoped: a session spins up when a review formula or synthesis
+# step is routed to it, and idles out afterward.
 #
 # Division of labor:
 #   - prompt.template.md  → the reviewer's standing METHOD (how it reviews,
@@ -26,7 +26,7 @@ max_active_sessions = 2
 # Without work_dir, a rig-scoped session resolves straight to the rig root
 # (verified: internal/workdir/workdir.go:241-256), so scaling max_active_sessions
 # past 1 would put every reviewer in the SAME checkout/HEAD. With this template,
-# a bounded pool expands to reviewer-1 / reviewer-2 (SupportsInstanceExpansion is
+# a bounded pool expands to pr-review-synthesizer-1 / pr-review-synthesizer-2 (SupportsInstanceExpansion is
 # true when max_active_sessions > 1), each with a distinct {{.AgentBase}} → its
 # own worktree. That is the paude-container guarantee, via native gascity.
 work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"

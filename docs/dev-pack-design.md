@@ -134,7 +134,7 @@ cruft. Counter-pressures, enforced not hoped:
   (keep families). Gate: reviewer + hard-bug still pass their cases.
 - **Phase 2 — lane consolidation. [DONE — local commit, unpushed]** Merged both packs into
   one `dev-pack/` (dir + `pack.toml` name); agents lane-prefixed for cross-pack clash-safety
-  (`pr-triage`/`pr-reviewer`/`pr-runner`, `bug-coordinator`/`bug-worker-a`/`bug-worker-b`,
+  (`pr-triage`/`pr-review-synthesizer`/`pr-runner`, `bug-coordinator`/`bug-worker-a`/`bug-worker-b`,
   `feature-dev`); only real collision was the two byte-identical fragments (collapsed to one).
   Command UX is verb-per-lane under `gc dev-pack`: `review`/`bug`/`feature` (kick-off) +
   `materialize`/`summary`/`status` (helpers); `start`→`bug`, added `review`+`feature` wrappers.
@@ -196,7 +196,7 @@ lanes being trustworthy), but the intended shape:
    every `gc reload`; self-hosting wants it versioned independently.
 2. **Register that repo as a rig and self-attach the pack to it** — a rig is just a repo
    registered with the city, and a pack can be `includes`'d into the rig that *is* its own
-   repo, so the pack's own `pr-reviewer` / `bug-*` / `feature-dev` lanes then review, fix, and
+   repo, so the pack's own `pr-review-synthesizer` / `bug-*` / `feature-dev` lanes then review, fix, and
    extend the pack's repo. A virtuous loop.
 3. **Consume it in the live city as a versioned remote pack** (a remote `includes` / `[imports]`
    ref — the same pin-a-ref model gascity itself uses; `compose.go` resolves remote pack refs +

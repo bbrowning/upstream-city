@@ -106,7 +106,7 @@ citywide work). Since almost all work here is single-rig, the normal flow is:
   formulas dynamically (`gc agent list` /
   `gc formula list`) once this pack is attached to the rig, so the shared lead
   prompt needs no pack-specific edits.
-- **Direct sling is the manual / power-user path** (`gc sling vllm/pr-reviewer …`,
+- **Direct sling is the manual / power-user path** (`gc sling vllm/pr-review-synthesizer …`,
   shown below). Use it to kick something off yourself, or for scripting; it's the
   exact mechanism the lead uses under the hood.
 
@@ -180,10 +180,10 @@ skip) and never deletes branches. **Naming constraint:** never name a slot
 pack.toml                             # manifest (schema 2); no [[named_session]] — see note below
 # --- review lane ---
 agents/pr-triage/                     # deterministic-first posture triage (1 slot)
-agents/pr-reviewer/                   # posture-gated reviewer, pooled up to 2 slots (own worktree each); N=1 review + quorum synthesis
-agents/pr-reviewer-opus46-xhigh/      # review lane PROFILE (1 slot): claude-opus-4-6 @ xhigh; shares pr-reviewer's prompt
-agents/pr-reviewer-opus48-xhigh/      # review lane PROFILE (1 slot): claude-opus-4-8 @ xhigh; shares pr-reviewer's prompt
-agents/pr-reviewer-sonnet-xhigh/      # review lane PROFILE (1 slot): sonnet @ xhigh; shares pr-reviewer's prompt
+agents/pr-review-synthesizer/         # posture-gated review orchestrator/synthesizer, pooled up to 2 slots
+agents/pr-reviewer-opus46-xhigh/      # review lane PROFILE (1 slot): claude-opus-4-6 @ xhigh; shares the review method
+agents/pr-reviewer-opus48-xhigh/      # review lane PROFILE (1 slot): claude-opus-4-8 @ xhigh; shares the review method
+agents/pr-reviewer-sonnet-xhigh/      # review lane PROFILE (1 slot): sonnet @ xhigh; shares the review method
 agents/pr-runner/                     # human-approved dynamic-check lane (1 slot)
 agents/pr-follow-up/                  # one-shot follow-up Q&A on a reviewed PR (1 slot)
 formulas/pr-review.toml               # N=1: triage → review TASK + pr-review.v1 verdict contract
@@ -263,7 +263,7 @@ on-demand slot auto-materializes the rig and the session.
    list (the `Rig` struct has **no `pack` field** — rig-scoped attach is
    `includes` for a local folder / URL, or an `[rigs.imports]` table for named
    V2 bindings). Rig-scope attachment is what stamps `Dir=vllm` on the agents so
-   `{{.Rig}}` resolves to `vllm` and their names become `vllm/pr-reviewer` /
+   `{{.Rig}}` resolves to `vllm` and their names become `vllm/pr-review-synthesizer` /
    `vllm/feature-dev` (verified: `pack.go:1544` stamps `Dir=rigName` when unset).
    A city-wide attach would leave `{{.Rig}}` empty and the `pre_start` guard
    would (safely) refuse to start. Merge into your existing rig entry — keep its
@@ -287,7 +287,7 @@ on-demand slot auto-materializes the rig and the session.
    gc formula list               # expect: pr-review, pr-review-quorum, pr-review-dynamic,
                                  #         pr-followup, feature-dev, hard-bug-round,
                                  #         hard-bug-round-solo, hard-bug-finalize
-   gc agent list                 # expect: vllm/pr-triage, vllm/pr-reviewer, vllm/pr-runner,
+   gc agent list                 # expect: vllm/pr-triage, vllm/pr-review-synthesizer, vllm/pr-runner,
                                  #         vllm/pr-follow-up, vllm/bug-coordinator,
                                  #         vllm/bug-worker-a, vllm/bug-worker-b, vllm/feature-dev
    gc dev-pack --help            # expect: review, bug, feature, materialize, summary, ask, status
@@ -337,7 +337,7 @@ Seeded profiles: `opus46-xhigh` (claude-opus-4-6), `opus48-xhigh` (claude-opus-4
 see below.
 
 **Add a profile (new model/effort combo).** Create `dev-pack/agents/pr-reviewer-<name>/`
-(copy an existing profile — they all share `pr-reviewer`'s prompt) and a `[[rigs.patches]]`
+(copy an existing profile — they all share the review method) and a `[[rigs.patches]]`
 in `city.toml` pinning `option_defaults = { model = "…", effort = "…" }` + the reviewer env,
 then `gc reload`. A **custom claude id** (e.g. `claude-opus-4-6`) must first be registered in
 `city.toml` under `[providers.claude]` via `options_schema_merge = "by_key"` — otherwise gascity
@@ -377,7 +377,7 @@ same summary/notify path works.
 (what the lead uses under the hood):
 
 ```bash
-gc sling vllm/pr-reviewer pr-review --formula \
+gc sling vllm/pr-review-synthesizer pr-review --formula \
   --var base_ref=origin/main \
   --var head_ref=<pr-branch-or-sha-or-N> \
   --title "review <pr>" --json          # --json prints the dispatch result, incl. the root bead id
@@ -547,7 +547,7 @@ To widen that net to coworkers and proven contributors you personally trust — 
 GitHub still reports as `CONTRIBUTOR`/`NONE` — set **`GC_PR_TRUSTED_AUTHORS`** to a
 file of GitHub logins (one per line, `#` comments and blanks ignored;
 case-insensitive). It is wired in `city.toml` on every review-lane agent
-(`pr-triage`, `pr-reviewer`, `pr-reviewer-a/-b`, `pr-runner`) and points at the
+(`pr-triage`, `pr-review-synthesizer`, `pr-reviewer-a/-b`, `pr-runner`) and points at the
 git-tracked `//tools/vllm/trusted-authors.txt` (an inline comma/space list also
 works). A listed author is treated as collaborator-grade, so their otherwise-boring
 PRs can reach `trusted`.
@@ -822,5 +822,5 @@ mine → distill → `learn` invariant-corpus pipeline, now archived at `//tools
   unchanged.
 - **Auto-trigger**: wrap the review in an order (`event` on PR-open, or `manual`
   fired by `gc order run`) once you trust the gate.
-- **More reviewers**: bump `max_active_sessions` in `agents/pr-reviewer/agent.toml`;
+- **More reviewers**: bump `max_active_sessions` in `agents/pr-review-synthesizer/agent.toml`;
   the worktree-per-slot mechanism scales with it unchanged.

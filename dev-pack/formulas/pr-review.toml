@@ -16,7 +16,8 @@ to the `runner` agent). Execution needs a prepared interpreter in
 `$GC_PR_TEST_VENV`; absent that, the check honestly reports `could_not_verify`.
 
 Both steps are routed by `gc.run_target` (overridable per run), so the standard
-`gc sling <rig>/pr-reviewer pr-review --formula --var head_ref=N` UX is unchanged —
+`gc sling <rig>/pr-review-synthesizer pr-review --formula --var head_ref=N` is the direct
+formula UX —
 the sling-time target is just the fallback; each step picks its own agent.
 """
 formula = "pr-review"
@@ -38,8 +39,8 @@ description = "Agent that runs the triage/posture step. Bare name resolves withi
 default = "pr-triage"
 
 [vars.review_target]
-description = "Agent that runs the read-only review step. Bare name resolves within the rig; override to a rig-qualified name (e.g. vllm/pr-reviewer) if bare resolution fails."
-default = "pr-reviewer"
+description = "Agent that runs the read-only review step. Bare name resolves within the rig; override to a rig-qualified name (e.g. vllm/pr-reviewer-gpt56luna-xhigh) if bare resolution fails."
+default = "pr-review-synthesizer"
 
 [vars.review_model]
 description = "Per-run model override for the review step (emitted as opt_model). INERT AT LAUNCH — gascity does not apply opt_model at dispatch (wo-au65.7); for a solo review at a specific model, route review_target to a model-pinned profile via `gc dev-pack review --lanes <profile>`. Empty by default."

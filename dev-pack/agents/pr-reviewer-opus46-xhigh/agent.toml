@@ -2,7 +2,7 @@
 #
 # One of a set of interchangeable single-slot reviewer profiles used by
 # `gc dev-pack review --lanes …` (and the default --n 2 quorum). Every profile shares
-# pr-reviewer's METHOD (same prompt template) and differs ONLY in the model/effort
+# the review METHOD (same prompt template) and differs ONLY in the model/effort
 # PINNED via its [[rigs.patches]] option_defaults in city.toml — the reliable launch
 # path, since gascity does not apply a per-run opt_model at launch (wo-au65.7). Single
 # slot so its worktree/HEAD is stable; used SOLO it notifies the human, used as a quorum
@@ -14,8 +14,8 @@ idle_timeout = "30m"
 min_active_sessions = 0
 max_active_sessions = 1
 
-# Share pr-reviewer's method (DRY). adjustFragmentPath resolves this against the pack root.
-prompt_template = "agents/pr-reviewer/prompt.template.md"
+# Share the review method (DRY). adjustFragmentPath resolves this against the pack root.
+prompt_template = "agents/pr-review-synthesizer/prompt.template.md"
 
 # Its OWN detached worktree (single slot → stable {{.AgentBase}} → stable worktree).
 work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"

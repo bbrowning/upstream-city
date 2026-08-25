@@ -1,1 +1,1 @@
-description = "Start a posture-gated PR review: sling the pr-review formula (triage → posture-gated review) to <rig>/pr-reviewer for a PR number or ref"
+description = "Start a posture-gated PR review: sling the pr-review formula (triage → posture-gated review) to <rig>/pr-review-synthesizer for a PR number or ref"

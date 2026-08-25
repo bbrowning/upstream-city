@@ -25,8 +25,8 @@ idle_timeout = "30m"
 min_active_sessions = 0
 max_active_sessions = 1
 
-# Share pr-reviewer's method (DRY). adjustFragmentPath resolves this against the pack root.
-prompt_template = "agents/pr-reviewer/prompt.template.md"
+# Share the review method (DRY). adjustFragmentPath resolves this against the pack root.
+prompt_template = "agents/pr-review-synthesizer/prompt.template.md"
 
 # Its OWN detached worktree (single slot → stable {{.AgentBase}} → stable worktree) so it
 # can fetch the PR head and read the code the crux turns on.
