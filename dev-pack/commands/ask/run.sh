@@ -90,6 +90,16 @@ done
 [ -x "$RESOLVE" ] || die "resolver not found/executable: $RESOLVE"
 [ -x "$MATERIALIZE" ] || die "materialize script not found/executable: $MATERIALIZE"
 [ -x "$NORMALIZE" ] || die "target normalizer not found/executable: $NORMALIZE"
+
+# Pack commands inherit the caller's stdin, but gc proxies their stdout through
+# its command-output writer. Consequently fd 1 is not a TTY even when gc was
+# launched from a real terminal. tmux attachment uses the terminal on stdin, so
+# that is the capability that matters. Check before resolution/materialization
+# so a headless invocation cannot leave an expensive half-prepared worktree.
+if [ "$INTERACTIVE" -eq 1 ] && [ "$DRYRUN" -eq 0 ] && [ ! -t 0 ]; then
+    die "interactive mode needs a terminal. Pass a \"<question>\" for the async path, or run from a terminal."
+fi
+
 NORM_ARGS=(--rig "$RIG")
 [ "$RIG_EXPLICIT" -eq 1 ] && NORM_ARGS+=(--rig-explicit)
 NORM=$("$NORMALIZE" "$SPEC" "${NORM_ARGS[@]}") || exit $?
@@ -190,11 +200,6 @@ if [ "$INTERACTIVE" -eq 0 ]; then
 fi
 
 # --- 5b. INTERACTIVE (no question): drop into a live per-PR chat session. -----
-# Attaching hands this terminal to the agent (blocks until you detach), so bail
-# early if there is no TTY rather than leaving a half-created session behind.
-{ [ -t 0 ] && [ -t 1 ]; } || \
-    die "interactive mode needs a terminal. Pass a \"<question>\" for the async path, or run from a terminal."
-
 # Rendezvous file: the ONLY per-PR channel into the session — `gc session new`
 # takes no --work-dir/--var/--initial-message, and ambient env doesn't reach the
 # tmux pane. The pr-chat agent reads this on its first turn (path derived from
