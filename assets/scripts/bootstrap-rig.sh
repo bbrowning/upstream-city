@@ -2,7 +2,7 @@
 # Clone an upstream repo and register it as a gascity rig, without polluting
 # the upstream repo's tracked git state or leaving its Dolt store misconfigured.
 #
-# Usage: scripts/bootstrap-rig.sh <git-url> [prefix]
+# Usage: assets/scripts/bootstrap-rig.sh <git-url> [prefix]
 #
 # See docs/rig-bootstrap.md for why each step below exists — it's grounded in
 # a live reproduction against a disposable rig, not guesswork.

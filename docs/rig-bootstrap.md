@@ -24,10 +24,10 @@ error in the latter case, same as `git` outside a repo).
 ## The one command
 
 ```bash
-scripts/bootstrap-rig.sh <git-url> [prefix]
+assets/scripts/bootstrap-rig.sh <git-url> [prefix]
 ```
 
-Example: `scripts/bootstrap-rig.sh https://github.com/vllm-project/vllm.git vllm`
+Example: `assets/scripts/bootstrap-rig.sh https://github.com/vllm-project/vllm.git vllm`
 
 It clones the repo under `rigs/<prefix>`, initializes beads in stealth mode,
 hardens the Dolt config against ever wiring a remote, adopts the rig into
