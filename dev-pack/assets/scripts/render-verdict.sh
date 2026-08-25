@@ -158,7 +158,11 @@ elif (.verdict != null) then
           + (if ($ctx|length) > 0 then [$ctx] else [] end)
           + (if ($lanes|length) > 0
              then ["Lanes: " + $lanestr
-                   + (if ((.evidence.settle_bead) // "") != "" then " -> settled: \($v)" else "" end)]
+                   # pr-review-quorum.v1.evidence is an array.  A re-synthesis
+                   # may optionally carry a top-level settle_bead marker, but
+                   # indexing .evidence as an object makes ordinary quorum
+                   # summaries fail with "Cannot index array with string".
+                   + (if ((.settle_bead // "") != "") then " -> settled: \($v)" else "" end)]
              else [] end)
           + (if $fclass != "none" then ["", "⚠ step \($fclass): \($freason)"] else [] end)
           + (if ($sorted | length) == 0
