@@ -5,23 +5,11 @@ provider = "claude"
 [providers.claude]
 base = "builtin:claude"
 ready_delay_ms = 0
-option_defaults = {
-  model = "opus",
-  effort = "high",
-}
-# gascity's builtin claude spec ships a CURATED model enum (see gascity
-# internal/worker/builtin/profiles.go). A requested model must match a choice
-# VALUE exactly; on the launch path an unknown value is silently dropped (no
-# --model emitted) and claude falls back to its own default — that is why a bare
-# `claude-opus-4-6` became opus 4.8. It is a data gap, NOT a capability limit:
-# claude runs whatever `--model <id>` we pass. `options_schema_merge = "by_key"`
-# APPENDS the choices below to the builtin enum (works on v1.4.0), making each id
-# a first-class, selectable, VALIDATED model. Add one choices block per id you
-# want; keep dev-pack/assets/valid-options.txt in sync for the offline validator.
+option_defaults = { model = "opus", effort = "high" }
 options_schema_merge = "by_key"
 
 [[providers.claude.options_schema]]
-key = "model"   # merges by key into the builtin "model" option (label/type/default inherited)
+key = "model"
 [[providers.claude.options_schema.choices]]
 value = "claude-opus-4-6"
 label = "Opus 4.6"
@@ -31,15 +19,6 @@ value = "claude-opus-4-8"
 label = "Opus 4.8 (pinned id)"
 flag_args = ["--model", "claude-opus-4-8"]
 
-# --- Codex (second vendor) ---------------------------------------------------
-# The `codex` CLI is installed and ChatGPT-OAuth authenticated (CODEX_HOME/~/.codex),
-# so NO OPENAI_API_KEY/OPENAI_BASE_URL is needed here. builtin:codex ships the model
-# enum (gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.3-codex, o3, o4-mini)
-# and effort choices (low|medium|high|xhigh — NO `max`; instructions file is AGENTS.md).
-# A review lane binds provider="codex" + option_defaults per-agent (see the
-# pr-reviewer-gpt56sol-medium patch below); it is picked up by
-# `gc dev-pack review --lanes <name>` with no run.sh change (the --lanes router is
-# name-based / provider-agnostic).
 [providers.codex]
 base = "builtin:codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
@@ -53,63 +32,18 @@ default_branch = "main"
 name = "vllm"
 prefix = "vllm"
 default_branch = "main"
-includes = ["dev-pack"]   # in-city folder: one dev pack — PR review + two-opinion hard-bug + feature lanes
+includes = ["dev-pack"]
 
-# Lane B of the hard-bug lane is provider-agnostic and the formula no longer pins its
-# model, so a real second vendor is a true one-liner: uncomment this patch (and add
-# a [providers.codex] block + creds); formulas/prompts unchanged.
-# [[rigs.patches]]
-# agent = "bug-worker-b"
-# provider = "codex"
-# option_defaults = { model = "gpt-5.6-sol" }   # gpt-5-codex is not a valid builtin choice
-
-# Per-agent model/effort (my choice, not the pack's). Triage is backstopped by
-# the deterministic prescan + reviewer re-derivation, so it stays lean; the
-# reviewer's verdict is what I act on, so it gets the deeper pass.
 [[rigs.patches]]
 agent = "pr-triage"
 option_defaults = { model = "opus", effort = "high" }
-# Operator PR-author trust allowlist (git-tracked; audit trail via git history).
-# Read by pr-prescan.sh: a listed login is elevated to collaborator-grade so the
-# PR can reach `trusted` (auto-run a scoped test) even when GitHub reports the
-# author as a mere CONTRIBUTOR. Identity-only — every file/pattern risk cap still
-# applies. Injected as $GC_PR_TRUSTED_AUTHORS. See tools/vllm/trusted-authors.txt.
 env = { GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 [[rigs.patches]]
 agent = "pr-reviewer"
-# effort=xhigh (data-driven): opus/high demonstrably MISSED the inkling THINK_END
-# regression in PR 47562 across two runs (f41i, 8pr1), while opus/xhigh caught it as a
-# blocker both times (wcq4 x2). Effort — not model — was the decisive factor. See the
-# per-lane breakdown in tools/vllm/arena/decisions.jsonl and follow-up wo-au65.6.
 option_defaults = { model = "opus", effort = "xhigh" }
-# Dynamic checks: lazily build/reuse a CPU vLLM test venv (vLLM-specific, kept out
-# of the generic pack). GC_PREPARE_TEST_ENV is the builder the gate runs only when
-# a trusted check actually executes; UV_CACHE_DIR stays on btrfs for reflinks.
-# GC_PERSONAS is the vLLM persona set (vLLM-specific, kept out of the generic
-# pack); the reviewer always loads base.md and adds any persona whose
-# "Activates on:" header matches a changed path (see tools/vllm/personas/).
-# ONE env for every persona consumer (reviewer + hard-bug lanes); injected as
-# $GC_PERSONAS.
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
-# Review lane PROFILES (gc dev-pack review --lanes A,B  and the default --n 2).
-# Each profile is a distinct single-slot reviewer agent that shares pr-reviewer's
-# METHOD and differs ONLY in a pinned model/effort. Model/effort come from THIS
-# option_defaults block, which is baked into the launch command (the reliable path) —
-# NOT from a per-run opt_model, which gascity does not apply at launch (wo-au65.7). So
-# to compare models per run you pick two profiles by name; to add a combo, add a profile
-# agent (dev-pack/agents/pr-reviewer-<name>/) + a patch here, then `gc reload`.
-# claude-opus-4-6 / claude-opus-4-8 are custom ids made valid by the [providers.claude]
-# `by_key` block above; "sonnet" is the builtin slug (= claude-sonnet-5).
-# Same env as pr-reviewer so every profile loads personas + can run the prepared CPU
-# check. These lanes must not mail the human — a quorum notifies exactly ONCE from the
-# SYNTHESIS step (pr-reviewer); emit-verdict.sh enforces that by skipping notify for any
-# bead stamped gc.review_quorum_lane (which lane beads are), so no notify env is needed
-# and a profile used SOLO (N=1, not quorum-stamped) still notifies once.
-# effort=xhigh is data-driven: opus/high demonstrably MISSED the inkling THINK_END
-# regression in PR 47562 (beads f41i, 8pr1) while opus/xhigh caught it as a blocker
-# (wcq4 x2) — effort, not model, was decisive. See tools/vllm/arena/decisions.jsonl.
 [[rigs.patches]]
 agent = "pr-reviewer-opus46-xhigh"
 option_defaults = { model = "claude-opus-4-6", effort = "xhigh" }
@@ -125,107 +59,52 @@ agent = "pr-reviewer-sonnet-xhigh"
 option_defaults = { model = "sonnet", effort = "xhigh" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
-# The SECOND-VENDOR review profile: OpenAI Codex (gpt-5.6-sol @ medium), not Claude.
-# The ONLY differences from the claude profiles above are `provider = "codex"` and the
-# model/effort; everything else (prompt, worktree, env, notify behaviour) is identical,
-# so it slots into --lanes exactly like the others. Opt-in only — NOT a default lane;
-# reach it with `--lanes gpt56sol-medium` (solo) or `--lanes opus48-xhigh,gpt56sol-medium`
-# (cross-vendor quorum). Same env as the claude reviewers so codex loads the vLLM persona
-# corpus and can run the prepared CPU check. Codex effort caps at xhigh (no `max`).
 [[rigs.patches]]
 agent = "pr-reviewer-gpt56sol-medium"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
-# Codex gpt-5.6-sol @ xhigh — the apples-to-apples counterpart to the Claude xhigh
-# profiles, so `--lanes opus48-xhigh,gpt56sol-xhigh` compares opus 4.8 vs gpt-5.6-sol at
-# MATCHED effort (xhigh is codex's top effort — no `max`). Opt-in, same env as the others.
 [[rigs.patches]]
 agent = "pr-reviewer-gpt56sol-xhigh"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
-# Codex gpt-5.6-luna @ xhigh — a sibling codex model to gpt-5.6-sol, for a third-vendor
-# opinion. Opt-in, same env as the others.
 [[rigs.patches]]
 agent = "pr-reviewer-gpt56luna-xhigh"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "xhigh" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
-# Review-divergence SETTLE lane (the verify-mandated arbiter for `gc dev-pack settle`).
-# The DEFAULT arbiter target; `--arbiter <profile>` can point at any reviewer profile for
-# a genuine 3rd-vendor opinion. opus @ xhigh: settling the crux is a deep static trace
-# (the manual PR 51937 arbiter run crossed ~8 files with exact line numbers), and the
-# arbiter is verify-mandated (correctness = the evidence chain, not model identity), so the
-# strongest reasoning model is the priority over independence. Same GC_PERSONAS corpus as
-# the reviewer + GC_PR_TRUSTED_AUTHORS (it re-derives posture for its FETCH latitude); no
-# GC_PREPARE_TEST_ENV — the arbiter is read-only and never executes changed code (a runtime
-# check is surfaced as needs_dynamic for the human's pr-review-dynamic lane).
 [[rigs.patches]]
 agent = "pr-arbiter"
 option_defaults = { model = "opus", effort = "xhigh" }
 env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
-# Human-approved dynamic-check lane. Same env wiring as the reviewer; the gate
-# (run-scoped-check.sh --min-ceiling limited) still floors it on the fresh ceiling.
-# Carries $GC_PERSONAS for parity/forward-readiness; the runner prompt does not
-# load personas today, so it is inert until a future prompt change reads it.
 [[rigs.patches]]
 agent = "pr-runner"
 option_defaults = { model = "opus", effort = "high" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
-# `gc dev-pack ask` follow-up lane: read-only, no execution latitude (v1), so no
-# test-venv wiring — just GC_PERSONAS for parity with the reviewer/runner.
 [[rigs.patches]]
 agent = "pr-follow-up"
 option_defaults = { model = "opus", effort = "high" }
 env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
 
-# `gc dev-pack ask <PR>` (NO question) interactive-chat lane: a live, attached
-# per-PR session (created on demand by `gc session new`, never pooled). Unlike the
-# read-only follow-up above, it MAY run tests on the human's request, so it carries
-# the SAME prepared CPU test-venv wiring as the reviewer (GC_PREPARE_TEST_ENV over
-# the warm uv cache) plus the persona corpus. opus/high for interactive reasoning.
 [[rigs.patches]]
 agent = "pr-chat"
 option_defaults = { model = "opus", effort = "high" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
 
-# Hard-bug lanes: same prepared CPU test-venv wiring as the reviewer, so a lane that
-# needs to run vllm reuses the warm uv cache + the blessed CPU-only recipe
-# (tools/vllm/vllm-testenv.sh, ~seconds warm) instead of a full torch install from
-# scratch. (vLLM-specific env, kept out of the generic pack.)
-# GC_PERSONAS = the SAME vLLM domain-knowledge corpus the reviewer loads:
-# tools/vllm/personas/. The lane loads base.md + any persona whose "Activates on:"
-# matches a subsystem in the bug's trace, and applies the domain reflexes (skipping
-# the review-process ones). One corpus, one env, every consumer.
-#
-# Per-worker model: uncomment option_defaults.model to control each lane's model
-# (valid claude: opus|sonnet|haiku|fable-5|opus-4-7|sonnet-5|sonnet-4-6). NB:
-# rig-patch option_defaults are NOT validated at `gc reload` — a typo here is caught
-# at launch (logged, falls back to default), not at reload.
 [[rigs.patches]]
 agent = "bug-worker-a"
-# option_defaults = { model = "opus" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
 
 [[rigs.patches]]
 agent = "bug-worker-b"
-# option_defaults = { model = "sonnet" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
 
-[[rigs]]
-name = "gascity"
-prefix = "gascity"
-default_branch = "main"
-
-# One lead per rig, from a single template. scope="rig" + no dir fans this
-# out to paude/lead, vllm/lead, gascity/lead. mode="on_demand" reserves the
-# identity and materializes on dispatch; set mode="always" for always-awake.
 [[named_session]]
 name = "lead"
 template = "lead"
