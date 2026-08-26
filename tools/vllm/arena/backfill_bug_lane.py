@@ -2,7 +2,7 @@
 """Project bug-lane judged comparisons (hard-bug reconcile beads) into the arena log.
 
 Backfill AND going-forward capture: re-run this after each hard-bug run and it
-merges new decisions into decisions.jsonl (preserving prior token counts even
+merges new decisions into the runtime decision log (preserving prior token counts even
 after transcripts rotate). One row per unique judged comparison; the coordinator's
 pick (`stronger_lane` + `stronger_rationale`) is the judgment; the N lane beads
 supply each participant's model/provider; per-participant token counts come from

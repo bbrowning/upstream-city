@@ -5,15 +5,36 @@ A durable, queryable log of every time a coordinator/judge preferred one model's
 reviewer that always loses, find the effort level with the best tokens-per-win,
 or A/B a persona blind.
 
-**Principle: log decisions, derive ratings.** Each row in `decisions.jsonl` is one
+**Principle: log decisions, derive ratings.** Each row in the runtime
+`decisions.jsonl` is one
 *judged comparison* (an event). Win-rates, Elo / Bradley-Terry, and cost curves are
 *queries* over this log — never stored as running state. Comparisons are **paired**
 (all participants saw the same task), the ideal input for pairwise rating methods.
 
-Storage is JSONL now, a Dolt table later. `decisions.jsonl` **is the system of
-record and should be committed** — it holds transcript-derived token counts, and
-the transcripts they came from are ephemeral/gitignored, so it isn't reliably
-re-derivable once they're purged.
+Storage is JSONL now, a Dolt table later. The runtime log **is the system of
+record** — it holds transcript-derived token counts, and the transcripts they came
+from are ephemeral, so it is not reliably re-derivable once they are purged. It lives
+on the city PVC, outside the tracked repository, so routine capture never dirties Git.
+
+## Runtime location, migration, and retention
+
+The default log is `$GC_CITY_RUNTIME_DIR/arena/decisions.jsonl`; Gas City's default
+runtime root is `$GC_CITY_PATH/.gc/runtime` (falling back to `$GC_CITY`, then
+`/pvc/workspace`). `GC_ARENA_STATE_DIR` relocates the whole arena runtime directory;
+`GC_ARENA_DECISIONS` overrides just the log. Locks and
+`refresh.log` live beside the default log. All replacements are atomic and fsynced.
+
+On the first default read or write, `arena_common` imports the retired
+`tools/vllm/arena/decisions.jsonl`. The import is idempotent by `decision_id` and is
+rechecked during the compatibility window: ids seen only by an old checkout are
+added, while runtime rows win collisions. An explicit `--out` is never migrated.
+The legacy path is ignored and can be removed after all old checkouts have stopped.
+
+The `.gc/runtime` tree is durable across process/controller restarts because it is on
+the city PVC, but it is not a backup. Include `.gc/runtime/arena/` in the same
+off-PVC snapshot job used for `.dolt-backup/`, at least every six hours. Retain enough
+generations to meet the site's RPO (30 daily generations is the recommended default),
+and periodically restore the JSONL into scratch and validate every line with `jq -e`.
 
 ## Sources currently captured
 
@@ -28,14 +49,15 @@ rows. Don't naively pool them — slice by `blind` and `source`.
 
 ## Files
 
-- `decisions.jsonl` — one arena decision per line (`schema: arena-decision.v0.2`).
+- `$GC_CITY_PATH/.gc/runtime/arena/decisions.jsonl` — system-of-record log, one arena
+  decision per line (`schema: arena-decision.v0.2`).
 - `arena_common.py` — shared load/merge/write (idempotent, cost-preserving) +
   `scan_transcript_usage()` (the session/window token join, deduped by message.id).
 - `backfill_bug_lane.py` — projects `hard-bug-reconcile.v1` beads + per-worker
   transcript tokens. `project()` is the going-forward entry point; re-run anytime.
 - `eval_to_arena.py` — projects `tools/vllm/eval/run-*/` (review + diagnosis).
 - `arena_refresh.py` — **the single idempotent capture entry point**: runs every
-  projector under a lock, logs to `refresh.log`. Driven by the `arena-capture` gascity
+  projector under a runtime lock, logs beside the runtime data. Driven by the `arena-capture` gascity
   order (below); also runnable manually / `--loop`. Add new N≥2 sources to `PROJECTORS`.
 - `test_arena.py` — hermetic tests for the token math (dedup, session-vs-window).
 
@@ -49,6 +71,7 @@ python3 tools/vllm/arena/arena_refresh.py       # capture ALL sources (idempoten
 python3 tools/vllm/arena/backfill_bug_lane.py   # just the bug lane
 python3 tools/vllm/arena/eval_to_arena.py       # just eval review + diagnosis
 python3 tools/vllm/arena/test_arena.py          # token-math regression tests
+printf '%s\n' "${GC_ARENA_DECISIONS:-${GC_ARENA_STATE_DIR:-${GC_CITY_RUNTIME_DIR:-${GC_CITY_PATH:-/pvc/workspace}/.gc/runtime}/arena}/decisions.jsonl}"
 ```
 
 ## Auto-capture (going-forward) — no manual backfilling
@@ -131,18 +154,21 @@ reason_tags[], rationale, divergences[], next_action, failure_class, failure_rea
 ## Example queries
 
 ```
+# Point shell analysis at the runtime system of record.
+ARENA_LOG="${GC_ARENA_DECISIONS:-${GC_ARENA_STATE_DIR:-${GC_CITY_RUNTIME_DIR:-${GC_CITY_PATH:-/pvc/workspace}/.gc/runtime}/arena}/decisions.jsonl}"
+
 # production win-rate by model (non-blind judge)
-jq -r 'select(.source=="bug-lane-reconcile").outcome.winner_model_canonical' decisions.jsonl | sort | uniq -c
+jq -r 'select(.source=="bug-lane-reconcile").outcome.winner_model_canonical' "$ARENA_LOG" | sort | uniq -c
 
 # blind persona bake-off: which treatment wins?
 jq -r 'select(.source=="eval-review" and .outcome.winner_slot!=null)
-       | (.participants[] | select(.slot==(.. ) )) ' decisions.jsonl   # see eval_to_arena summary
+       | (.participants[] | select(.slot==(.. ) )) ' "$ARENA_LOG"   # see eval_to_arena summary
 
 # bang-for-buck: output tokens per model, production only
-jq -r 'select(.source=="bug-lane-reconcile").participants[] | "\(.model_canonical)\t\(.cost.tokens.output)"' decisions.jsonl
+jq -r 'select(.source=="bug-lane-reconcile").participants[] | "\(.model_canonical)\t\(.cost.tokens.output)"' "$ARENA_LOG"
 
 # only real disagreements (drop aligned/agreement rows)
-jq -c 'select(.aligned==false)' decisions.jsonl
+jq -c 'select(.aligned==false)' "$ARENA_LOG"
 ```
 
 ## Caveats

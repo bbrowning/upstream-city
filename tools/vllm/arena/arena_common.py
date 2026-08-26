@@ -1,6 +1,6 @@
 """Shared helpers for the model-arena projectors.
 
-The arena is ONE JSONL log (`decisions.jsonl`) fed by several projectors, one
+The arena is ONE runtime JSONL log (`decisions.jsonl`) fed by several projectors, one
 per source (bug-lane reconcile beads, eval review runs, eval diagnosis runs).
 Every projector loads the existing log, merges in its own rows by decision_id
 (preserving foreign rows and prior token counts), and rewrites. So running any
@@ -12,12 +12,20 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 from collections import defaultdict
 from datetime import datetime
 
-REPO = "/pvc/workspace"
+REPO = os.path.abspath(os.environ.get("GC_CITY_PATH") or
+                       os.environ.get("GC_CITY") or "/pvc/workspace")
 ARENA_DIR = os.path.join(REPO, "tools", "vllm", "arena")
-DECISIONS = os.path.join(ARENA_DIR, "decisions.jsonl")
+LEGACY_DECISIONS = os.path.join(ARENA_DIR, "decisions.jsonl")
+RUNTIME_DIR = os.path.abspath(os.environ.get("GC_CITY_RUNTIME_DIR") or
+                              os.path.join(REPO, ".gc", "runtime"))
+STATE_DIR = os.path.abspath(os.environ.get("GC_ARENA_STATE_DIR") or
+                            os.path.join(RUNTIME_DIR, "arena"))
+DECISIONS = os.path.abspath(os.environ.get("GC_ARENA_DECISIONS") or
+                            os.path.join(STATE_DIR, "decisions.jsonl"))
 
 ARENA_SCHEMA = "arena-decision.v0.2"
 
@@ -190,7 +198,7 @@ def scan_transcript_usage(agent, start=None, end=None, session_id=None):
     }
 
 
-def load_decisions(path=DECISIONS):
+def _read_decisions(path):
     if not os.path.exists(path):
         return []
     out = []
@@ -200,6 +208,62 @@ def load_decisions(path=DECISIONS):
             if line:
                 out.append(json.loads(line))
     return out
+
+
+def _write_decisions(path, rows):
+    """Atomically replace a log and fsync both its contents and directory entry."""
+    directory = os.path.dirname(path)
+    os.makedirs(directory, mode=0o700, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".decisions.", suffix=".tmp", dir=directory,
+                               text=True)
+    try:
+        with os.fdopen(fd, "w") as f:
+            for row in rows:
+                f.write(json.dumps(row) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+        dir_fd = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def migrate_legacy_decisions(path=None):
+    """Import the retired repository log into the default runtime log.
+
+    This remains intentionally idempotent for a compatibility window: an old checkout
+    may append a new decision to the legacy path after the runtime log was created.
+    Missing legacy ids are imported, while an existing runtime row wins on collision.
+    Explicit alternate output paths never invoke this migration.
+    """
+    path = path or DECISIONS
+    if os.path.abspath(path) != os.path.abspath(DECISIONS):
+        return False
+    legacy = _read_decisions(LEGACY_DECISIONS)
+    current = _read_decisions(path)
+    if not legacy:
+        return False
+    by_id = {r["decision_id"]: r for r in legacy}
+    by_id.update({r["decision_id"]: r for r in current})
+    rows = sorted(by_id.values(), key=lambda r: (r.get("at") or "", r.get("decision_id")))
+    if rows == current:
+        return False
+    _write_decisions(path, rows)
+    return True
+
+
+def load_decisions(path=None):
+    path = path or DECISIONS
+    migrate_legacy_decisions(path)
+    return _read_decisions(path)
 
 
 def _preserve_cost(new, old):
@@ -224,9 +288,10 @@ def _preserve_cost(new, old):
     return new
 
 
-def merge_write(new_rows, path=DECISIONS):
+def merge_write(new_rows, path=None):
     """Merge new_rows into the log by decision_id (new wins, cost preserved),
     keep foreign rows untouched, write sorted by timestamp. Returns (total, added, updated)."""
+    path = path or DECISIONS
     existing = load_decisions(path)
     by_id = {r["decision_id"]: r for r in existing}
     added = updated = 0
@@ -246,8 +311,5 @@ def merge_write(new_rows, path=DECISIONS):
             added += 1
         by_id[did] = r
     rows = sorted(by_id.values(), key=lambda r: (r.get("at") or "", r.get("decision_id")))
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
-        for r in rows:
-            f.write(json.dumps(r) + "\n")
+    _write_decisions(path, rows)
     return len(rows), added, updated

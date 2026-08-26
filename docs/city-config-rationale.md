@@ -94,7 +94,7 @@ Data-driven, not a preference: opus/high demonstrably **missed** the inkling
 `THINK_END` regression in PR 47562 across two runs (beads f41i, 8pr1), while
 opus/xhigh caught it as a **blocker** both times (wcq4 x2). **Effort — not
 model — was the decisive factor.** See the per-lane breakdown in
-`tools/vllm/arena/decisions.jsonl` and follow-up bead wo-au65.6.
+`.gc/runtime/arena/decisions.jsonl` and follow-up bead wo-au65.6.
 
 ### Review lane PROFILES
 

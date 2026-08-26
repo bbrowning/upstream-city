@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Idempotent arena capture — run every projector once, merge into decisions.jsonl.
+"""Idempotent arena capture — run every projector once, merge into runtime state.
 
 This is the SINGLE entry point every auto-capture trigger calls (the Stop hook, a
 manual run, or `--loop`). It runs all source projectors; each is idempotent and
@@ -8,7 +8,7 @@ counts), so running this any number of times is always safe. New N>=2 decisions 
 automatically; transcript token counts are captured before those worktree transcripts
 rotate (Claude Code cleanupPeriodDays, ~30d default).
 
-Concurrency: an flock on .refresh.lock makes overlapping runs a no-op (the Stop hook
+Concurrency: an flock in the runtime-state directory makes overlapping runs a no-op (the Stop hook
 can fire while a prior refresh is mid-flight). A held lock -> clean exit 0.
 
 Usage:
@@ -31,8 +31,8 @@ import backfill_bug_lane
 import backfill_review_quorum
 import eval_to_arena
 
-LOCK = os.path.join(A.ARENA_DIR, ".refresh.lock")
-LOG = os.path.join(A.ARENA_DIR, "refresh.log")
+LOCK = os.path.join(A.STATE_DIR, ".refresh.lock")
+LOG = os.path.join(A.STATE_DIR, "refresh.log")
 
 # Source projectors run on every refresh. Each takes (out, quiet) and returns a stats
 # dict {source, rows, added, updated, total}. Add review-quorum / feature here as they
@@ -50,6 +50,7 @@ def _now():
 
 def _logline(msg):
     try:
+        os.makedirs(os.path.dirname(LOG), mode=0o700, exist_ok=True)
         with open(LOG, "a") as f:
             f.write(msg + "\n")
     except Exception:
@@ -58,6 +59,7 @@ def _logline(msg):
 
 def refresh_once(out=A.DECISIONS, quiet=False):
     """Run every projector once under the lock. Returns True on a full clean pass."""
+    os.makedirs(os.path.dirname(LOCK), mode=0o700, exist_ok=True)
     lock_fd = os.open(LOCK, os.O_CREAT | os.O_RDWR, 0o644)
     try:
         try:

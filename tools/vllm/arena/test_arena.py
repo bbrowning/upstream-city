@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hermetic tests for the arena token-attribution core (arena_common.scan_transcript_usage).
+"""Hermetic tests for the arena runtime-state and token-attribution core.
 
 Deterministic — synthesizes its own tiny transcripts in a temp dir (no dependency on
 the ephemeral real worktree transcripts). Guards the bits most likely to regress:
@@ -31,6 +31,55 @@ def _write(dirpath, sid, records):
     with open(os.path.join(dirpath, sid + ".jsonl"), "w") as f:
         for r in records:
             f.write(json.dumps(r) + "\n")
+
+
+def _decision(decision_id, at=None, marker=None):
+    row = {"decision_id": decision_id, "at": at}
+    if marker:
+        row["marker"] = marker
+    return row
+
+
+def _write_decisions(path, rows):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        for row in rows:
+            f.write(json.dumps(row) + "\n")
+
+
+def test_runtime_state_migration(root):
+    """Legacy rows migrate once, late legacy ids remain readable, runtime wins conflicts."""
+    old = (A.DECISIONS, A.LEGACY_DECISIONS, A.STATE_DIR, A.RUNTIME_DIR)
+    try:
+        A.RUNTIME_DIR = os.path.join(root, "city", ".gc", "runtime")
+        A.STATE_DIR = os.path.join(A.RUNTIME_DIR, "arena")
+        A.DECISIONS = os.path.join(A.STATE_DIR, "decisions.jsonl")
+        A.LEGACY_DECISIONS = os.path.join(root, "city", "tools", "vllm", "arena",
+                                          "decisions.jsonl")
+        _write_decisions(A.LEGACY_DECISIONS, [
+            _decision("old-a", "2026-01-01T00:00:00Z"),
+            _decision("shared", marker="legacy"),
+        ])
+
+        rows = A.load_decisions()
+        assert {r["decision_id"] for r in rows} == {"old-a", "shared"}, rows
+        assert os.path.exists(A.DECISIONS)
+
+        A.merge_write([_decision("shared", marker="runtime"), _decision("new-b")])
+        _write_decisions(A.LEGACY_DECISIONS, [
+            _decision("old-a"), _decision("shared", marker="stale"),
+            _decision("late-c"),
+        ])
+        rows = A.load_decisions()
+        by_id = {r["decision_id"]: r for r in rows}
+        assert set(by_id) == {"old-a", "shared", "new-b", "late-c"}, rows
+        assert by_id["shared"]["marker"] == "runtime", by_id["shared"]
+
+        alternate = os.path.join(root, "alternate", "out.jsonl")
+        _write_decisions(alternate, [_decision("explicit-only")])
+        assert A.load_decisions(alternate) == [_decision("explicit-only")]
+    finally:
+        A.DECISIONS, A.LEGACY_DECISIONS, A.STATE_DIR, A.RUNTIME_DIR = old
 
 
 def test_canonical_model():
@@ -68,6 +117,7 @@ def test_canonical_model():
 def main():
     test_canonical_model()
     with tempfile.TemporaryDirectory() as root:
+        test_runtime_state_migration(root)
         A.TRANSCRIPTS = root
         A.WORKTREE_PREFIX = "agent-"
         d = os.path.join(root, "agent-fake")

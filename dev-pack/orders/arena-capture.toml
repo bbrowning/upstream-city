@@ -1,6 +1,6 @@
 # arena-capture — capture new model-arena decisions (model-vs-model judge picks +
 # per-participant transcript token counts) on a cooldown, so N>=2 runs land in
-# tools/vllm/arena/decisions.jsonl on their own — no manual backfilling.
+# the city runtime-state log on their own — no manual backfilling or Git churn.
 #
 # The controller runs this via exec (no LLM, no agent, no wisp): the durable,
 # always-on cousin of a cron poller. It survives restarts and needs no per-session

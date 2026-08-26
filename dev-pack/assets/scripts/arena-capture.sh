@@ -3,7 +3,8 @@
 # per-participant Claude Code transcript token counts) are captured automatically.
 #
 # Runs as an exec order (no LLM, no agent, no wisp) — the durable, controller-hosted
-# cousin of a cron job. arena_refresh.py is idempotent and cost-preserving (merges by
+# cousin of a cron job. The log lives under the city's ignored .gc/runtime tree;
+# arena_refresh.py is idempotent and cost-preserving (merges by
 # decision_id, preserves prior token counts), so re-running every interval is free and
 # safe; it only adds newly-closed decisions. Token counts are captured well within
 # Claude Code's transcript retention (cleanupPeriodDays, ~30d).
