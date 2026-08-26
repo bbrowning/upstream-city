@@ -16,6 +16,13 @@ Build a path list before loading anything beyond `base.md`:
 Select deterministically; do not read unrelated persona bodies merely because they exist:
 
 ```bash
+persona_status=$(bash "$GC_CITY_PATH/dev-pack/assets/scripts/persona-preflight.sh") || {
+  printf '%s\n' "persona preflight failed: ${GC_PERSONAS:-unset}" >&2
+  # Required corpora are a configuration contract: stop and emit a hard failure
+  # with failure_reason=persona-corpus-unavailable instead of silently degrading.
+  exit 2
+}
+printf 'persona preflight: %s\n' "$persona_status"
 mapfile -t persona_files < <(python3 "$GC_CITY_PATH/dev-pack/assets/scripts/persona-lifecycle.py" select \
   --corpus "$GC_PERSONAS" --lens {{.}} \
   --path <relevant-path> [--path <another-path> ...])
@@ -23,7 +30,7 @@ printf 'loading persona: %s\n' "${persona_files[@]}"
 cat "${persona_files[@]}"
 ```
 
-The selector always returns `base.md`, then only domain personas whose `**Activates on:**` prefixes match. Multiple domain personas may match; zero is valid. If `$GC_PERSONAS` is unset, record that and reason from first principles.
+The selector always returns `base.md`, then only domain personas whose `**Activates on:**` prefixes match. Multiple domain personas may match; zero is valid. If the corpus is optional, preflight records the intentional first-principles fallback. If `GC_PERSONAS_REQUIRED=true`, absence is a hard, actionable configuration failure.
 
 Apply domain facts through this lane's method:
 {{- if eq . "diagnosis"}}

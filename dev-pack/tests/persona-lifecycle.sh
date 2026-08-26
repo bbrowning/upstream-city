@@ -3,7 +3,9 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 TOOL="$ROOT/dev-pack/assets/scripts/persona-lifecycle.py"
+PREFLIGHT="$ROOT/dev-pack/assets/scripts/persona-preflight.sh"
 CORPUS="$ROOT/tools/vllm/personas"
+PAUDE_CORPUS="$ROOT/tools/paude/personas"
 PACK="$ROOT/dev-pack"
 REGISTRY="$PACK/assets/persona-lenses.json"
 COVERAGE="$ROOT/tools/vllm/eval/reflex-coverage.json"
@@ -18,6 +20,44 @@ govern() {
 }
 
 govern >/dev/null
+
+GC_PERSONAS="$PAUDE_CORPUS" GC_PERSONAS_REQUIRED=true "$PREFLIGHT" >"$TMP/paude-preflight"
+jq -e --arg corpus "$PAUDE_CORPUS" '.available == true and .required == true and .corpus == $corpus' \
+  "$TMP/paude-preflight" >/dev/null || fail "Paude persona preflight did not verify corpus"
+python3 "$TOOL" select --corpus "$PAUDE_CORPUS" --lens change-review \
+  --path src/paude/git_remote/utils.py >"$TMP/paude-select"
+grep -qx "$PAUDE_CORPUS/base.md" "$TMP/paude-select" || fail "Paude review omitted base persona"
+grep -qx "$PAUDE_CORPUS/git-orchestration.md" "$TMP/paude-select" \
+  || fail "Paude review omitted matched orchestration persona"
+if GC_PERSONAS="$TMP/missing" GC_PERSONAS_REQUIRED=true "$PREFLIGHT" >"$TMP/required-missing" 2>&1; then
+  fail "required missing persona corpus silently degraded"
+fi
+grep -q 'persona-corpus-unavailable' "$TMP/required-missing" || fail "required corpus failure was not actionable"
+GC_PERSONAS="$TMP/missing" GC_PERSONAS_REQUIRED=false "$PREFLIGHT" >"$TMP/optional-missing"
+jq -e '.available == false and .fallback == "first-principles"' "$TMP/optional-missing" >/dev/null \
+  || fail "optional persona fallback was not explicit"
+
+# Resolve the real city, not only source TOML: every Paude review profile and
+# synthesis/settle role must receive its own corpus and required preflight flag.
+gc config show >"$TMP/resolved.toml" 2>"$TMP/config-warnings"
+python3 - "$TMP/resolved.toml" "$PAUDE_CORPUS" <<'PY'
+import sys, tomllib
+config = tomllib.load(open(sys.argv[1], "rb"))
+corpus = sys.argv[2]
+roles = {
+    "pr-review-synthesizer", "pr-reviewer-opus46-xhigh", "pr-reviewer-opus48-xhigh",
+    "pr-reviewer-sonnet-xhigh", "pr-reviewer-gpt56sol-medium",
+    "pr-reviewer-gpt56sol-xhigh", "pr-reviewer-gpt56luna-xhigh", "pr-arbiter",
+}
+agents = {a["name"]: a for a in config["agent"] if a.get("dir") == "paude" and a.get("name") in roles}
+missing = roles - agents.keys()
+if missing:
+    raise SystemExit(f"missing Paude review roles: {sorted(missing)}")
+for role, agent in agents.items():
+    env = agent.get("env", {})
+    if env.get("GC_PERSONAS") != corpus or env.get("GC_PERSONAS_REQUIRED") != "true":
+        raise SystemExit(f"Paude {role} persona env mismatch: {env}")
+PY
 
 python3 "$TOOL" select --corpus "$CORPUS" --lens design \
   --path vllm/parser/engine/parser_engine.py --path tests/parser/engine/test_parser_engine.py \
