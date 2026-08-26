@@ -9,7 +9,7 @@
 # and idles out afterward.
 
 scope = "rig"
-nudge = "You have a bug lane assignment. Run `gc prime`, read your step bead (it names the TASK — diagnose / reconsider / implement / cross-review — and the JSON schema to emit), do the work in your OWN worktree, then finish with emit-json.sh."
+nudge = "You have a bug lane assignment. Run `gc prime`, read your step bead (it names the TASK — diagnose / reconsider / implement / cross-review — and the JSON schema to emit), do the work in your OWN worktree, then finish with emit-json.sh. Any implementation is local-only: commit and report branch + immutable HEAD SHA + worktree state; never push, create or modify a PR, fetch as recovery, or otherwise mutate a remote."
 idle_timeout = "45m"
 min_active_sessions = 0
 max_active_sessions = 1          # single slot => stable AgentBase "bug-worker-a" => stable worktree

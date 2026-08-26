@@ -2,14 +2,14 @@ description = """
 Single-lane feature implementation.
 
 Routes one write assignment to the feature-dev agent, which implements it on a
-real `paude/<bead_id>` branch inside its own isolated worktree, pushes to origin,
-and emits a structured report to `gc.output_json`. The push is the durable
-output; opening/merging the PR is a separate, human- or checkpoint-gated step.
+real `paude/<bead_id>` branch inside its own isolated worktree and emits a
+structured report to `gc.output_json`. A coherent committed local
+branch, immutable HEAD SHA, and explicit worktree state are the durable output.
+Exporting commits or creating a PR is an operator action outside Gas City.
 
 Deliberately the minimal shape and a single lane (feature-dev is capped at one
 pool slot), so it never collides with the read-only reviewers. The arc/tracking
-bead is NOT closed by this formula — it closes on a real checkpoint (PR opened,
-CI green, merged).
+bead is NOT closed by this formula — it closes on a real operator checkpoint.
 """
 formula = "feature-dev"
 
@@ -26,32 +26,33 @@ default = "origin/main"
 
 [[steps]]
 id = "implement"
-title = "Implement the assignment on a paude/<bead_id> branch and push"
+title = "Implement the assignment on a local paude/<bead_id> branch"
 description = """
 Implement the assignment described in your bead, working **only inside your own
 isolated worktree** (created for your slot before this session). Do not work in
 the shared rig root.
 
 Method (see your feature-dev prompt for detail):
-- `git fetch origin`, then `git switch -c paude/{{bead_id}} {{base}}` — one
-  branch per assignment, branched off the merge target.
+- Resolve `{{base}}` from refs already present in the shared repository, then
+  `git switch -c paude/{{bead_id}} {{base}}` — one branch per assignment.
 - Make the smallest change that fully does the job; keep unrelated edits out.
 - Build and run the relevant tests in your worktree; record the exact commands
   and results. Do not imply a check passed that you did not run.
-- Commit in coherent steps, then **push**: `git push -u origin paude/{{bead_id}}`.
-  The push is the point of no return and the durable output of this step.
-- Open the PR only if this assignment says to; otherwise report the branch.
+- Commit in coherent steps. Verify the local handoff with `git rev-parse HEAD`
+  and `git status --short`.
+- This is strictly local-only: never push, open or modify a PR, fetch as a
+  missing-ref fallback, or otherwise mutate a remote. Operators alone export
+  commits and decide whether or where to publish them.
 
 Do **not** close the arc/tracking bead — that closes on a real checkpoint, not
 your self-report.
 
 Write this JSON object to `gc.output_json`:
 
-- `branch`: the branch you pushed (e.g. `paude/{{bead_id}}`)
-- `pushed`: boolean — true only if `git push` succeeded
-- `head_sha`: the sha you pushed
+- `branch`: the local branch (e.g. `paude/{{bead_id}}`)
+- `head_sha`: the full immutable SHA from `git rev-parse HEAD`
 - `base`: the base you branched from ({{base}})
-- `pr_url`: the PR URL if you opened one, else null
+- `worktree_state`: `clean` or `dirty`; explain residual paths in `follow_ups`
 - `summary`: 1–3 sentences on what changed and why
 - `tests`: array of `{command, result}` for checks you actually ran
 - `files_changed`: array of paths
@@ -60,10 +61,11 @@ Write this JSON object to `gc.output_json`:
 - `failure_reason`: stable reason string, or "" when `none`
 
 On success, close with `gc.outcome=pass` and the JSON in `gc.output_json`. On a
-retryable infra failure (provider down, repo unreachable, push rejected for
-auth) close with `gc.outcome=fail`, `gc.failure_class=transient`, and a stable
+retryable infra failure (provider down) close with `gc.outcome=fail`,
+`gc.failure_class=transient`, and a stable
 `gc.failure_reason`. Use `gc.failure_class=hard` for non-retryable contract/input
-failures (under-specified assignment, or `pwd` resolved to the rig root).
+failures (under-specified assignment, absent local base ref, or `pwd` resolved
+to the rig root). Retries must remain local-only.
 """
 metadata = { "gc.output_json_schema" = "feature-dev.v1", "gc.output_json_required" = "true" }
 

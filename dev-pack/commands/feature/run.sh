@@ -5,8 +5,8 @@
 #
 # Resolves the RIG (explicit --rig wins, else inferred from the bead prefix, e.g.
 # vllm-123 -> vllm), then slings the feature-dev formula to <rig>/feature-dev, which
-# implements the assignment on a paude/<bead> branch in its own worktree and pushes
-# to origin. The arc/tracking bead closes on a real checkpoint, not this sling.
+# implements and commits the assignment on a local paude/<bead> branch in its own
+# worktree. The operator exports the commit; the arc closes on a real checkpoint.
 #
 # Env (provided by gc): GC_CITY_PATH, GC_BIN.
 set -euo pipefail

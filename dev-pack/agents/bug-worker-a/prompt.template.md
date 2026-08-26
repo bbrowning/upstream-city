@@ -143,17 +143,26 @@ Apply the second-opinion discipline to the peer's `proposed_fix`. Emit
 
 You were chosen to implement the converged fix. Work only in your worktree.
 
-1. **Fresh base + branch:** `git fetch origin`, then
-   `git switch -c <branch_prefix><bug_bead> origin/main` — use the exact branch
-   (and base) your step names; its description is authoritative.
+This implementation lane is **strictly local-only**. Never push, open or modify
+a pull request, fetch as a recovery path, or otherwise mutate a Git remote.
+Commit export and any publication are operator actions outside Gas City.
+
+1. **Local base + branch:** resolve the base named by your step from refs already
+   present in the shared repository, then run
+   `git switch -c <branch_prefix><bug_bead> <base>` — use the exact branch and
+   base your step names. If the ref is absent, report that precise blocker; do
+   not contact a remote to recover it.
+   On retry/resume, if the exact branch already exists, verify it belongs to
+   this bug and switch to it; never recreate or reset away prior local work.
 2. **Implement** the agreed fix — the smallest change that fully addresses the root
    cause; keep unrelated edits out.
 3. **Prove it:** add the tests from the fix plan; **run** them and any existing
    suites that cover the area. Record the exact commands + results. If a fix reveals
    another bug, fix it too and note it in `follow_ups`. Do not imply a check passed
    that you did not run.
-4. **Commit** coherently, then **push** — the point of no return:
-   `git push -u origin <branch_prefix><bug_bead>`.
+4. **Commit** coherently. Record `git rev-parse HEAD` and `git status --short`;
+   the local branch, immutable HEAD SHA, and explicit worktree state are the
+   durable handoff.
 5. Do **not** close the arc/tracking bead — it closes on a real checkpoint, not your
    self-report.
 
@@ -164,18 +173,19 @@ Emit **`hard-bug-implement.v1`**.
 The other lane implemented the fix on a branch (its `hard-bug-implement.v1` is on the
 `implement` step you depend on: walk your `needs` edge, or read the branch named in
 your step). Your worktree and theirs are **linked worktrees of the same repo**, so
-their branch is already visible locally — you do NOT need `git fetch origin` or a
-successful `pushed` to review it. Review **both** the fix and its **verification
-evidence**:
+their branch and commit are already visible locally. Resolve the exact
+`head_sha` from the implementation output and confirm the named branch points to
+it before reviewing **both** the fix and its **verification evidence**:
 
 ```bash
-git diff origin/main...<branch>          # the change
-git log --oneline origin/main..<branch>
+test "$(git rev-parse <branch>)" = "<head_sha>"  # immutable handoff guard
+git diff <base>...<head_sha>                    # the change
+git log --oneline <base>..<head_sha>
 ```
 
-(If the branch is unexpectedly missing — e.g. the implementer's slot was reused before
-you got here — only then fall back to `git fetch origin <branch>`, which only works if
-`pushed=true`.)
+If the local branch or commit is missing or the branch has moved, report
+`blocked` with the exact missing/mismatched ref. Never contact a remote as a
+fallback; the coordinator can preserve or re-run the local implementation lane.
 
 - Does the diff actually fix the **root cause** agreed earlier (not just the symptom),
   with no scope creep or new defects? (`concurs_with_fix`)
@@ -204,9 +214,7 @@ bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-step-bead
 rm -f "$out"
 ```
 
-On a retryable infrastructure failure (provider down, repo unreachable — but NOT a
-rejected `git push`, which is expected on a read-only token and belongs in `pushed`,
-not a failure) finish with the same command plus:
+On a retryable infrastructure failure (provider down) finish with the same command plus:
 `--outcome fail --failure-class transient --failure-reason "<stable reason>"`
 (use `--failure-class hard` for a contract/input failure a retry won't fix). Do not
 run a separate `gc bd close`.
@@ -225,9 +233,9 @@ verification_plan:[…]}`, `considered_second_opinion{peer_bead | null, stance
 (adopted|refined|rejected|none), why}`, `evidence:[{kind (file|line|repro|trace|test),
 ref, note}]`, `failure_class`, `failure_reason`.
 
-**`hard-bug-implement.v1`** — `branch`, `pushed` (bool), `head_sha`, `base`, `summary`,
-`tests:[{command, result}]`, `files_changed:[…]`, `follow_ups:[…]`, `failure_class`,
-`failure_reason`.
+**`hard-bug-implement.v1`** — `branch`, `head_sha`, `base`, `worktree_state`
+(`clean|dirty`; explain residual paths in `follow_ups`), `summary`, `tests:[{command,
+result}]`, `files_changed:[…]`, `follow_ups:[…]`, `failure_class`, `failure_reason`.
 
 **`hard-bug-crossreview.v1`** — `reviewer_lane`, `verdict (concur|request_changes|
 blocked)`, `concurs_with_fix` (bool), `concurs_with_evidence` (bool), `findings:[{
@@ -236,12 +244,13 @@ actually verified vs what was claimed), `summary`, `failure_class`, `failure_rea
 
 ## Handoff (context cycling)
 
-If your context fills mid-task, note where you are and exit; your next session
-resumes from `gc prime` + mail (an implementer should push WIP first to keep it
-durable):
+If your context fills mid-task, make a coherent local checkpoint commit when the
+current change is internally consistent, then hand off its branch, HEAD SHA, and
+worktree state. Your next session resumes from `gc prime` + mail:
 
 ```bash
-gc mail send {{.Rig}}/bug-coordinator -s "HANDOFF" -m "on <task>; done X, remaining Y."
+git rev-parse --abbrev-ref HEAD && git rev-parse HEAD && git status --short
+gc mail send {{.Rig}}/bug-coordinator -s "HANDOFF" -m "local branch <branch> at <head-sha>; state <clean|dirty>; done X, remaining Y."
 exit
 ```
 

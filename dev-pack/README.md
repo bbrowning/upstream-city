@@ -18,7 +18,7 @@ lane that self-verifies its own keystones; N≥2 fans out N independent opinions
 |---|---|---|
 | **review** | `gc dev-pack review <PR> [--n N] [--lineup p:m:e,…]` | posture-gated PR review → a structured merge verdict (read-only + one trusted auto-check); N≥2 runs a reviewer quorum → synthesis; `--lineup` names provider/model/effort per opinion, validated before dispatch |
 | **bug** | `gc dev-pack bug <bead> [--n N]` | N=1 solo diagnosis + keystone self-verify; N≥2 independent lanes act as each other's second opinion until root cause & fix converge, then the stronger implements + tests and the other cross-reviews |
-| **feature** | `gc dev-pack feature <bead>` | implement an assignment on a `paude/<bead>` branch, run tests, push |
+| **feature** | `gc dev-pack feature <bead>` | implement an assignment on a local `paude/<bead>` branch, run tests, commit, and hand off its HEAD SHA |
 
 Helpers: `gc dev-pack materialize <PR>` (durable human checkout) ·
 `gc dev-pack summary <bead|PR>` (re-render a stored verdict) ·
@@ -170,7 +170,7 @@ Worktrees are cheap here: measured **~0.36s / ~111MB** per detached add on vLLM
 gascity's worktree reaper (`reapClosedBeadWorktrees`) only removes a worktree
 whose name parses as a **closed bead ID**. Agent-named worktrees (`reviewer-1`,
 `feature-dev`) never parse as a bead ID, so they are **never** reaper-eligible.
-On top of that the reaper has a git-safety gate (uncommitted/unpushed/stashed →
+On top of that the reaper has a git-safety gate (uncommitted/local-only/stashed →
 skip) and never deletes branches. **Naming constraint:** never name a slot
 `<rig-prefix>-<something>` that could look like a configured bead ID.
 
@@ -198,7 +198,7 @@ formulas/hard-bug-round.toml          # N≥2 round: the lanes + coordinator rec
 formulas/hard-bug-round-solo.toml     # N=1 round: one lane + coordinator self-verify synthesis
 formulas/hard-bug-finalize.toml       # implement → cross-review → finalize
 # --- feature lane ---
-agents/feature-dev/                   # single write lane (1 slot): branch/push, never self-close arc
+agents/feature-dev/                   # single write lane (1 slot): local branch/commit, never self-close arc
 formulas/feature-dev.toml             # per-run implement TASK + feature-dev.v1 report contract
 # --- shared ---
 orders/fetch-origin.toml              # read-only `git fetch --prune` on a cooldown (warm refs)
@@ -655,11 +655,14 @@ gc sling vllm/feature-dev feature-dev --formula \
   --title "implement <thing>"
 ```
 
-feature-dev branches `paude/<bead_id>` off `origin/main` **in its own
-worktree**, implements, runs tests, and **pushes** (the durable output). It does
-**not** open a PR unless the assignment says to, and it **never closes the
-arc/tracking bead** — that closes on a real checkpoint (PR opened, CI green,
-merged), not on self-report.
+feature-dev branches `paude/<bead_id>` off the named local base **in its own
+worktree**, implements, runs tests, and commits coherently. Its durable handoff is
+the local branch, immutable HEAD SHA, worktree state, and verification results.
+Every implementation lane is strictly local-only: it never pushes, creates or
+modifies a PR, or otherwise mutates a remote—even when an assignment requests
+publication. The operator extracts commits to a local host and alone decides
+whether and where to publish them. The lane also **never closes the arc/tracking
+bead**; that closes on an operator-controlled checkpoint, not on self-report.
 
 ## Fix a bug (the N-opinion dial)
 
@@ -701,6 +704,13 @@ implement + cross-review. Track the arc's durable state any time (LLM-free):
 ```bash
 gc dev-pack status vllm-123                  # phase / round / status / chosen implementer
 ```
+
+The hard-bug implementation and cross-review handoff is local-only too. The
+implementer commits on the named branch and emits its full HEAD SHA and
+worktree state; the reviewer verifies that local branch still resolves to the
+same SHA and reviews the SHA directly. Missing or moved local refs block the
+handoff instead of triggering a remote fallback. As in the feature lane, only
+the operator may extract or publish the resulting commit.
 
 A second real vendor for lane B is a one-line `[[rigs.patches]]` provider change in
 `city.toml` (formulas and prompts unchanged) — see the manifest.

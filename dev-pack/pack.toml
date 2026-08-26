@@ -61,10 +61,10 @@
 #                           escalates to the human.
 #
 #   feature — an intent/bead -> an implementation + tests on a paude/<bead> branch,
-#             pushed to origin. The push is the durable output; opening/merging the
-#             PR is a separate, human- or checkpoint-gated step.
+#             committed locally. The local branch + immutable HEAD SHA + worktree
+#             state are the durable output; export/publication are operator actions.
 #     agents/feature-dev/   single write lane (1 slot), its own worktree, real
-#                           branch, pushes to origin.
+#                           local branch and coherent commits.
 #
 # FORMULAS (compile-time DAGs; lanes stay separate formulas that share the spine)
 #     formulas/pr-review.toml         N=1 review: triage -> review + pr-review.v1 verdict.
