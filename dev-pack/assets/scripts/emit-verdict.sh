@@ -6,6 +6,7 @@
 #
 #   emit-verdict.sh --bead <id> --verdict-file <path.json> --outcome pass|fail \
 #       [--failure-class none|transient|hard] [--failure-reason STR] [--reason CLOSE_MSG]
+#       [--implementation-artifact-id ID ...all implementation provenance fields]
 #
 # Schema is auto-detected from the verdict JSON (by shape): `.resolutions` present ->
 # pr-review-settle.v1 (divergence settle); else `.verdict` present -> pr-review.v1 /
@@ -22,7 +23,10 @@ set -euo pipefail
 GC="${GC_BIN:-gc}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NORMALIZE="$SCRIPT_DIR/normalize-pr-target.sh"
+RESOLVE_LOCAL="$SCRIPT_DIR/resolve-local-change.sh"
 BEAD="" ; VF="" ; OUTCOME="pass" ; FCLASS="none" ; FREASON="" ; REASON=""
+VALIDATE_IMPL=0 ; IMPL_REF="" ; IMPL_ID="" ; IMPL_REPO="" ; IMPL_BRANCH=""
+IMPL_REVISION="" ; IMPL_BASE="" ; IMPL_HEAD="" ; REVIEW_REPO="."
 
 die() { printf '%s\n' "emit-verdict: $*" >&2; exit 2; }
 
@@ -40,6 +44,22 @@ while [ $# -gt 0 ]; do
         --failure-reason=*) FREASON="${1#*=}"; shift ;;
         --reason)         REASON="${2:?}"; shift 2 ;;
         --reason=*)       REASON="${1#*=}"; shift ;;
+        --implementation-artifact-ref) IMPL_REF="${2-}"; shift 2 ;;
+        --implementation-artifact-ref=*) IMPL_REF="${1#*=}"; shift ;;
+        --implementation-artifact-id) VALIDATE_IMPL=1; IMPL_ID="${2-}"; shift 2 ;;
+        --implementation-artifact-id=*) VALIDATE_IMPL=1; IMPL_ID="${1#*=}"; shift ;;
+        --implementation-repository-id) IMPL_REPO="${2-}"; shift 2 ;;
+        --implementation-repository-id=*) IMPL_REPO="${1#*=}"; shift ;;
+        --implementation-branch) IMPL_BRANCH="${2-}"; shift 2 ;;
+        --implementation-branch=*) IMPL_BRANCH="${1#*=}"; shift ;;
+        --implementation-revision) IMPL_REVISION="${2-}"; shift 2 ;;
+        --implementation-revision=*) IMPL_REVISION="${1#*=}"; shift ;;
+        --implementation-base-sha) IMPL_BASE="${2-}"; shift 2 ;;
+        --implementation-base-sha=*) IMPL_BASE="${1#*=}"; shift ;;
+        --implementation-head-sha) IMPL_HEAD="${2-}"; shift 2 ;;
+        --implementation-head-sha=*) IMPL_HEAD="${1#*=}"; shift ;;
+        --repo) REVIEW_REPO="${2:?}"; shift 2 ;;
+        --repo=*) REVIEW_REPO="${1#*=}"; shift ;;
         -*)               die "unknown option '$1'" ;;
         *)                die "unexpected argument '$1'" ;;
     esac
@@ -48,6 +68,63 @@ done
 [ -n "$BEAD" ] || die "usage: --bead is required"
 [ -n "$VF" ] && [ -f "$VF" ] || die "usage: --verdict-file must be an existing file"
 OUT=$(jq -c . "$VF") || die "verdict file is not valid JSON: $VF"
+
+# Local-change lane provenance is a controller contract, not reviewer prose. Validate
+# it immediately before the atomic close against both the assigned formula values and
+# a fresh artifact resolution. A failure closes this attempt as retryable so the
+# formula controller can run its bounded retry; it never reaches synthesis as a pass.
+retry_provenance_failure() {
+    local detail="$1"
+    "$GC" bd update "$BEAD" \
+        --set-metadata "gc.outcome=fail" \
+        --set-metadata "gc.failure_class=transient" \
+        --set-metadata "gc.failure_reason=implementation-provenance-mismatch"
+    "$GC" bd close "$BEAD" --reason "retry: implementation provenance mismatch ($detail)"
+    die "implementation provenance mismatch: $detail; attempt closed for bounded retry"
+}
+
+if [ "$VALIDATE_IMPL" -eq 1 ]; then
+    if [ -z "$IMPL_ID" ]; then
+        printf '%s' "$OUT" | jq -e '.implementation_provenance == null' >/dev/null \
+            || retry_provenance_failure "PR review must emit null implementation_provenance"
+    else
+        [ -n "$IMPL_REF" ] || retry_provenance_failure "assigned artifact_ref is empty"
+        [ -n "$IMPL_REPO" ] || retry_provenance_failure "assigned repository_id is empty"
+        [ -n "$IMPL_REVISION" ] || retry_provenance_failure "assigned revision is empty"
+        [ -n "$IMPL_BASE" ] || retry_provenance_failure "assigned base_sha is empty"
+        [ -n "$IMPL_HEAD" ] || retry_provenance_failure "assigned head_sha is empty"
+        case "$IMPL_REVISION" in *[!0-9]*) retry_provenance_failure "assigned revision is not numeric" ;; esac
+
+        expected=$(jq -cn --arg ref "$IMPL_REF" --arg id "$IMPL_ID" --arg repo "$IMPL_REPO" \
+            --arg branch "$IMPL_BRANCH" --argjson revision "$IMPL_REVISION" \
+            --arg base "$IMPL_BASE" --arg head "$IMPL_HEAD" \
+            '{artifact_ref:$ref,artifact_id:$id,repository_id:$repo,branch:$branch,revision:$revision,base_sha:$base,head_sha:$head}')
+        for field in artifact_ref artifact_id repository_id branch revision base_sha head_sha; do
+            actual=$(printf '%s' "$OUT" | jq -c ".implementation_provenance.$field // null")
+            wanted=$(printf '%s' "$expected" | jq -c ".$field")
+            [ "$actual" = "$wanted" ] \
+                || retry_provenance_failure "$field expected $wanted, got $actual"
+        done
+
+        [ -x "$RESOLVE_LOCAL" ] || retry_provenance_failure "local-change resolver unavailable"
+        if [ "$IMPL_ID" = "explicit-local-ref" ]; then
+            resolve_args=(--repo "$REVIEW_REPO" --rig "${GC_RIG:-vllm}" --head "$IMPL_REF" --base "$IMPL_BASE")
+        else
+            resolve_args=(--repo "$REVIEW_REPO" --rig "${GC_RIG:-vllm}" --artifact "$IMPL_REF")
+        fi
+        if ! fresh=$("$RESOLVE_LOCAL" "${resolve_args[@]}" 2>&1); then
+            retry_provenance_failure "fresh artifact resolution failed: $fresh"
+        fi
+        for mapping in artifact_id:artifact_id repository_id:repository.id branch:head.branch revision:revision.number base_sha:base.sha head_sha:head.sha; do
+            field=${mapping%%:*}; path=${mapping#*:}
+            actual=$(printf '%s' "$fresh" | jq -c ".$path // null")
+            wanted=$(printf '%s' "$expected" | jq -c ".$field")
+            [ "$actual" = "$wanted" ] \
+                || retry_provenance_failure "fresh $field expected $wanted, got $actual"
+        done
+    fi
+fi
+
 # Treat agent-produced JSON as an untrusted handoff too. This guarantees newly
 # stored verdicts and notification hints never reintroduce a compound PR alias.
 head=$(printf '%s' "$OUT" | jq -r '.head_ref // empty')

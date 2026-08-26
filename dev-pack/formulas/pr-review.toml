@@ -210,8 +210,18 @@ notes — which personas, commands, and files backed each finding — live ONLY 
 - `failure_class`: one of `none`, `transient`, `hard`
 - `failure_reason`: stable reason string, or "" when `none`
 
-Finish the step with the single `emit-verdict.sh` command (see your reviewer
-method): it writes the JSON to `gc.output_json`, closes the bead, AND notifies the
+Finish the step with the single `emit-verdict.sh` command, passing the assigned
+provenance contract even when its values are empty for a PR:
+  bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-step-bead> \\
+    --verdict-file "$out" --outcome pass --repo . \\
+    --implementation-artifact-ref "{{implementation_artifact_ref}}" \\
+    --implementation-artifact-id "{{implementation_artifact_id}}" \\
+    --implementation-repository-id "{{implementation_repository_id}}" \\
+    --implementation-branch "{{implementation_branch}}" \\
+    --implementation-revision "{{implementation_revision}}" \\
+    --implementation-base-sha "{{base_ref}}" --implementation-head-sha "{{head_ref}}"
+It re-resolves a local artifact and rejects every missing, truncated, or mismatched
+field before writing a pass. The command writes the JSON to `gc.output_json`, closes the bead, AND notifies the
 human — atomically, so the verdict always reaches the inbox and can never be a
 forgotten step. Use `--outcome pass` on success; `--outcome fail --failure-class
 transient` (or `hard`) with a stable `--failure-reason` on an infrastructure

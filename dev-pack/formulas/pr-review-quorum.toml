@@ -171,7 +171,13 @@ implementation_provenance (artifact ref/id, repository id, branch, revision, and
 exact base/head SHAs; null for PRs), evidence, read_only_enforcement, failure_class,
 failure_reason) and finish atomically:
   bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-step-bead> \\
-    --verdict-file "$out" --outcome pass
+    --verdict-file "$out" --outcome pass --repo . \\
+    --implementation-artifact-ref "{{implementation_artifact_ref}}" \\
+    --implementation-artifact-id "{{implementation_artifact_id}}" \\
+    --implementation-repository-id "{{implementation_repository_id}}" \\
+    --implementation-branch "{{implementation_branch}}" \\
+    --implementation-revision "{{implementation_revision}}" \\
+    --implementation-base-sha "{{base_ref}}" --implementation-head-sha "{{head_ref}}"
 On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
 """
 metadata = { "gc.run_target" = "{{lane_a_target}}", "gc.provider" = "{{lane_a_provider}}", "opt_model" = "{{lane_a_model}}", "opt_effort" = "{{lane_a_effort}}", "gc.review_quorum_lane" = "{{lane_a_id}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true" }
@@ -215,7 +221,13 @@ implementation_provenance (artifact ref/id, repository id, branch, revision, and
 exact base/head SHAs; null for PRs), evidence, read_only_enforcement, failure_class,
 failure_reason) and finish atomically:
   bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-step-bead> \\
-    --verdict-file "$out" --outcome pass
+    --verdict-file "$out" --outcome pass --repo . \\
+    --implementation-artifact-ref "{{implementation_artifact_ref}}" \\
+    --implementation-artifact-id "{{implementation_artifact_id}}" \\
+    --implementation-repository-id "{{implementation_repository_id}}" \\
+    --implementation-branch "{{implementation_branch}}" \\
+    --implementation-revision "{{implementation_revision}}" \\
+    --implementation-base-sha "{{base_ref}}" --implementation-head-sha "{{head_ref}}"
 On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
 """
 metadata = { "gc.run_target" = "{{lane_b_target}}", "gc.provider" = "{{lane_b_provider}}", "opt_model" = "{{lane_b_model}}", "opt_effort" = "{{lane_b_effort}}", "gc.review_quorum_lane" = "{{lane_b_id}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true" }
