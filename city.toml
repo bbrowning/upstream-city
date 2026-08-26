@@ -27,6 +27,7 @@ option_defaults = { model = "gpt-5.6-luna", effort = "high" }
 name = "paude"
 prefix = "paude"
 default_branch = "main"
+includes = ["dev-pack"]
 
 [[rigs]]
 name = "vllm"
