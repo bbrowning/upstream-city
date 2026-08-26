@@ -59,7 +59,9 @@ worktree. Read the agreed root cause and fix plan from `{{bug_bead}}`'s
 hard-bug-state.v1 and the fix-phase lane outputs. Branch off `{{base}}`:
 `git switch -c {{branch_prefix}}{{bug_bead}} {{base}}`. Make the smallest change that fully
 fixes the ROOT CAUSE; add the planned tests; RUN them (and existing suites covering
-the area); fix anything they reveal; commit. Record the full immutable SHA from
+the area); fix anything they reveal; commit with a concise imperative subject and one
+complete what/why body (message file or one subject plus one body argument; never one
+`-m` per wrapped line). Record the full immutable SHA from
 `git rev-parse HEAD` and the result of `git status --short`. A clean committed
 local branch is successful durable output.
 

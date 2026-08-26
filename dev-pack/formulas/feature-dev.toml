@@ -41,7 +41,9 @@ Method (see your feature-dev prompt for detail):
 - Make the smallest change that fully does the job; keep unrelated edits out.
 - Build and run the relevant tests in your worktree; record the exact commands
   and results. Do not imply a check passed that you did not run.
-- Commit in coherent steps. Verify the local handoff with `git rev-parse HEAD`
+- Commit in coherent steps with an imperative subject and a single complete what/why
+  body. Use a message file or one subject plus one body argument, never one `-m` per
+  wrapped line. Verify the local handoff with `git rev-parse HEAD`
   and `git status --short`.
 - This is strictly local-only: never push, open or modify a PR, fetch as a
   missing-ref fallback, or otherwise mutate a remote. Operators alone export

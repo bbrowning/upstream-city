@@ -167,7 +167,10 @@ Commit export and any publication are operator actions outside Gas City.
    suites that cover the area. Record the exact commands + results. If a fix reveals
    another bug, fix it too and note it in `follow_ups`. Do not imply a check passed
    that you did not run.
-4. **Commit** coherently. Record `git rev-parse HEAD` and `git status --short`;
+4. **Commit** with a concise imperative subject and one coherent what/why body,
+   honoring stricter repository policy. Use `git commit -F <message-file>` or one
+   subject argument plus one complete body argument; never one `-m` per wrapped line.
+   Record `git rev-parse HEAD` and `git status --short`;
    the local branch, immutable HEAD SHA, and explicit worktree state are the
    durable handoff.
 5. Do **not** close the arc/tracking bead — it closes on a real checkpoint, not your
@@ -177,6 +180,9 @@ Generate `local-change.v1` with `emit-local-change.sh` after committing and embe
 it verbatim as `local_change` in **`hard-bug-implement.v2`**. Use revision 1 for
 the initial implementation. A revision produced after review names the prior
 artifact id, producing feedback bead, and verdict so lineage is explicit.
+The emitter validates every commit in base..head and reports the offending SHA/rule.
+Any history rewrite or review-driven revision must emit a new artifact revision and be
+re-reviewed.
 
 ## Task: Cross-review — read-only
 

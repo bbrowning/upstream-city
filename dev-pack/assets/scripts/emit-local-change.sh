@@ -4,6 +4,8 @@ set -euo pipefail
 
 REPO="." ; RIG="" ; WORKFLOW="" ; BEAD="" ; INTENT="" ; BASE="" ; BRANCH=""
 VERIFY_FILE="" ; OUTPUT="" ; REVISION="1" ; PREVIOUS="" ; FEEDBACK_BEAD="" ; VERDICT=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VALIDATE_COMMITS="$SCRIPT_DIR/validate-commit-series.py"
 
 die() { printf '%s\n' "emit-local-change: $*" >&2; exit 2; }
 while [ $# -gt 0 ]; do
@@ -53,8 +55,17 @@ case "$COMMON_RAW" in /*) COMMON_DIR=$(realpath "$COMMON_RAW") ;; *) COMMON_DIR=
 WORKTREE=$(realpath "$(git -C "$REPO" rev-parse --show-toplevel)")
 OBJECT_FORMAT=$(git -C "$REPO" rev-parse --show-object-format 2>/dev/null || printf sha1)
 REPOSITORY_ID=$(printf '%s\0%s' "$OBJECT_FORMAT" "$COMMON_DIR" | sha256sum | awk '{print $1}')
-COMMITS=$(git -C "$REPO" log --reverse --format='%H%x09%s' "$BASE_SHA..$HEAD_SHA" \
-    | jq -R -s -c 'split("\n") | map(select(length > 0) | split("\t") | {sha:.[0], subject:(.[1:] | join("\t"))})')
+[ -x "$VALIDATE_COMMITS" ] || die "commit-series validator not found/executable: $VALIDATE_COMMITS"
+QUALITY_TMP=$(mktemp)
+trap 'rm -f "$QUALITY_TMP"' EXIT
+if ! "$VALIDATE_COMMITS" --repo "$REPO" --base "$BASE_SHA" --head "$HEAD_SHA" --output "$QUALITY_TMP"; then
+    die "commit message quality gate failed for $BASE_SHA..$HEAD_SHA"
+fi
+QUALITY=$(jq -ce . "$QUALITY_TMP") || die "commit message validator emitted invalid JSON"
+rm -f "$QUALITY_TMP"
+trap - EXIT
+COMMITS=$(printf '%s' "$QUALITY" | jq -c '.commits')
+QUALITY_AUDIT=$(printf '%s' "$QUALITY" | jq -c '{schema,policy,valid,violations}')
 PATHS=$(git -C "$REPO" diff --name-only "$BASE_SHA...$HEAD_SHA" | jq -R -s -c 'split("\n") | map(select(length > 0))')
 [ "$COMMITS" != '[]' ] || die "local change has no commits after its base"
 CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -69,9 +80,9 @@ BODY=$(jq -S -cn \
     --arg schema local-change.v1 --arg rig "$RIG" --arg workflow "$WORKFLOW" --arg bead "$BEAD" --arg intent "$INTENT" \
     --arg repo_id "$REPOSITORY_ID" --arg common "$COMMON_DIR" --arg object_format "$OBJECT_FORMAT" --arg worktree "$WORKTREE" \
     --arg base_ref "$BASE" --arg base_sha "$BASE_SHA" --arg branch "$BRANCH" --arg head_sha "$HEAD_SHA" \
-    --argjson commits "$COMMITS" --argjson paths "$PATHS" --argjson verification "$VERIFY" \
+    --argjson commits "$COMMITS" --argjson commit_quality "$QUALITY_AUDIT" --argjson paths "$PATHS" --argjson verification "$VERIFY" \
     --arg created "$CREATED_AT" --arg generator dev-pack/emit-local-change.sh --argjson revision "$REVISION" --argjson lineage "$LINEAGE" \
-    '{schema:$schema,producer:{rig:$rig,workflow:$workflow,bead:$bead,intent_kind:$intent},repository:{id:$repo_id,git_common_dir:$common,object_format:$object_format},worktree:{path:$worktree},base:{ref:$base_ref,sha:$base_sha},head:{branch:$branch,sha:$head_sha},commits:$commits,changed_paths:$paths,verification:$verification,provenance:{created_at:$created,generator:$generator},revision:{number:$revision,lineage:$lineage}}')
+    '{schema:$schema,producer:{rig:$rig,workflow:$workflow,bead:$bead,intent_kind:$intent},repository:{id:$repo_id,git_common_dir:$common,object_format:$object_format},worktree:{path:$worktree},base:{ref:$base_ref,sha:$base_sha},head:{branch:$branch,sha:$head_sha},commits:$commits,commit_message_quality:$commit_quality,changed_paths:$paths,verification:$verification,provenance:{created_at:$created,generator:$generator},revision:{number:$revision,lineage:$lineage}}')
 ARTIFACT_ID=$(printf '%s' "$BODY" | sha256sum | awk '{print $1}')
 FINAL=$(printf '%s' "$BODY" | jq -S -c --arg id "$ARTIFACT_ID" '. + {artifact_id:$id}')
 

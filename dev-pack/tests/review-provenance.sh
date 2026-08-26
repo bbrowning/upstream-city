@@ -16,7 +16,7 @@ git -C "$TMP/repo" add file.txt
 git -C "$TMP/repo" commit -qm base
 git -C "$TMP/repo" switch -qc feature/provenance
 printf 'change\n' >>"$TMP/repo/file.txt"
-git -C "$TMP/repo" commit -qam change
+git -C "$TMP/repo" commit -qam change -m 'Create a local change whose review provenance can be validated.'
 printf '[]\n' >"$TMP/checks.json"
 "$EMIT_CHANGE" --repo "$TMP/repo" --rig fixture --workflow feature-dev --bead fixture-impl \
   --intent feature --base main --branch feature/provenance --verification-file "$TMP/checks.json" \

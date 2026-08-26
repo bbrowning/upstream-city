@@ -672,8 +672,15 @@ Feature and hard-bug implementation outputs both embed the same versioned
 `local-change.v1` object. `emit-local-change.sh` derives it only after commit and
 writes it atomically. The content-addressed object records producer rig, workflow,
 bead and intent; linked-worktree repository/worktree identity; the base ref and
-resolved SHA; local branch and immutable head SHA; ordered commits and changed
-paths; claimed verification; creation provenance; and revision lineage. Revision
+resolved SHA; local branch and immutable head SHA; ordered commits (full subject/body
+plus message digest) and changed paths; claimed verification; creation provenance; and
+revision lineage. Before emission, `validate-commit-series.py` checks every base..head
+commit for a nonempty body, subject/body separation, line budgets, and fragmented
+paragraph wrapping, tightening defaults from committed repository-local `AGENTS.md` or
+`.commit-message-policy.json` when discoverable. The artifact retains that policy and
+audit evidence. This one boundary covers initial feature/bug work, review revisions,
+base refresh, and pre-publication history finalization; any rewrite requires a new
+artifact revision and review. Revision
 1 has no predecessor. Every later revision names the prior artifact id and the
 feedback bead/verdict that produced it.
 

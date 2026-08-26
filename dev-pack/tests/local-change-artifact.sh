@@ -18,7 +18,7 @@ git -C "$TMP/repo" commit -qm base
 git -C "$TMP/repo" switch -qc feature/local-change
 printf 'feature\n' >> "$TMP/repo/change.txt"
 git -C "$TMP/repo" add change.txt
-git -C "$TMP/repo" commit -qm feature
+git -C "$TMP/repo" commit -qm feature -m 'Add the fixture change so artifact provenance can be exercised.'
 HEAD_SHA=$(git -C "$TMP/repo" rev-parse HEAD)
 BASE_SHA=$(git -C "$TMP/repo" rev-parse main)
 printf '[{"command":"test -s change.txt","result":"pass"}]\n' > "$TMP/checks.json"
@@ -78,7 +78,7 @@ PREVIOUS_ID=$(jq -r '.artifact_id' "$TMP/artifact.json")
 git -C "$TMP/repo" switch -q feature/local-change
 printf 'revision two\n' >> "$TMP/repo/change.txt"
 git -C "$TMP/repo" add change.txt
-git -C "$TMP/repo" commit -qm 'revise after review'
+git -C "$TMP/repo" commit -qm 'Revise after review' -m 'Record a second artifact revision in response to review feedback.'
 "$EMIT" --repo "$TMP/repo" --rig fixture --workflow feature-dev --bead fixture-1 \
   --intent feature --base main --branch feature/local-change \
   --verification-file "$TMP/checks.json" --revision 2 --previous-artifact "$PREVIOUS_ID" \

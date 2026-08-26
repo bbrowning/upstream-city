@@ -52,8 +52,11 @@ If `pwd` is the rig root, stop: report `blocked` with
 4. **Prove it.** Build and run the relevant tests *in your worktree*. Record the
    exact commands and their results; you will report them. If you cannot run a
    check that matters, say so explicitly rather than implying it passed.
-5. **Commit** in coherent steps with clear messages describing *why*, not just
-   *what*.
+5. **Commit** in coherent steps. Every workflow-authored commit needs a concise
+   imperative subject and one coherent what/why body, honoring stricter repository
+   policy. Construct it unambiguously with `git commit -F <message-file>` or one
+   subject argument plus one complete body argument. Never pass each wrapped body line
+   as a separate `-m`; that creates artificial one-line paragraphs.
 6. **Make the local handoff durable.** Verify that every intended change is
    committed, resolve the immutable commit id, and record the worktree state:
    ```bash
@@ -77,6 +80,8 @@ Create the canonical immutable artifact after committing with
 `emit-local-change.sh --intent feature --workflow feature-dev --revision 1`,
 passing the rig, assignment bead, exact base and branch, and a JSON array of
 claimed checks through `--verification-file`.
+Artifact emission runs the deterministic base-to-head commit-message quality gate; fix
+every reported SHA/rule before retrying it.
 
 Write this `feature-dev.v2` object to a unique temp file, embedding the artifact
 verbatim as `local_change`, then atomically MERGE-write and close the step with

@@ -3,6 +3,8 @@
 set -euo pipefail
 
 GC="${GC_BIN:-gc}" ; CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VALIDATE_COMMITS="$SCRIPT_DIR/validate-commit-series.py"
 REPO="." ; RIG="" ; ARTIFACT="" ; HEAD="" ; BASE="origin/main"
 die() { printf '%s\n' "resolve-local-change: $*" >&2; exit 2; }
 while [ $# -gt 0 ]; do
@@ -70,7 +72,22 @@ ACTUAL_HEAD=$(git -C "$REPO" rev-parse --verify "refs/heads/$BRANCH^{commit}" 2>
 [ "$ACTUAL_HEAD" = "$HEAD_SHA" ] || die "stale artifact: branch '$BRANCH' points to $ACTUAL_HEAD, recorded head is $HEAD_SHA"
 git -C "$REPO" merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA" || die "recorded base is not an ancestor of recorded head"
 
-COMMITS=$(git -C "$REPO" log --reverse --format='%H%x09%s' "$BASE_SHA..$HEAD_SHA" | jq -R -s -c 'split("\n") | map(select(length > 0) | split("\t") | {sha:.[0], subject:(.[1:] | join("\t"))})')
+if printf '%s' "$CHANGE" | jq -e '.commit_message_quality != null' >/dev/null; then
+    [ -x "$VALIDATE_COMMITS" ] || die "commit-series validator not found/executable: $VALIDATE_COMMITS"
+    QUALITY_TMP=$(mktemp)
+    trap 'rm -f "$QUALITY_TMP"' EXIT
+    "$VALIDATE_COMMITS" --repo "$REPO" --base "$BASE_SHA" --head "$HEAD_SHA" --output "$QUALITY_TMP" \
+        || die "commit message quality gate failed while resolving artifact"
+    QUALITY=$(jq -ce . "$QUALITY_TMP") || die "commit message validator emitted invalid JSON"
+    rm -f "$QUALITY_TMP"
+    trap - EXIT
+    COMMITS=$(printf '%s' "$QUALITY" | jq -c '.commits')
+    QUALITY_AUDIT=$(printf '%s' "$QUALITY" | jq -S -c '{schema,policy,valid,violations}')
+    [ "$(printf '%s' "$CHANGE" | jq -S -c '.commit_message_quality')" = "$QUALITY_AUDIT" ] \
+        || die "artifact commit-message policy evidence does not match its immutable range"
+else
+    COMMITS=$(git -C "$REPO" log --reverse --format='%H%x09%s' "$BASE_SHA..$HEAD_SHA" | jq -R -s -c 'split("\n") | map(select(length > 0) | split("\t") | {sha:.[0], subject:(.[1:] | join("\t"))})')
+fi
 PATHS=$(git -C "$REPO" diff --name-only "$BASE_SHA...$HEAD_SHA" | jq -R -s -c 'split("\n") | map(select(length > 0))')
 [ "$(printf '%s' "$CHANGE" | jq -S -c '.commits')" = "$(printf '%s' "$COMMITS" | jq -S -c .)" ] || die "artifact commit list does not match its immutable range"
 [ "$(printf '%s' "$CHANGE" | jq -S -c '.changed_paths')" = "$(printf '%s' "$PATHS" | jq -S -c .)" ] || die "artifact changed paths do not match its immutable range"
