@@ -15,12 +15,15 @@ surfaces=(
     "$PACK_ROOT/README.md"
 )
 
-implementation_contracts=(
-    "$PACK_ROOT/agents/feature-dev"
+offline_only_contracts=(
     "$PACK_ROOT/agents/bug-worker-a"
     "$PACK_ROOT/agents/bug-worker-b"
-    "$PACK_ROOT/formulas/feature-dev.toml"
     "$PACK_ROOT/formulas/hard-bug-finalize.toml"
+)
+
+feature_contracts=(
+    "$PACK_ROOT/agents/feature-dev"
+    "$PACK_ROOT/formulas/feature-dev.toml"
     "$PACK_ROOT/commands/feature"
 )
 
@@ -36,11 +39,19 @@ if grep -ERni --include='*.toml' --include='*.md' --include='*.sh' \
     fail "remote-write command found"
 fi
 
-# Implementation work must consume refs already present in the shared repo.
-# A fetch fallback makes the supposedly local handoff depend on publication.
+# Bug implementation consumes refs already present in the shared repo. Feature
+# work has one explicit exception: a narrow, no-tags fetch of the selected base
+# branch. Reject every other literal fetch command, especially recovery/fallback.
 if grep -ERni --include='*.toml' --include='*.md' --include='*.sh' \
-    'git[[:space:]]+fetch|FETCH_HEAD' "${implementation_contracts[@]}"; then
+    'git[[:space:]]+fetch|FETCH_HEAD' "${offline_only_contracts[@]}"; then
     fail "remote-read fallback found in an implementation contract"
+fi
+feature_fetches=$(grep -ERni --include='*.toml' --include='*.md' --include='*.sh' \
+    'git[[:space:]]+fetch|FETCH_HEAD' "${feature_contracts[@]}" || true)
+if [ -n "$feature_fetches" ] && printf '%s\n' "$feature_fetches" \
+    | grep -Ev 'git fetch --no-tags <remote>' >/dev/null; then
+    printf '%s\n' "$feature_fetches"
+    fail "feature contract contains a fetch broader than the selected base"
 fi
 
 # Legacy publication-oriented schema fields are not valid durable output.

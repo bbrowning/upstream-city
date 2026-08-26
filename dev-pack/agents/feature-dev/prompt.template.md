@@ -30,9 +30,12 @@ If `pwd` is the rig root, stop: report `blocked` with
 
 ## How you work
 
-1. **Start from a fresh, correct base.** Your worktree is detached at whatever
-   HEAD it was created from — do not trust it. Resolve the named base from the
-   refs already present in this shared repository, then branch explicitly:
+1. **Start from the assignment's exact base policy.** Your worktree is detached
+   at whatever HEAD it was created from — do not trust it. The step description
+   says whether to narrowly fetch a remote-qualified base or remain offline.
+   Fetch only that one selected branch when authorized; otherwise contact no
+   remote and mark freshness unverified. Resolve the requested base ref verbatim,
+   then branch explicitly:
    ```bash
    git switch -c paude/<bead-id> origin/main   # your branch, off the merge target
    ```
@@ -40,7 +43,7 @@ If `pwd` is the rig root, stop: report `blocked` with
    verify it is this assignment's branch and switch to it instead of recreating
    or resetting it.
    If the named base is absent, stop with a precise local-ref failure. Do not
-   fetch as recovery; the operator owns ref refresh and commit export.
+   broaden a selected-base fetch or fetch as ad-hoc recovery.
    Use the bead id you were assigned (e.g. `paude/vllm-1234`). One branch per
    assignment; do not reuse another assignment's branch.
 2. **Design through the matched domain lens before editing.** Derive likely paths
@@ -77,15 +80,18 @@ reporting "done" is not a merge.
 ## Output
 
 Create the canonical immutable artifact after committing with
-`emit-local-change.sh --intent feature --workflow feature-dev --revision 1`,
-passing the rig, assignment bead, exact base and branch, and a JSON array of
-claimed checks through `--verification-file`.
+`emit-local-change.sh --intent feature --workflow feature-dev`, passing the
+assignment's revision and lineage values, rig, assignment bead, requested base
+ref verbatim, exact branch, base-fetch evidence, and a JSON array of claimed
+checks through `--verification-file`.
 Artifact emission runs the deterministic base-to-head commit-message quality gate; fix
 every reported SHA/rule before retrying it.
 
 Write this `feature-dev.v2` object to a unique temp file, embedding the artifact
 verbatim as `local_change`, then atomically MERGE-write and close the step with
 `emit-json.sh --schema feature-dev.v2`:
+On success, include `--work-outcome shipped --work-commit <head_sha>
+--work-branch <branch>` in that same close command.
 
 - `branch`: the local branch (e.g. `paude/vllm-1234`)
 - `head_sha`: the full immutable SHA from `git rev-parse HEAD`

@@ -21,6 +21,7 @@ set -euo pipefail
 
 GC="${GC_BIN:-gc}"
 BEAD="" ; JF="" ; SCHEMA="" ; OUTCOME="pass" ; FCLASS="none" ; FREASON="" ; REASON="" ; NOTIFY="" ; SUBJECT="" ; RENDER="" ; CONSUME=0
+WORK_OUTCOME="" ; WORK_COMMIT="" ; WORK_BRANCH=""
 
 die() { printf '%s\n' "emit-json: $*" >&2; exit 2; }
 
@@ -47,6 +48,12 @@ while [ $# -gt 0 ]; do
         --render)           RENDER="${2:?}"; shift 2 ;;
         --render=*)         RENDER="${1#*=}"; shift ;;
         --consume)          CONSUME=1; shift ;;
+        --work-outcome)     WORK_OUTCOME="${2:?}"; shift 2 ;;
+        --work-outcome=*)   WORK_OUTCOME="${1#*=}"; shift ;;
+        --work-commit)      WORK_COMMIT="${2:?}"; shift 2 ;;
+        --work-commit=*)    WORK_COMMIT="${1#*=}"; shift ;;
+        --work-branch)      WORK_BRANCH="${2:?}"; shift 2 ;;
+        --work-branch=*)    WORK_BRANCH="${1#*=}"; shift ;;
         -*)                 die "unknown option '$1'" ;;
         *)                  die "unexpected argument '$1'" ;;
     esac
@@ -56,10 +63,18 @@ done
 [ -n "$JF" ] && [ -f "$JF" ] || die "usage: --json-file must be an existing file"
 OUT=$(jq -c . "$JF") || die "json file is not valid JSON: $JF"
 [ "$CONSUME" -eq 0 ] || trap 'rm -f -- "$JF"' EXIT
+if [ -n "$WORK_OUTCOME$WORK_COMMIT$WORK_BRANCH" ]; then
+    [ -n "$WORK_OUTCOME" ] && [ -n "$WORK_COMMIT" ] && [ -n "$WORK_BRANCH" ] \
+        || die "work record requires --work-outcome, --work-commit, and --work-branch together"
+fi
 
 # --- write metadata (MERGE — never --metadata '{…}', which wipes routing keys) ---
 "$GC" bd update "$BEAD" --set-metadata "gc.output_json=$OUT" --set-metadata "gc.outcome=$OUTCOME"
 [ -n "$SCHEMA" ] && "$GC" bd update "$BEAD" --set-metadata "gc.output_json_schema=$SCHEMA"
+[ -z "$WORK_OUTCOME" ] || "$GC" bd update "$BEAD" \
+    --set-metadata "gc.work_outcome=$WORK_OUTCOME" \
+    --set-metadata "gc.work_commit=$WORK_COMMIT" \
+    --set-metadata "gc.work_branch=$WORK_BRANCH"
 # Stamp the Claude Code session id (== this session's transcript filename) so the
 # model-arena projector joins token counts to THIS exact session, window-independent.
 # The agent knows it via $CLAUDE_CODE_SESSION_ID — pack-only, no gascity change. Absent

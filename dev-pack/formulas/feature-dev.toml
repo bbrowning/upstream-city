@@ -25,6 +25,26 @@ required = true
 description = "The branch point and merge target the feature branches from."
 default = "origin/main"
 
+[vars.fetch_base]
+description = "true fetches a remote-qualified base ref narrowly before resolving it; false is offline and records freshness as unverified."
+default = "true"
+
+[vars.revision]
+description = "Positive local-change artifact revision controlled by the lifecycle."
+default = "1"
+
+[vars.previous_artifact_id]
+description = "Prior local-change artifact id; required by the emitter when revision is greater than 1."
+default = ""
+
+[vars.feedback_bead]
+description = "Review or synthesis bead whose verdict produced this revision."
+default = ""
+
+[vars.producing_verdict]
+description = "Structured verdict that produced this revision."
+default = ""
+
 [[steps]]
 id = "implement"
 title = "Implement the assignment on a local paude/{{work_bead}} branch"
@@ -34,7 +54,12 @@ isolated worktree** (created for your slot before this session). Do not work in
 the shared rig root.
 
 Method (see your feature-dev prompt for detail):
-- Resolve `{{base}}` from refs already present in the shared repository, then
+- With `fetch_base={{fetch_base}}`: when true, require `{{base}}` to be a
+  remote-qualified `<remote>/<branch>`, record `git remote get-url <remote>`, and
+  narrowly refresh only that branch with `git fetch --no-tags <remote>
+  +refs/heads/<branch>:refs/remotes/<remote>/<branch>`. This is read-only with
+  respect to the remote. When false, contact no remote and record base freshness
+  as unverified. Resolve the requested `{{base}}` verbatim, then
   `git switch -c paude/{{work_bead}} {{base}}` — one branch per assignment.
 - Before design or editing, load base plus only path/subsystem-matched personas through
   the `design` lens; reload through `implementation` when the actual path set is known.
@@ -45,16 +70,20 @@ Method (see your feature-dev prompt for detail):
   body. Use a message file or one subject plus one body argument, never one `-m` per
   wrapped line. Verify the local handoff with `git rev-parse HEAD`
   and `git status --short`.
-- This is strictly local-only: never push, open or modify a PR, fetch as a
-  missing-ref fallback, or otherwise mutate a remote. Operators alone export
+- This is strictly local-only: never push, open or modify a PR, or otherwise
+  mutate a remote. The single selected-base fetch above is the only permitted
+  network read. Operators alone export
   commits and decide whether or where to publish them.
 
 Do **not** close the arc/tracking bead — that closes on a real checkpoint, not
 your self-report.
 
 After committing, create the canonical artifact with `emit-local-change.sh`
-(`--intent feature --workflow feature-dev --bead {{work_bead}} --revision 1`,
-plus this rig, base, branch, and a JSON array of checks via `--verification-file`).
+(`--intent feature --workflow feature-dev --bead {{work_bead}} --revision {{revision}}`,
+plus this rig, requested base ref verbatim, branch, JSON checks, and revision
+lineage `{{previous_artifact_id}}` / `{{feedback_bead}}` / `{{producing_verdict}}`).
+Pass `--base-fetch-status fetched` plus the recorded remote URL and fetched ref
+when `fetch_base=true`; otherwise pass `--base-fetch-status offline`.
 Embed its JSON verbatim as `local_change` in this `feature-dev.v2` object, then
 finish atomically with `emit-json.sh` (schema `feature-dev.v2`).
 
@@ -76,6 +105,9 @@ Write this JSON object to `gc.output_json`:
 - `persona_traces`: the design and implementation lens load/influence records.
 
 On success, close with `gc.outcome=pass` and the JSON in `gc.output_json`. On a
+successful implementation, the same `emit-json.sh` call must include
+`--work-outcome shipped --work-commit <head_sha> --work-branch <branch>` so the
+work record and durable output close together. On a
 retryable infra failure (provider down) close with `gc.outcome=fail`,
 `gc.failure_class=transient`, and a stable
 `gc.failure_reason`. Use `gc.failure_class=hard` for non-retryable contract/input

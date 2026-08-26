@@ -4,6 +4,7 @@ set -euo pipefail
 
 REPO="." ; RIG="" ; WORKFLOW="" ; BEAD="" ; INTENT="" ; BASE="" ; BRANCH=""
 VERIFY_FILE="" ; OUTPUT="" ; REVISION="1" ; PREVIOUS="" ; FEEDBACK_BEAD="" ; VERDICT=""
+BASE_FETCH_STATUS="offline" ; BASE_REMOTE_URL="" ; BASE_FETCHED_REF=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VALIDATE_COMMITS="$SCRIPT_DIR/validate-commit-series.py"
 
@@ -23,6 +24,9 @@ while [ $# -gt 0 ]; do
         --previous-artifact) PREVIOUS="${2:?}"; shift 2 ;; --previous-artifact=*) PREVIOUS="${1#*=}"; shift ;;
         --feedback-bead) FEEDBACK_BEAD="${2:?}"; shift 2 ;; --feedback-bead=*) FEEDBACK_BEAD="${1#*=}"; shift ;;
         --verdict) VERDICT="${2:?}"; shift 2 ;; --verdict=*) VERDICT="${1#*=}"; shift ;;
+        --base-fetch-status) BASE_FETCH_STATUS="${2:?}"; shift 2 ;; --base-fetch-status=*) BASE_FETCH_STATUS="${1#*=}"; shift ;;
+        --base-remote-url) BASE_REMOTE_URL="${2:?}"; shift 2 ;; --base-remote-url=*) BASE_REMOTE_URL="${1#*=}"; shift ;;
+        --base-fetched-ref) BASE_FETCHED_REF="${2:?}"; shift 2 ;; --base-fetched-ref=*) BASE_FETCHED_REF="${1#*=}"; shift ;;
         -*) die "unknown option '$1'" ;; *) die "unexpected argument '$1'" ;;
     esac
 done
@@ -39,6 +43,13 @@ else
     [ -n "$PREVIOUS" ] && [ -n "$FEEDBACK_BEAD" ] && [ -n "$VERDICT" ] \
         || die "revision $REVISION requires --previous-artifact, --feedback-bead, and --verdict"
 fi
+case "$BASE_FETCH_STATUS" in
+    fetched) [ -n "$BASE_REMOTE_URL" ] && [ -n "$BASE_FETCHED_REF" ] \
+        || die "fetched base requires --base-remote-url and --base-fetched-ref" ;;
+    offline) [ -z "$BASE_REMOTE_URL$BASE_FETCHED_REF" ] \
+        || die "offline base cannot claim remote URL or fetched ref" ;;
+    *) die "--base-fetch-status must be fetched or offline" ;;
+esac
 [ -z "$VERIFY_FILE" ] || [ -f "$VERIFY_FILE" ] || die "verification file not found: $VERIFY_FILE"
 VERIFY='[]'
 [ -z "$VERIFY_FILE" ] || VERIFY=$(jq -ce 'if type == "array" then . else error("verification must be an array") end' "$VERIFY_FILE")
@@ -69,6 +80,12 @@ QUALITY_AUDIT=$(printf '%s' "$QUALITY" | jq -c '{schema,policy,valid,violations}
 PATHS=$(git -C "$REPO" diff --name-only "$BASE_SHA...$HEAD_SHA" | jq -R -s -c 'split("\n") | map(select(length > 0))')
 [ "$COMMITS" != '[]' ] || die "local change has no commits after its base"
 CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+if [ "$BASE_FETCH_STATUS" = "fetched" ]; then
+    BASE_RESOLUTION=$(jq -cn --arg status "$BASE_FETCH_STATUS" --arg url "$BASE_REMOTE_URL" --arg ref "$BASE_FETCHED_REF" \
+        '{fetch_status:$status,remote_url:$url,fetched_ref:$ref,freshness:"verified"}')
+else
+    BASE_RESOLUTION='{"fetch_status":"offline","remote_url":null,"fetched_ref":null,"freshness":"unverified"}'
+fi
 
 if [ "$REVISION" -eq 1 ]; then LINEAGE='{"previous_artifact_id":null,"producing_feedback":null}'
 else
@@ -81,8 +98,9 @@ BODY=$(jq -S -cn \
     --arg repo_id "$REPOSITORY_ID" --arg common "$COMMON_DIR" --arg object_format "$OBJECT_FORMAT" --arg worktree "$WORKTREE" \
     --arg base_ref "$BASE" --arg base_sha "$BASE_SHA" --arg branch "$BRANCH" --arg head_sha "$HEAD_SHA" \
     --argjson commits "$COMMITS" --argjson commit_quality "$QUALITY_AUDIT" --argjson paths "$PATHS" --argjson verification "$VERIFY" \
-    --arg created "$CREATED_AT" --arg generator dev-pack/emit-local-change.sh --argjson revision "$REVISION" --argjson lineage "$LINEAGE" \
-    '{schema:$schema,producer:{rig:$rig,workflow:$workflow,bead:$bead,intent_kind:$intent},repository:{id:$repo_id,git_common_dir:$common,object_format:$object_format},worktree:{path:$worktree},base:{ref:$base_ref,sha:$base_sha},head:{branch:$branch,sha:$head_sha},commits:$commits,commit_message_quality:$commit_quality,changed_paths:$paths,verification:$verification,provenance:{created_at:$created,generator:$generator},revision:{number:$revision,lineage:$lineage}}')
+    --arg created "$CREATED_AT" --arg generator dev-pack/emit-local-change.sh --argjson base_resolution "$BASE_RESOLUTION" \
+    --argjson revision "$REVISION" --argjson lineage "$LINEAGE" \
+    '{schema:$schema,producer:{rig:$rig,workflow:$workflow,bead:$bead,intent_kind:$intent},repository:{id:$repo_id,git_common_dir:$common,object_format:$object_format},worktree:{path:$worktree},base:{ref:$base_ref,sha:$base_sha},head:{branch:$branch,sha:$head_sha},commits:$commits,commit_message_quality:$commit_quality,changed_paths:$paths,verification:$verification,provenance:{created_at:$created,generator:$generator,base_resolution:$base_resolution},revision:{number:$revision,lineage:$lineage}}')
 ARTIFACT_ID=$(printf '%s' "$BODY" | sha256sum | awk '{print $1}')
 FINAL=$(printf '%s' "$BODY" | jq -S -c --arg id "$ARTIFACT_ID" '. + {artifact_id:$id}')
 

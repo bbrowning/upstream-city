@@ -100,6 +100,18 @@ quorum=$(jq -cn --arg summary "Both lanes agree it's ready" \
 printf '%s\n' "$quorum" | emit synthesis pr-review-quorum.v1
 grep -q 'bd close synthesis' "$MOCK_GC_LOG" || fail "synthesis did not close"
 
+# Successful implementation steps satisfy the work-record gate atomically with
+# their durable output instead of closing with an incomplete shipped record.
+: >"$MOCK_GC_LOG"
+printf '%s\n' "$review" >"$TMP/implementation.json"
+"$ROOT/dev-pack/assets/scripts/emit-json.sh" --bead implementation \
+  --json-file "$TMP/implementation.json" --schema feature-dev.v2 --outcome pass \
+  --work-outcome shipped --work-commit 0123456789abcdef --work-branch feature/safe
+for expected in 'gc.work_outcome=shipped' 'gc.work_commit=0123456789abcdef' 'gc.work_branch=feature/safe'; do
+  grep -q "bd update implementation .*${expected}" "$MOCK_GC_LOG" \
+    || fail "implementation close did not stamp $expected"
+done
+
 # Agents can be handed the retry control/logical bead while its current attempt is
 # the actual executable unit. Every review role must finish that open attempt and
 # leave logical closure to the controller, which mirrors the terminal attempt.

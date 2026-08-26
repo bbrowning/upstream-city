@@ -5,6 +5,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 EMIT="$ROOT/dev-pack/assets/scripts/emit-local-change.sh"
 RESOLVE="$ROOT/dev-pack/assets/scripts/resolve-local-change.sh"
 REVIEW="$ROOT/dev-pack/commands/review/run.sh"
+FEATURE="$ROOT/dev-pack/commands/feature/run.sh"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -25,12 +26,28 @@ printf '[{"command":"test -s change.txt","result":"pass"}]\n' > "$TMP/checks.jso
 
 "$EMIT" --repo "$TMP/repo" --rig fixture --workflow feature-dev --bead fixture-1 \
   --intent feature --base main --branch feature/local-change \
-  --verification-file "$TMP/checks.json" --revision 1 --output "$TMP/artifact.json"
+  --verification-file "$TMP/checks.json" --revision 1 \
+  --base-fetch-status fetched --base-remote-url https://example.invalid/repo.git \
+  --base-fetched-ref refs/remotes/origin/main --output "$TMP/artifact.json"
 jq -e --arg head "$HEAD_SHA" --arg base "$BASE_SHA" '
   .schema == "local-change.v1" and .producer.intent_kind == "feature" and
   .base.sha == $base and .head.sha == $head and .revision.number == 1 and
   (.artifact_id | test("^[0-9a-f]{64}$")) and .changed_paths == ["change.txt"] and
-  .verification[0].result == "pass"' "$TMP/artifact.json" >/dev/null || fail "artifact schema/provenance"
+  .verification[0].result == "pass" and
+  .provenance.base_resolution == {fetch_status:"fetched",remote_url:"https://example.invalid/repo.git",fetched_ref:"refs/remotes/origin/main",freshness:"verified"}' \
+  "$TMP/artifact.json" >/dev/null || fail "artifact schema/provenance"
+
+# Feature launch controls revision lineage and whether the selected base may be
+# refreshed; the formula receives every value instead of hard-coding revision 1.
+feature_dry=$(GC_BIN=gc "$FEATURE" fixture-1 --rig fixture --dry-run)
+printf '%s' "$feature_dry" | grep -q -- '--var revision=1' || fail "feature default revision missing"
+printf '%s' "$feature_dry" | grep -q -- '--var fetch_base=true' || fail "feature default fetch policy missing"
+feature_r2=$(GC_BIN=gc "$FEATURE" fixture-1 --rig fixture --base main --offline --revision 2 \
+  --previous-artifact artifact-r1 --feedback-bead review-r1 --verdict request_changes --dry-run)
+for expected in 'base=main' 'fetch_base=false' 'revision=2' 'previous_artifact_id=artifact-r1' \
+  'feedback_bead=review-r1' 'producing_verdict=request_changes'; do
+  printf '%s' "$feature_r2" | grep -q -- "--var $expected" || fail "feature revision launch lost $expected"
+done
 
 git -C "$TMP/repo" switch -q main
 git -C "$TMP/repo" worktree add -q --detach "$TMP/reviewer" main
@@ -82,10 +99,12 @@ git -C "$TMP/repo" commit -qm 'Revise after review' -m 'Record a second artifact
 "$EMIT" --repo "$TMP/repo" --rig fixture --workflow feature-dev --bead fixture-1 \
   --intent feature --base main --branch feature/local-change \
   --verification-file "$TMP/checks.json" --revision 2 --previous-artifact "$PREVIOUS_ID" \
-  --feedback-bead fixture-review --verdict request_changes --output "$TMP/artifact-r2.json"
+  --feedback-bead fixture-review --verdict request_changes --base-fetch-status offline \
+  --output "$TMP/artifact-r2.json"
 jq -e --arg previous "$PREVIOUS_ID" '
   .revision.number == 2 and .revision.lineage.previous_artifact_id == $previous and
-  .revision.lineage.producing_feedback == {bead:"fixture-review",verdict:"request_changes"}' \
+  .revision.lineage.producing_feedback == {bead:"fixture-review",verdict:"request_changes"} and
+  .provenance.base_resolution == {fetch_status:"offline",remote_url:null,fetched_ref:null,freshness:"unverified"}' \
   "$TMP/artifact-r2.json" >/dev/null || fail "revision lineage"
 "$RESOLVE" --repo "$TMP/reviewer" --rig fixture --artifact "$TMP/artifact-r2.json" >/dev/null \
   || fail "revision 2 resolution"

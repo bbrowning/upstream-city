@@ -59,4 +59,14 @@ fi
 grep -q 'remote-read fallback found' "$TMP/fetch-fallback.out" \
     || fail 'fetch fallback failed for an unexpected reason'
 
+fixture="$TMP/feature-fetch-fallback"
+mkdir -p "$fixture"
+cp -R "$ROOT/dev-pack/." "$fixture/"
+printf '\nFallback: git fetch origin missing-branch\n' >> "$fixture/agents/feature-dev/prompt.template.md"
+if bash "$AUDIT" "$fixture" >"$TMP/feature-fetch-fallback.out" 2>&1; then
+    fail 'broad feature fetch escaped the audit'
+fi
+grep -q 'feature contract contains a fetch broader than the selected base' "$TMP/feature-fetch-fallback.out" \
+    || fail 'broad feature fetch failed for an unexpected reason'
+
 printf 'local-only implementation regression: ok\n'
