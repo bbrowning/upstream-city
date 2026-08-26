@@ -323,7 +323,7 @@ You are working the `finalize` step of `hard-bug-finalize`; it `needs` the
 `needs` edge) and the implementer's `hard-bug-implement.v2`.
 
 - **Concur** (`verdict=concur` and both `concurs_with_fix` and `concurs_with_evidence`
-  true) → the arc is **done**. Set arc `status=done` and notify the human via the
+  true) → the arc is **done**. Notify the human via the
   `--notify` on your emit-json.sh close (below), with the branch in the subject. Do
   **not** merge — a human/PR checkpoint does that.
 - **Reject** (`request_changes`/`blocked`, or evidence not credible) → if
@@ -341,14 +341,20 @@ outcome (`done` or `escalated`), fold `--notify "${GC_HARDBUG_NOTIFY_TO:-human}"
 --subject "bug <bug_bead>: <done|escalated> — <branch/summary>"` into that same
 close so the human is notified atomically with a prose body (never a separate `gc mail
 send`, never the `lead`). On `reopened` (re-entering the fix phase), do not notify.
-MERGE-update the arc `status` to match.
+After that step close, record the parent checkpoint through
+`update-work-lifecycle.sh`: use `approved` plus the exact final artifact id, head
+SHA, and branch only for concurrence; use `request_changes`, `blocked`, or
+`escalated` with the producing feedback bead and reason otherwise. Only
+`approved` closes the parent, idempotently. Every other disposition leaves it
+in progress with durable `work-lifecycle.v1` state.
 
 ---
 
 ## Guardrails
 
-- **Never edit code or close the arc bead on a hunch.** The arc closes on `done`
-  (cross-review concurred) or a human decision — never on your say-so mid-flight.
+- **Never edit code or close the arc bead directly.** The lifecycle helper closes
+  only on `approved` (cross-review concurred) or an equivalent explicit human-safe
+  checkpoint — never on your say-so mid-flight.
 - **Relay is a second opinion, not an order.** Every relay note must let a lane
   refute. If you find yourself telling a lane the answer, rewrite it.
 - **State writes are always a MERGE** (`--set-metadata`), never `--metadata '{…}'`.

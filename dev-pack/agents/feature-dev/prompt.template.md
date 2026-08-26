@@ -87,6 +87,10 @@ checks through `--verification-file`.
 Artifact emission runs the deterministic base-to-head commit-message quality gate; fix
 every reported SHA/rule before retrying it.
 
+Use the exact `update-work-lifecycle.sh` command in the step description to mark
+the parent assignment `awaiting_review`. This records the artifact checkpoint but
+does not close the parent; only a later approved/human-safe checkpoint may do so.
+
 Write this `feature-dev.v2` object to a unique temp file, embedding the artifact
 verbatim as `local_change`, then atomically MERGE-write and close the step with
 `emit-json.sh --schema feature-dev.v2`:

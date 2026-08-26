@@ -81,6 +81,11 @@ the resulting immutable `local-change.v1` verbatim as `local_change` in
 `hard-bug-implement.v2`, alongside the compatibility fields `branch`, `head_sha`,
 `base`, `worktree_state`, `summary`, `tests`, `files_changed`, and `follow_ups`,
 plus `persona_traces`,
+then mark the parent arc as awaiting review without closing it:
+  bash "$GC_CITY_PATH/dev-pack/assets/scripts/update-work-lifecycle.sh" \
+    --bead {{bug_bead}} --intent hard_bug --checkpoint implementation \
+    --disposition awaiting_review --iteration <revision> \
+    --artifact-id <artifact_id> --head-sha <head_sha> --branch <branch>
 then finish:
   bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-step-bead> \\
     --json-file "$out" --schema hard-bug-implement.v2 --outcome pass
@@ -136,13 +141,18 @@ Conclude the hard-bug arc `{{bug_bead}}`. Read the cross-reviewer's
 `hard-bug-implement.v2` (see your finalize playbook):
 
 - Concur (verdict=concur AND concurs_with_fix AND concurs_with_evidence) → the arc is
-  DONE. Mail the human the branch, fix summary, and evidence; set arc status=done.
+  DONE. After closing this finalize step, call `update-work-lifecycle.sh` with
+  disposition `approved` and the exact final artifact/head/branch; that helper
+  closes the parent idempotently at this validated checkpoint. Mail the human the
+  branch, fix summary, and evidence.
   Do NOT merge, publish, or otherwise mutate a remote.
 - Reject → if rounds.fix < {{max_rounds}}, re-enter the fix phase (sling hard-bug-round
   phase=fix, relaying the cross-review findings); else escalate (hold=mayor + notify the
   human).
 
-Emit `hard-bug-final.v1` via emit-json.sh and MERGE-update the arc status.
+Emit `hard-bug-final.v1` via emit-json.sh. On request_changes, blocked, or
+escalation, call `update-work-lifecycle.sh` with the matching nonterminal
+disposition and durable reason; those outcomes must leave the parent open.
 """
 metadata = { "gc.run_target" = "{{coordinator_target}}", "gc.output_json_schema" = "hard-bug-final.v1", "gc.output_json_required" = "true" }
 

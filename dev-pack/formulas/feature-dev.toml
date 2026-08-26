@@ -84,6 +84,12 @@ plus this rig, requested base ref verbatim, branch, JSON checks, and revision
 lineage `{{previous_artifact_id}}` / `{{feedback_bead}}` / `{{producing_verdict}}`).
 Pass `--base-fetch-status fetched` plus the recorded remote URL and fetched ref
 when `fetch_base=true`; otherwise pass `--base-fetch-status offline`.
+Before closing the implementation step, durably mark the still-open parent work
+as awaiting review (never close it here):
+  bash "$GC_CITY_PATH/dev-pack/assets/scripts/update-work-lifecycle.sh" \
+    --bead {{work_bead}} --intent feature --checkpoint implementation \
+    --disposition awaiting_review --iteration {{revision}} \
+    --artifact-id <artifact_id> --head-sha <head_sha> --branch <branch>
 Embed its JSON verbatim as `local_change` in this `feature-dev.v2` object, then
 finish atomically with `emit-json.sh` (schema `feature-dev.v2`).
 
