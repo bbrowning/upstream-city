@@ -2,7 +2,7 @@ description = """
 Single-lane feature implementation.
 
 Routes one write assignment to the feature-dev agent, which implements it on a
-real `paude/<bead_id>` branch inside its own isolated worktree and emits a
+real `paude/<work_bead>` branch inside its own isolated worktree and emits a
 structured report to `gc.output_json`. A coherent committed local
 branch, immutable HEAD SHA, and explicit worktree state are the durable output.
 Exporting commits or creating a PR is an operator action outside Gas City.
@@ -17,8 +17,9 @@ formula = "feature-dev"
 formula_compiler = ">=2.0.0"
 
 [vars]
-[vars.bead_id]
-description = "The assignment/tracking bead id. The branch is named paude/<bead_id>. Required — there is no safe default for a branch name."
+[vars.work_bead]
+description = "The assignment/tracking bead id. The branch is named paude/<work-bead>. Required — there is no safe default for a branch name."
+required = true
 
 [vars.base]
 description = "The branch point and merge target the feature branches from."
@@ -26,7 +27,7 @@ default = "origin/main"
 
 [[steps]]
 id = "implement"
-title = "Implement the assignment on a local paude/<bead_id> branch"
+title = "Implement the assignment on a local paude/{{work_bead}} branch"
 description = """
 Implement the assignment described in your bead, working **only inside your own
 isolated worktree** (created for your slot before this session). Do not work in
@@ -34,7 +35,7 @@ the shared rig root.
 
 Method (see your feature-dev prompt for detail):
 - Resolve `{{base}}` from refs already present in the shared repository, then
-  `git switch -c paude/{{bead_id}} {{base}}` — one branch per assignment.
+  `git switch -c paude/{{work_bead}} {{base}}` — one branch per assignment.
 - Make the smallest change that fully does the job; keep unrelated edits out.
 - Build and run the relevant tests in your worktree; record the exact commands
   and results. Do not imply a check passed that you did not run.
@@ -47,9 +48,15 @@ Method (see your feature-dev prompt for detail):
 Do **not** close the arc/tracking bead — that closes on a real checkpoint, not
 your self-report.
 
+After committing, create the canonical artifact with `emit-local-change.sh`
+(`--intent feature --workflow feature-dev --bead {{work_bead}} --revision 1`,
+plus this rig, base, branch, and a JSON array of checks via `--verification-file`).
+Embed its JSON verbatim as `local_change` in this `feature-dev.v2` object, then
+finish atomically with `emit-json.sh` (schema `feature-dev.v2`).
+
 Write this JSON object to `gc.output_json`:
 
-- `branch`: the local branch (e.g. `paude/{{bead_id}}`)
+- `branch`: the local branch (e.g. `paude/{{work_bead}}`)
 - `head_sha`: the full immutable SHA from `git rev-parse HEAD`
 - `base`: the base you branched from ({{base}})
 - `worktree_state`: `clean` or `dirty`; explain residual paths in `follow_ups`
@@ -59,6 +66,9 @@ Write this JSON object to `gc.output_json`:
 - `follow_ups`: anything a reviewer or human should know (or [])
 - `failure_class`: one of `none`, `transient`, `hard`
 - `failure_reason`: stable reason string, or "" when `none`
+- `local_change`: the complete immutable `local-change.v1` artifact. Its resolved
+  base/head SHAs, repository identity, commit/path inventories, verification,
+  provenance, and revision lineage are authoritative for downstream review.
 
 On success, close with `gc.outcome=pass` and the JSON in `gc.output_json`. On a
 retryable infra failure (provider down) close with `gc.outcome=fail`,
@@ -67,7 +77,7 @@ retryable infra failure (provider down) close with `gc.outcome=fail`,
 failures (under-specified assignment, absent local base ref, or `pwd` resolved
 to the rig root). Retries must remain local-only.
 """
-metadata = { "gc.output_json_schema" = "feature-dev.v1", "gc.output_json_required" = "true" }
+metadata = { "gc.output_json_schema" = "feature-dev.v2", "gc.output_json_required" = "true" }
 
 [steps.retry]
 max_attempts = 2

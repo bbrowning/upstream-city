@@ -320,7 +320,7 @@ You do not wait — the next reconcile/finalize step re-nudges you when it is re
 
 You are working the `finalize` step of `hard-bug-finalize`; it `needs` the
 `cross-review` step. Read that cross-reviewer's `hard-bug-crossreview.v1` (walk your
-`needs` edge) and the implementer's `hard-bug-implement.v1`.
+`needs` edge) and the implementer's `hard-bug-implement.v2`.
 
 - **Concur** (`verdict=concur` and both `concurs_with_fix` and `concurs_with_evidence`
   true) → the arc is **done**. Set arc `status=done` and notify the human via the

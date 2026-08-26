@@ -199,7 +199,7 @@ formulas/hard-bug-round-solo.toml     # N=1 round: one lane + coordinator self-v
 formulas/hard-bug-finalize.toml       # implement → cross-review → finalize
 # --- feature lane ---
 agents/feature-dev/                   # single write lane (1 slot): local branch/commit, never self-close arc
-formulas/feature-dev.toml             # per-run implement TASK + feature-dev.v1 report contract
+formulas/feature-dev.toml             # per-run implement TASK + feature-dev.v2/local-change.v1 contract
 # --- shared ---
 orders/fetch-origin.toml              # read-only `git fetch --prune` on a cooldown (warm refs)
 commands/review/                      # `gc dev-pack review <PR>`     — start a PR review
@@ -221,7 +221,9 @@ assets/valid-options.txt              # offline fallback allowlist for lineup-op
 assets/scripts/emit-followup.sh       # follow-up atomic finish: write answer + chain + close + thread + notify
 assets/scripts/render-verdict.sh      # verdict JSON → human-readable summary (mail body + `summary` cmd)
 assets/scripts/resolve-verdict-bead.sh # PR/bead spec → root verdict bead (shared by `summary` and `ask`)
-assets/scripts/emit-json.sh           # bug-lane schema-agnostic atomic finish: write + set outcome + close
+assets/scripts/emit-json.sh           # implementation/bug schema-agnostic atomic finish: write + set outcome + close
+assets/scripts/emit-local-change.sh    # committed git state → canonical content-addressed local-change.v1
+assets/scripts/resolve-local-change.sh # artifact/bead/ref → validated immutable same-repository review input
 assets/scripts/fetch-origin.sh        # the fetch order's exec body
 # worktree-setup.sh lives at //tools/shared/ (shared spine — see "How the isolation actually works")
 ```
@@ -651,11 +653,11 @@ gc dev-pack feature vllm-123 --dry-run
 
 ```bash
 gc sling vllm/feature-dev feature-dev --formula \
-  --var bead_id=<the-assignment-bead-id> \
+  --var work_bead=<the-assignment-bead-id> \
   --title "implement <thing>"
 ```
 
-feature-dev branches `paude/<bead_id>` off the named local base **in its own
+feature-dev branches `paude/<work_bead>` off the named local base **in its own
 worktree**, implements, runs tests, and commits coherently. Its durable handoff is
 the local branch, immutable HEAD SHA, worktree state, and verification results.
 Every implementation lane is strictly local-only: it never pushes, creates or
@@ -663,6 +665,33 @@ modifies a PR, or otherwise mutates a remote—even when an assignment requests
 publication. The operator extracts commits to a local host and alone decides
 whether and where to publish them. The lane also **never closes the arc/tracking
 bead**; that closes on an operator-controlled checkpoint, not on self-report.
+
+### Canonical local-change handoff
+
+Feature and hard-bug implementation outputs both embed the same versioned
+`local-change.v1` object. `emit-local-change.sh` derives it only after commit and
+writes it atomically. The content-addressed object records producer rig, workflow,
+bead and intent; linked-worktree repository/worktree identity; the base ref and
+resolved SHA; local branch and immutable head SHA; ordered commits and changed
+paths; claimed verification; creation provenance; and revision lineage. Revision
+1 has no predecessor. Every later revision names the prior artifact id and the
+feedback bead/verdict that produced it.
+
+Review accepts the artifact JSON file, its implementation-output bead, or an
+explicit local branch/SHA. Resolution occurs inside the selected rig repository,
+without fetching: it verifies artifact integrity and same-repository identity,
+checks that the branch still points at the recorded head, and dispatches exact
+`base_sha...head_sha` inputs to solo or bounded N=2 quorum review:
+
+```bash
+gc dev-pack review --artifact /path/to/local-change.json --rig vllm --n 1
+gc dev-pack review <implementation-step-bead> --rig vllm --n 2
+gc dev-pack review paude/vllm-123 --rig vllm --base origin/main --n 2
+```
+
+Each reviewer repeats the guard immediately before reading the diff. Verdicts
+preserve artifact id/ref, revision, repository id, branch, and exact reviewed SHAs
+as `implementation_provenance`, the stable seam for later review/revise rounds.
 
 ## Fix a bug (the N-opinion dial)
 

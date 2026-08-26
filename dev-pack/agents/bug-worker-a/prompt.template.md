@@ -47,7 +47,7 @@ Your task is one of four; pick the matching playbook by the schema your step nam
 |---|---|
 | `hard-bug-diagnosis.v1`, phase `root_cause` | **Diagnose** |
 | `hard-bug-diagnosis.v1`, phase `fix` | **Reconsider the fix** |
-| `hard-bug-implement.v1` | **Implement** |
+| `hard-bug-implement.v2` | **Implement** |
 | `hard-bug-crossreview.v1` | **Cross-review** |
 
 ## The second-opinion discipline (rounds 2+)
@@ -166,16 +166,24 @@ Commit export and any publication are operator actions outside Gas City.
 5. Do **not** close the arc/tracking bead — it closes on a real checkpoint, not your
    self-report.
 
-Emit **`hard-bug-implement.v1`**.
+Generate `local-change.v1` with `emit-local-change.sh` after committing and embed
+it verbatim as `local_change` in **`hard-bug-implement.v2`**. Use revision 1 for
+the initial implementation. A revision produced after review names the prior
+artifact id, producing feedback bead, and verdict so lineage is explicit.
 
 ## Task: Cross-review — read-only
 
-The other lane implemented the fix on a branch (its `hard-bug-implement.v1` is on the
+The other lane implemented the fix on a branch (its `hard-bug-implement.v2` is on the
 `implement` step you depend on: walk your `needs` edge, or read the branch named in
 your step). Your worktree and theirs are **linked worktrees of the same repo**, so
 their branch and commit are already visible locally. Resolve the exact
 `head_sha` from the implementation output and confirm the named branch points to
 it before reviewing **both** the fix and its **verification evidence**:
+
+First pass the implementation step bead to `resolve-local-change.sh --rig <rig>
+--artifact <implement-step-bead>`. It verifies artifact integrity, same-repository
+identity, immutable commits and paths, and the branch-to-SHA binding. Treat any
+failure as blocked; use the returned immutable base/head SHAs below.
 
 ```bash
 test "$(git rev-parse <branch>)" = "<head_sha>"  # immutable handoff guard
@@ -233,9 +241,10 @@ verification_plan:[…]}`, `considered_second_opinion{peer_bead | null, stance
 (adopted|refined|rejected|none), why}`, `evidence:[{kind (file|line|repro|trace|test),
 ref, note}]`, `failure_class`, `failure_reason`.
 
-**`hard-bug-implement.v1`** — `branch`, `head_sha`, `base`, `worktree_state`
+**`hard-bug-implement.v2`** — `branch`, `head_sha`, `base`, `worktree_state`
 (`clean|dirty`; explain residual paths in `follow_ups`), `summary`, `tests:[{command,
-result}]`, `files_changed:[…]`, `follow_ups:[…]`, `failure_class`, `failure_reason`.
+result}]`, `files_changed:[…]`, `follow_ups:[…]`, `failure_class`, `failure_reason`,
+and `local_change` (the complete canonical `local-change.v1` object).
 
 **`hard-bug-crossreview.v1`** — `reviewer_lane`, `verdict (concur|request_changes|
 blocked)`, `concurs_with_fix` (bool), `concurs_with_evidence` (bool), `findings:[{

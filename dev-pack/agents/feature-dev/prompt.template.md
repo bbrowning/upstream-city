@@ -69,8 +69,14 @@ reporting "done" is not a merge.
 
 ## Output
 
-Write this JSON object to `gc.output_json` and close your step with
-`gc.outcome=pass`:
+Create the canonical immutable artifact after committing with
+`emit-local-change.sh --intent feature --workflow feature-dev --revision 1`,
+passing the rig, assignment bead, exact base and branch, and a JSON array of
+claimed checks through `--verification-file`.
+
+Write this `feature-dev.v2` object to a unique temp file, embedding the artifact
+verbatim as `local_change`, then atomically MERGE-write and close the step with
+`emit-json.sh --schema feature-dev.v2`:
 
 - `branch`: the local branch (e.g. `paude/vllm-1234`)
 - `head_sha`: the full immutable SHA from `git rev-parse HEAD`
@@ -83,6 +89,7 @@ Write this JSON object to `gc.output_json` and close your step with
 - `follow_ups`: anything a reviewer or the human should know (or [])
 - `failure_class`: one of `none`, `transient`, `hard`
 - `failure_reason`: stable reason string, or "" when `none`
+- `local_change`: the complete `local-change.v1` object emitted after commit
 
 If you were blocked by transient infrastructure (provider down), close with
 `gc.outcome=fail`, `gc.failure_class=transient`, and a stable

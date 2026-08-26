@@ -67,14 +67,20 @@ This step and every retry are strictly local-only: never push, open or modify a
 PR, fetch as a missing-ref fallback, or otherwise mutate a remote. The operator
 alone exports or publishes commits. Do NOT close the arc bead.
 
-Emit `hard-bug-implement.v1` (branch, head_sha, base, worktree_state, summary, …) to
-gc.output_json, then finish:
+After committing, run `emit-local-change.sh` with intent `hard_bug`, workflow
+`hard-bug-finalize`, this rig and bug bead, the exact base/branch, claimed checks,
+and revision lineage. Revision 1 has no predecessor; each later revision names
+the prior artifact id plus the feedback bead and verdict that produced it. Embed
+the resulting immutable `local-change.v1` verbatim as `local_change` in
+`hard-bug-implement.v2`, alongside the compatibility fields `branch`, `head_sha`,
+`base`, `worktree_state`, `summary`, `tests`, `files_changed`, and `follow_ups`,
+then finish:
   bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-step-bead> \\
-    --json-file "$out" --schema hard-bug-implement.v1 --outcome pass
+    --json-file "$out" --schema hard-bug-implement.v2 --outcome pass
 Contract failure (rig-root worktree, under-specified, or the fix genuinely fails its
 own tests): --outcome fail --failure-class hard --failure-reason "…".
 """
-metadata = { "gc.run_target" = "{{implementer_target}}", "gc.output_json_schema" = "hard-bug-implement.v1", "gc.output_json_required" = "true" }
+metadata = { "gc.run_target" = "{{implementer_target}}", "gc.output_json_schema" = "hard-bug-implement.v2", "gc.output_json_required" = "true" }
 
 [steps.retry]
 max_attempts = 2
@@ -86,11 +92,14 @@ title = "Cross-review the fix and its verification evidence"
 needs = ["implement"]
 description = """
 You are the OTHER lane, cross-reviewing the fix for arc `{{bug_bead}}` — read-only.
-Read the implementer's `hard-bug-implement.v1` (walk your `needs` edge) for the
-branch name and immutable `head_sha`. Your worktree and theirs are linked
-worktrees of the SAME repo, so verify `git rev-parse <branch>` equals `head_sha`,
-then review `git diff {{base}}...<head_sha>`. If the local ref or commit is absent
+Read the implementer's `hard-bug-implement.v2` (walk your `needs` edge), then
+validate its embedded artifact with `resolve-local-change.sh --rig <rig>
+--artifact <implement-step-bead>`. Your worktree and theirs are linked worktrees
+of the SAME repo; review the returned exact `<base_sha>...<head_sha>`. If the
+artifact, local ref, repository, or commit is absent
 or mismatched, report `blocked`; never contact a remote as fallback. Judge (1)
+The resolver includes the explicit guard `git rev-parse <branch> == head_sha`;
+do not review if that branch-to-SHA check fails.
 whether the diff
 actually fixes the agreed ROOT CAUSE with no scope creep or new defects
 (`concurs_with_fix`), and (2) whether the claimed tests exist and genuinely assert
@@ -114,7 +123,7 @@ needs = ["cross-review"]
 description = """
 Conclude the hard-bug arc `{{bug_bead}}`. Read the cross-reviewer's
 `hard-bug-crossreview.v1` (walk your `needs` edge) and the implementer's
-`hard-bug-implement.v1` (see your finalize playbook):
+`hard-bug-implement.v2` (see your finalize playbook):
 
 - Concur (verdict=concur AND concurs_with_fix AND concurs_with_evidence) → the arc is
   DONE. Mail the human the branch, fix summary, and evidence; set arc status=done.

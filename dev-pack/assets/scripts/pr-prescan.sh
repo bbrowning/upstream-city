@@ -67,7 +67,6 @@ if printf '%s' "$HEAD_REF" | grep -qE '^[0-9]+$'; then
     AUTHOR_ASSOC=${AUTHOR_ASSOC:-UNKNOWN}
     AUTHOR_LOGIN=$(printf '%s' "$PR_META" | jq -r '.user.login // empty' 2>/dev/null || true)
 else
-    git fetch --quiet origin 2>/dev/null || true
     if ! DIFF=$(GIT_LFS_SKIP_SMUDGE=1 git diff "$BASE_REF...$HEAD_REF" 2>/dev/null); then
         echo "pr-prescan: could not git diff $BASE_REF...$HEAD_REF" >&2
         exit 3

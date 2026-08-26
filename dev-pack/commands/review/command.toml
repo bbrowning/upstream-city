@@ -1,1 +1,1 @@
-description = "Start a posture-gated PR review for a PR number, rig#PR alias, or ref"
+description = "Start a posture-gated solo/quorum review for a PR, immutable local-change artifact/bead, or explicit local ref"

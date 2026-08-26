@@ -54,7 +54,7 @@ if [ -z "$RIG" ]; then
 fi
 
 set -- "$RIG/feature-dev" feature-dev --formula \
-    --var "bead_id=$BEAD" --var "base=$BASE" \
+    --var "work_bead=$BEAD" --var "base=$BASE" \
     --title "feature-dev: $BEAD" --json
 
 if [ "$DRYRUN" = "yes" ]; then

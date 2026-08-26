@@ -82,7 +82,7 @@
 #     formulas/pr-followup.toml       per-question follow-up: one answer +
 #                                     pr-followup.v1 contract, chained to the root
 #                                     verdict bead via gc.followup_of.
-#     formulas/feature-dev.toml       per-run implement task + feature-dev.v1 report.
+#     formulas/feature-dev.toml       per-run implement task + feature-dev.v2/local-change.v1 report.
 #     formulas/hard-bug-round.toml    N>=2 round: the lanes + a coordinator reconcile
 #                                     fan-in. Re-slung per round.
 #     formulas/hard-bug-round-solo.toml N=1 round: one lane + a coordinator self-verify

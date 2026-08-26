@@ -22,8 +22,9 @@ GC="${GC_BIN:-gc}"
 CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NORMALIZE="$SCRIPT_DIR/../../assets/scripts/normalize-pr-target.sh"
+RESOLVE_LOCAL="$SCRIPT_DIR/../../assets/scripts/resolve-local-change.sh"
 
-RIG="vllm" ; BASE="origin/main" ; SPEC="" ; DRYRUN="no"
+RIG="vllm" ; BASE="origin/main" ; SPEC="" ; ARTIFACT="" ; DRYRUN="no"
 RIG_EXPLICIT=0
 N="" ; LANES=""
 # Default solo profile and quorum lanes when --lanes is not given (must be existing profiles).
@@ -32,12 +33,15 @@ DEFAULT_LANE_A="pr-reviewer-sonnet-xhigh" ; DEFAULT_LANE_B="pr-reviewer-gpt56lun
 
 usage() {
     cat <<'EOF'
-usage: gc dev-pack review <PR-number | rig#PR | ref> [options]
+usage: gc dev-pack review <PR-number | rig#PR | local-ref | artifact-bead> [options]
 
 Sling the review formula (N=1 -> pr-review, N=2 -> pr-review-quorum) to <rig>/pr-review-synthesizer.
 
   --rig NAME       rig the PR belongs to            (default: vllm)
   --base REF       baseline the diff is against      (default: origin/main)
+  --artifact X     local-change.v1 JSON file or implementation-output bead.
+                   Validates repository identity, immutable commits, and that
+                   the recorded local branch still points at the recorded HEAD.
   --n N            opinion count / fan-out: 1 (single reviewer, default) or 2 (quorum).
                    Cross-checked against --lanes when both are given.
   --lanes A[,B]    reviewer PROFILE(s) to run, by name; the count IS N (1 or 2). Each
@@ -81,6 +85,8 @@ while [ $# -gt 0 ]; do
         --rig=*)     RIG="${1#*=}"; RIG_EXPLICIT=1; shift ;;
         --base)      BASE="${2:?}"; shift 2 ;;
         --base=*)    BASE="${1#*=}"; shift ;;
+        --artifact)  ARTIFACT="${2:?}"; shift 2 ;;
+        --artifact=*) ARTIFACT="${1#*=}"; shift ;;
         --n)         N="${2:?}"; shift 2 ;;
         --n=*)       N="${1#*=}"; shift ;;
         --lanes)     LANES="${2:?}"; shift 2 ;;
@@ -93,13 +99,48 @@ while [ $# -gt 0 ]; do
     esac
 done
 [ $# -eq 0 ] || { [ -z "$SPEC" ] && SPEC="$1"; }
-[ -n "$SPEC" ] || { usage >&2; die "missing <PR-number | rig#PR | ref>"; }
+[ -z "$ARTIFACT" ] || [ -z "$SPEC" ] || die "do not combine a positional target with --artifact"
+[ -n "$SPEC$ARTIFACT" ] || { usage >&2; die "missing review target"; }
+[ -n "$SPEC" ] || SPEC="$ARTIFACT"
 [ -x "$NORMALIZE" ] || die "target normalizer not found/executable: $NORMALIZE"
 NORM_ARGS=(--rig "$RIG")
 [ "$RIG_EXPLICIT" -eq 1 ] && NORM_ARGS+=(--rig-explicit)
 NORM=$("$NORMALIZE" "$SPEC" "${NORM_ARGS[@]}") || exit $?
 SPEC=$(printf '%s' "$NORM" | jq -r '.spec')
 RIG=$(printf '%s' "$NORM" | jq -r '.rig')
+
+# Resolve implementation handoffs before dispatch. Reviewers receive immutable
+# SHAs plus provenance and independently re-run the same branch/repository guard.
+[ -x "$RESOLVE_LOCAL" ] || die "local-change resolver not found/executable: $RESOLVE_LOCAL"
+RIGS_JSON=$("$GC" --city "$CITY" rig list --json 2>/dev/null) || die "could not list rigs"
+RIG_PATH=$(printf '%s' "$RIGS_JSON" | jq -er --arg rig "$RIG" '.rigs[] | select(.name == $rig) | .path') \
+    || die "could not resolve repository path for rig '$RIG'"
+LOCAL_JSON="" ; DISPLAY_SPEC="$SPEC"
+if [ -n "$ARTIFACT" ]; then
+    [ ! -f "$ARTIFACT" ] || ARTIFACT=$(realpath "$ARTIFACT")
+    DISPLAY_SPEC="$ARTIFACT"
+    LOCAL_JSON=$("$RESOLVE_LOCAL" --repo "$RIG_PATH" --rig "$RIG" --artifact "$ARTIFACT") || exit $?
+elif git -C "$RIG_PATH" rev-parse --verify "$SPEC^{commit}" >/dev/null 2>&1; then
+    LOCAL_JSON=$("$RESOLVE_LOCAL" --repo "$RIG_PATH" --rig "$RIG" --head "$SPEC" --base "$BASE") || exit $?
+elif [[ "$SPEC" == "$RIG-"* ]]; then
+    # A rig-prefixed non-ref is the positional artifact-bead form. Use
+    # --artifact for cross-rig checks or file paths so intent is unambiguous.
+    LOCAL_JSON=$("$RESOLVE_LOCAL" --repo "$RIG_PATH" --rig "$RIG" --artifact "$SPEC") || exit $?
+fi
+
+LOCAL_ARTIFACT_ID="" ; LOCAL_ARTIFACT_REF="" ; LOCAL_REPOSITORY_ID="" ; LOCAL_BRANCH="" ; LOCAL_REVISION=""
+LOCAL_BASE_SHA="" ; LOCAL_HEAD_SHA=""
+if [ -n "$LOCAL_JSON" ]; then
+    LOCAL_ARTIFACT_ID=$(printf '%s' "$LOCAL_JSON" | jq -r '.artifact_id')
+    if [ -n "$ARTIFACT" ]; then LOCAL_ARTIFACT_REF="$ARTIFACT"; else LOCAL_ARTIFACT_REF="$DISPLAY_SPEC"; fi
+    LOCAL_REPOSITORY_ID=$(printf '%s' "$LOCAL_JSON" | jq -r '.repository.id')
+    LOCAL_BRANCH=$(printf '%s' "$LOCAL_JSON" | jq -r '.head.branch')
+    LOCAL_REVISION=$(printf '%s' "$LOCAL_JSON" | jq -r '.revision.number')
+    LOCAL_BASE_SHA=$(printf '%s' "$LOCAL_JSON" | jq -r '.base.sha')
+    LOCAL_HEAD_SHA=$(printf '%s' "$LOCAL_JSON" | jq -r '.head.sha')
+    BASE="$LOCAL_BASE_SHA"
+    SPEC="$LOCAL_HEAD_SHA"
+fi
 
 # --- resolve N + lane targets from --lanes -----------------------------------
 declare -a LT   # resolved rig-qualified lane targets
@@ -131,8 +172,12 @@ if [ "$N" = "1" ]; then
     fi
     set -- "$RIG/pr-review-synthesizer" pr-review --formula \
         --var "head_ref=$SPEC" --var "base_ref=$BASE" \
+        --var "implementation_artifact_ref=$LOCAL_ARTIFACT_REF" \
+        --var "implementation_artifact_id=$LOCAL_ARTIFACT_ID" \
+        --var "implementation_repository_id=$LOCAL_REPOSITORY_ID" \
+        --var "implementation_branch=$LOCAL_BRANCH" --var "implementation_revision=$LOCAL_REVISION" \
         --var "review_target=$RTARGET" \
-        --title "pr-review: $SPEC" --json
+        --title "pr-review: $DISPLAY_SPEC" --json
 else
     # Quorum. Named profiles pick the two lanes; otherwise the two default profiles.
     if [ -n "$LANES" ]; then AT="${LT[0]}"; BT="${LT[1]}"; else
@@ -142,11 +187,15 @@ else
     fi
     set -- "$RIG/pr-review-synthesizer" pr-review-quorum --formula \
         --var "head_ref=$SPEC" --var "base_ref=$BASE" \
+        --var "implementation_artifact_ref=$LOCAL_ARTIFACT_REF" \
+        --var "implementation_artifact_id=$LOCAL_ARTIFACT_ID" \
+        --var "implementation_repository_id=$LOCAL_REPOSITORY_ID" \
+        --var "implementation_branch=$LOCAL_BRANCH" --var "implementation_revision=$LOCAL_REVISION" \
         --var "triage_target=$RIG/pr-triage" \
         --var "lane_a_target=$AT" \
         --var "lane_b_target=$BT" \
         --var "synthesis_target=$RIG/pr-review-synthesizer" \
-        --title "pr-review-quorum: $SPEC" --json
+        --title "pr-review-quorum: $DISPLAY_SPEC" --json
 fi
 
 if [ "$DRYRUN" = "yes" ]; then
