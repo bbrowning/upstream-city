@@ -30,7 +30,20 @@ elif [ "${1-} ${2-}" = "bd update" ]; then
     fi
   done
 elif [ "${1-} ${2-}" = "bd show" ]; then
+  if [ "${3-}" = "${MOCK_LOGICAL_BEAD:-}" ]; then
+    jq -cn --arg logical "${MOCK_LOGICAL_BEAD}" --arg attempt "${MOCK_ATTEMPT_BEAD:?}" \
+      '[{status:"open",metadata:{"gc.kind":"retry"},dependencies:[
+        {id:"workflow-root",status:"open",metadata:{"gc.kind":"workflow"},dependency_type:"tracks"},
+        {id:"previous-attempt",status:"closed",metadata:{"gc.logical_bead_id":$logical,"gc.attempt":"1"},dependency_type:"blocks"},
+        {id:$attempt,status:"open",metadata:{"gc.logical_bead_id":$logical,"gc.attempt":"2"},dependency_type:"blocks"}
+      ]}]'
+    exit 0
+  fi
   state="${MOCK_GC_STATE:?}/$3.json"
+  if [ ! -f "$state" ]; then
+    printf '%s\n' '[{"status":"open","metadata":{}}]'
+    exit 0
+  fi
   metadata=$(cat "$state")
   if [ "${MOCK_TRUNCATE:-0}" = 1 ]; then
     metadata=$(printf '%s' "$metadata" | jq '."gc.output_json" = "{"')
@@ -86,6 +99,28 @@ quorum=$(jq -cn --arg summary "Both lanes agree it's ready" \
   read_only_enforcement:{clean:true,mutations_delta:[]},failure_class:"none",failure_reason:""}')
 printf '%s\n' "$quorum" | emit synthesis pr-review-quorum.v1
 grep -q 'bd close synthesis' "$MOCK_GC_LOG" || fail "synthesis did not close"
+
+# Agents can be handed the retry control/logical bead while its current attempt is
+# the actual executable unit. Every review role must finish that open attempt and
+# leave logical closure to the controller, which mirrors the terminal attempt.
+assert_logical_attempt_close() {
+  local logical=$1 attempt=$2 schema=$3 payload=$4
+  : >"$MOCK_GC_LOG"
+  export MOCK_LOGICAL_BEAD=$logical MOCK_ATTEMPT_BEAD=$attempt
+  printf '%s\n' "$payload" | emit "$logical" "$schema"
+  grep -q "bd update $attempt" "$MOCK_GC_LOG" \
+    || fail "$schema did not write the active attempt"
+  grep -q "bd close $attempt" "$MOCK_GC_LOG" \
+    || fail "$schema did not close the active attempt"
+  ! grep -q "bd update $logical" "$MOCK_GC_LOG" \
+    || fail "$schema wrote result metadata to the logical retry bead"
+  ! grep -q "bd close $logical" "$MOCK_GC_LOG" \
+    || fail "$schema closed the logical retry bead directly"
+  unset MOCK_LOGICAL_BEAD MOCK_ATTEMPT_BEAD
+}
+assert_logical_attempt_close logical-triage attempt-triage pr-triage.v1 "$triage"
+assert_logical_attempt_close logical-review attempt-review pr-review.v1 "$review"
+assert_logical_attempt_close logical-synthesis attempt-synthesis pr-review-quorum.v1 "$quorum"
 
 before=$(wc -l <"$MOCK_GC_LOG")
 if printf '' | emit empty pr-triage.v1 >/dev/null 2>&1; then fail "empty stdin passed"; fi

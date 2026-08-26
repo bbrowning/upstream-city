@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -87,6 +88,61 @@ def validate(value: object, schema: str) -> dict:
     return value
 
 
+def resolve_retry_attempt(bead_id: str) -> str:
+    """Resolve a retry logical bead to its current executable attempt.
+
+    Formula v2 retry controls own logical-step completion. Agents must close the
+    attempt bead; the controller then validates and mirrors it onto the logical
+    bead. Some assignment paths expose the logical id, whose blocking edge points
+    at the active attempt. Closing that id directly deadlocks on its own open
+    prerequisite, so redirect it before writing any result metadata.
+    """
+    gc = os.environ.get("GC_BIN", "gc")
+    completed = subprocess.run(
+        [gc, "bd", "show", bead_id, "--json"],
+        text=True,
+        capture_output=True,
+    )
+    if completed.returncode != 0:
+        die(f"could not inspect bead {bead_id!r}: {completed.stderr.strip()}")
+    try:
+        value = json.loads(completed.stdout)
+        bead = value[0] if isinstance(value, list) else value
+    except (json.JSONDecodeError, IndexError, TypeError) as exc:
+        die(f"could not parse bead {bead_id!r}: {exc}")
+    if not isinstance(bead, dict):
+        die(f"bead {bead_id!r} did not resolve to an object")
+    metadata = bead.get("metadata") or {}
+    if metadata.get("gc.kind") != "retry":
+        return bead_id
+
+    candidates = []
+    for dependency in bead.get("dependencies") or []:
+        dep_metadata = dependency.get("metadata") or {}
+        if (
+            dependency.get("status") != "closed"
+            and dependency.get("dependency_type") == "blocks"
+            and dep_metadata.get("gc.logical_bead_id") == bead_id
+        ):
+            try:
+                attempt = int(dep_metadata.get("gc.attempt", ""))
+            except (TypeError, ValueError):
+                continue
+            candidates.append((attempt, dependency.get("id", "")))
+    candidates = [(attempt, dep_id) for attempt, dep_id in candidates if dep_id]
+    if not candidates:
+        die(f"logical retry bead {bead_id!r} has no open blocking attempt")
+    highest = max(attempt for attempt, _ in candidates)
+    active = sorted(dep_id for attempt, dep_id in candidates if attempt == highest)
+    if len(active) != 1:
+        die(f"logical retry bead {bead_id!r} has ambiguous attempt {highest}: {active}")
+    print(
+        f"emit-review: logical retry bead {bead_id} redirects to active attempt {active[0]}",
+        file=sys.stderr,
+    )
+    return active[0]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bead", required=True)
@@ -117,11 +173,13 @@ def main() -> None:
     if payload["failure_reason"] != args.failure_reason:
         die("JSON failure_reason does not match --failure-reason")
 
+    target_bead = resolve_retry_attempt(args.bead)
+
     script_dir = Path(__file__).resolve().parent
     triage = args.schema == "pr-triage.v1"
     emitter = script_dir / ("emit-json.sh" if triage else "emit-verdict.sh")
     command = [
-        str(emitter), "--bead", args.bead,
+        str(emitter), "--bead", target_bead,
         "--json-file" if triage else "--verdict-file", "PLACEHOLDER",
         "--outcome", args.outcome,
     ]
