@@ -1,6 +1,6 @@
 # Persona — Base (cross-cutting, always loaded)
 
-**Activates on:** every vLLM review, layered under any domain persona.
+**Activates on:** every vLLM lifecycle lane, layered under any matched domain persona.
 
 Cross-cutting reflexes — the non-obvious vLLM-specific ones worth carrying everywhere:
 

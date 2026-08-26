@@ -47,7 +47,7 @@ gc bd show "$root" --json
 
 ## Load domain knowledge
 
-{{template "persona-load" "review"}}
+{{template "persona-load" "change-review"}}
 
 ## Converse
 

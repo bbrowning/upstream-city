@@ -63,6 +63,10 @@ the area); fix anything they reveal; commit. Record the full immutable SHA from
 `git rev-parse HEAD` and the result of `git status --short`. A clean committed
 local branch is successful durable output.
 
+Before editing, use the `implementation` lifecycle lens to load `base.md` plus only
+personas matching the agreed subsystem and planned paths; reload if the actual path set
+expands. Record the load and material reflex influences in `persona_traces`.
+
 This step and every retry are strictly local-only: never push, open or modify a
 PR, fetch as a missing-ref fallback, or otherwise mutate a remote. The operator
 alone exports or publishes commits. Do NOT close the arc bead.
@@ -74,6 +78,7 @@ the prior artifact id plus the feedback bead and verdict that produced it. Embed
 the resulting immutable `local-change.v1` verbatim as `local_change` in
 `hard-bug-implement.v2`, alongside the compatibility fields `branch`, `head_sha`,
 `base`, `worktree_state`, `summary`, `tests`, `files_changed`, and `follow_ups`,
+plus `persona_traces`,
 then finish:
   bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-step-bead> \\
     --json-file "$out" --schema hard-bug-implement.v2 --outcome pass
@@ -105,6 +110,9 @@ actually fixes the agreed ROOT CAUSE with no scope creep or new defects
 (`concurs_with_fix`), and (2) whether the claimed tests exist and genuinely assert
 the corrected behavior — re-run them if feasible (`concurs_with_evidence`). Verdict:
 concur / request_changes / blocked.
+
+Load personas through the same `change-review` changed-path lens as local-change and PR
+reviewers, and include its load/material-influence record in `persona_traces`.
 
 Emit `hard-bug-crossreview.v1` to gc.output_json, then finish:
   bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-step-bead> \\

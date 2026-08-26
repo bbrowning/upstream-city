@@ -2,8 +2,9 @@
 
 **Activates on:** paths under `vllm/entrypoints/openai/`.
 
-You review OpenAI-compatible chat/completions/responses serving — protocol fidelity and
-the API server. How you think — reflexes, highest-value first:
+Domain facts for OpenAI-compatible chat/completions/responses serving — protocol fidelity
+and the API server. Apply these reflexes through the active lifecycle lens, highest-value
+first:
 
 1. **Error handling belongs to the framework.** Raise `VLLMValidationError` (not a bare
    `ValueError`) for request-field validation and set `parameter` to the specific field via

@@ -1,0 +1,10 @@
+{
+  "id": "caseFeatureDesign",
+  "family": "feature-design",
+  "domains": ["parser"],
+  "has_answer_key": true,
+  "candidate_paths": ["vllm/parser/engine/parser_engine.py", "tests/parser/engine/test_parser_engine.py"],
+  "expected_personas": ["base.md", "parser.md"],
+  "excluded_personas": ["openai-frontend.md"],
+  "gold": "Before editing, identify the shared parser-engine blast radius, preserve incremental streaming, and require per-model plus streaming/non-streaming regression coverage."
+}

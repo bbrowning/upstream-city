@@ -1,7 +1,7 @@
-# eval — a growing eval suite for vLLM PR review + hard-bug diagnosis
+# eval — lifecycle persona regression cases
 
-Purpose: compare review setups (current pack vs lean personas) and regression-test the
-**lean personas** as they evolve. Blind, reproducible, offline.
+Purpose: regression-test the lean persona corpus across review, diagnosis, feature design,
+implementation, local-change review, and settlement. Blind, reproducible, offline.
 
 > **Changing a persona?** Read `RUNBOOK.md` first — it's the workflow + quality bar for
 > validating a persona edit against a blind case (this README is the mechanics it builds on).
@@ -22,8 +22,9 @@ Purpose: compare review setups (current pack vs lean personas) and regression-te
 
 ## Persona selection
 Always load `tools/vllm/personas/base.md`, plus every domain persona whose
-activation paths (top of each file) match the PR's changed files. Keep it lean; don't
-load domains the PR doesn't touch.
+activation paths match the current lifecycle lens's symptom/planned/changed paths. Use
+`persona-lifecycle.py select`; keep it lean and never load domains the work does not touch.
+`reflex-coverage.json` binds every numbered reflex to at least one complete case.
 
 ## Running a case (isolated A/B, via the Agent tool — NOT gascity)
 1. Worktree at head + CPU venv: `git worktree add --detach <wt> <head_sha>` then

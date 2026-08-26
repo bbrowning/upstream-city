@@ -158,7 +158,7 @@ position), `head_ref`/`base_ref`, and an optional `crux_question` hint.
    `file:line`. Ground-truth the load-bearing facts (a config default, an
    `__init_subclass__` flag, whether a helper is fed delta-only vs accumulated, a token
    that arrives alone) by READING them — do not infer. Load the personas for the touched
-   paths ({{template "persona-load" "review"}} inline) so you apply the domain reflexes.
+   paths ({{template "persona-load" "settle"}} inline) so you apply the domain reflexes.
 4. **Resolve each dispute** to one of:
    - `resolved` — the evidence settles it. Set `which_holds` to the lane whose position the
      code supports (or `neither`/`both_partial`), the settled `severity`, and
@@ -319,7 +319,7 @@ Everything below is performed **within** the latitude you just set.
    this checkout is **required, not optional** — the check must run against the PR
    head, not the base tree your worktree starts at (see **Posture disposition**).
 2. **Load the personas for what this PR touches.**
-{{template "persona-load" "review"}}
+{{template "persona-load" "change-review"}}
 3. **Verify every candidate finding skeptically before you keep it.** For each
    one ask: *Is this real, or am I pattern-matching? What is the concrete
    failure case — inputs and the wrong result? Is the severity honest?* Drop
@@ -352,6 +352,8 @@ fields:
 - `dynamic_request`: for `trusted`, the command you ran (provenance for
   `dynamic_check`); for `limited`, the scoped command a human could approve via the
   `pr-review-dynamic` lane; `null` for `restricted`/`block`.
+- `persona_traces`: for review, the `change-review` load/material-influence record;
+  synthesis carries the lane traces it relied on; settle records its `settle` lens.
 Write that object to a **unique** temp file via `mktemp` — never a fixed name
 (pooled slots share `/tmp`, so a fixed path collides with a concurrent reviewer),
 kept out of your worktree so it can't trip `read_only_enforcement`:

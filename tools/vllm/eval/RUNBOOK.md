@@ -1,7 +1,8 @@
 # RUNBOOK — changing a persona and proving it helps
 
-Read this **before editing any file in `tools/vllm/personas/`**. Personas are the live review spec:
-a change to them changes every future review. This suite exists so a persona edit is
+Read this **before editing any file in `tools/vllm/personas/`**. Personas are the live
+lifecycle domain spec: a change to them changes future design, implementation, diagnosis,
+review, and settlement lanes. This suite exists so a persona edit is
 *validated against a real, blind case* — not merged on a hunch. The mechanics of running
 (worktrees, CPU venv, isolated A/B, blind judge) are in `README.md`; this doc is the
 **workflow and the quality bar** around them. It is written to be followed months from now
@@ -28,13 +29,13 @@ Negative knowledge ("do NOT assume X") beats affirmative restatement. **Prune as
 one sharp reflex, not three soft ones. A persona that restates general best practice is
 noise that costs context on every review.
 
-**Two consumers now — review AND hard-bug diagnosis.** The personas are injected into the PR
-reviewer *and* the hard-bug lanes as one env (`$GC_PERSONAS`) — the same
-files. So: (1) validate a persona edit against **both** case families before it ships — a
-diagnosis-helping reflex must not add review noise, and vice-versa; (2) keep personas to
+**One corpus across the lifecycle.** The same `$GC_PERSONAS` files serve diagnosis,
+design, implementation, change-review, and settle. So: (1) validate a persona edit against
+the affected case families before it ships — a diagnosis-helping reflex must not add review
+or design noise, and vice-versa; (2) keep personas to
 **domain facts**; *method* ("prefer static analysis", "ground-truth cheap load-bearing facts
 before asserting") lives in the pack prompts, not here — that separation is what lets one
-corpus serve both; (3) a **verification reflex** (one that tells a diagnoser to ground-truth
+corpus serve every lens; (3) a **verification reflex** (one that tells a diagnoser to ground-truth
 a fact) is a fifth bar test: it must name *what* to fetch and *when* — **cheap AND
 load-bearing** — so it can't degenerate into "always fetch everything."
 
@@ -107,7 +108,7 @@ pack was cut over to personas, and the old corpus is archived at
 miss → one persona reflex → re-run → confirm.
 
 ## Where everything lives
-- **Personas (the live review spec):** `tools/vllm/personas/*.md` — the single
+- **Personas (the live lifecycle domain spec):** `tools/vllm/personas/*.md` — the single
   canonical home read by BOTH this harness and the production pack (injected there as
   `$GC_PERSONAS`). `base.md` always loads; each domain persona lists its
   activation-path globs at the top and loads only when a changed path matches.
@@ -115,6 +116,9 @@ miss → one persona reflex → re-run → confirm.
   (lean arm, now live) vs the retired pre-cutover pack (the old reviewer prompt in git
   history + the corpus now archived at `tools/vllm/_archive/review-knowledge/`).
 - **Cases:** `cases/<id>/{meta.json, diff.patch, answer-key.md?}`.
+- **Static coverage map:** `reflex-coverage.json`; every numbered reflex must name at
+  least one complete case. Feature/design and immutable local-review fixtures are
+  `caseFeatureDesign` and `caseLocalReview`.
 - **Runs (the evidence):** `run-<date>/` — per-arm `caseX-{A,B}.json`, `judge-caseX.json`,
   `RESULTS.md`, and the private `blind-map.txt` (A=current, B=lean; which arm was shown to
   the judge as Review1/Review2).

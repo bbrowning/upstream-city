@@ -744,29 +744,34 @@ the operator may extract or publish the resulting commit.
 A second real vendor for lane B is a one-line `[[rigs.patches]]` provider change in
 `city.toml` (formulas and prompts unchanged) — see the manifest.
 
-## Review personas
+## Lifecycle personas
 
 The reviewer's quality comes less from a generic checklist than from a **sharp,
 path-specific lens** — the non-obvious things that actually bite in an area. Rather than
 one growing blob injected into every review (which bloats context and dilutes attention),
-that lens is **partitioned into personas**, and each review loads **only `base` + the
-personas the PR's changed paths activate**.
+that lens is **partitioned into personas**. Diagnosis, design, implementation,
+change-review, and settle all read the same domain facts; each lane loads **only `base` +
+the personas its symptom/planned/changed paths activate**.
 
 **How it works**
 
 - The personas live at `$GC_PERSONAS` (`//tools/vllm/personas/`): `base.md`
   (cross-cutting reflexes, always loaded) plus domain personas (`parser.md`,
   `openai-frontend.md`). Each is a terse "how you think" reflex list.
-- **Personas self-route — no separate manifest.** Each domain persona declares its
-  activation paths in an `**Activates on:**` header at the top; the reviewer loads it only
-  when a changed path matches (more than one can match). `base.md` always loads.
+- **Personas self-route — no domain manifest.** Each domain persona declares its
+  activation paths in an `**Activates on:**` header. The deterministic
+  `persona-lifecycle.py select` command returns `base.md` plus matches and never reads an
+  irrelevant persona body. `persona-lenses.json` registers lane guidance, not facts.
 - The pack's `pr-prescan.sh` stays **project-agnostic**: it reports the changed files
   (`facts.changed_files`) + generic security classes and knows nothing about vLLM domains.
   Persona activation is a plain path-prefix match the reviewer does against those changed
   files — not a security decision, so the deterministic security ceiling stays wholly in
   `pr-prescan.sh`.
-- The reviewer (method step 2) reads `base.md` + each persona whose header matches, and
-  reviews through that lens. Personas are read fresh each run, so **content edits are live
+- Feature workers load design and implementation lenses before design/editing; diagnosis
+  retains trace-based matching; PR and immutable local-change reviewers share the exact
+  `change-review` lens; arbiters use `settle`. Every structured output records
+  `persona_traces` with loaded personas and only material reflex influences. Personas are
+  read fresh each run, so **content edits are live
   on the next review — no `gc reload`** (reload is only for the reviewer prompt or the
   `$GC_PERSONAS` env wiring itself).
 
@@ -778,6 +783,9 @@ prune as you add. The full workflow + quality bar live in
 `//tools/vllm/eval/RUNBOOK.md`, and the eval harness (`//tools/vllm/eval/`)
 regression-tests a persona edit before it ships. (This replaces the old
 mine → distill → `learn` invariant-corpus pipeline, now archived at `//tools/vllm/_archive/`.)
+`dev-pack/tests/persona-lifecycle.sh` is the cheap static gate: it enforces corpus budgets,
+exact/non-orphan lifecycle wiring, declared reflex regression cases, unique activation
+domains, and selective loading (including base-only out-of-domain paths).
 
 ## Deliberate boundaries
 

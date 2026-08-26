@@ -112,10 +112,10 @@
 #                                         rig root" guard (every prompt).
 #     template-fragments/persona-load     load base.md + the personas whose
 #                                         `Activates on:` matches the lane's entry
-#                                         (changed paths for review; subsystem-in-trace
-#                                         for diagnosis). Parameterized by lens:
-#                                         {{template "persona-load" "review"}} /
-#                                         {{template "persona-load" "diagnosis"}}.
+#                                         using explicit diagnosis, design,
+#                                         implementation, change-review, and settle
+#                                         lifecycle lenses. Domain facts remain in one
+#                                         corpus; the lens controls activation guidance.
 #     assets/scripts/emit-verdict.sh      review lane atomic finish (write output_json +
 #                                         close + notify $GC_PR_NOTIFY_TO).
 #     assets/scripts/emit-json.sh         schema-agnostic atomic finish (bug lane).

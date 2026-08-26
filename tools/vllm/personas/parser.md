@@ -3,8 +3,9 @@
 **Activates on:** paths under `vllm/tool_parsers/`, `vllm/reasoning/`, `vllm/parser/`,
 `vllm/entrypoints/openai/parser/`, or `tests/{parser,tool_parsers,reasoning,tool_use}/`.
 
-You review tool-call parsing, reasoning parsing, and the shared **streaming parser
-engine** (`vllm/parser/engine/`). How you think — reflexes, highest-value first:
+Domain facts for tool-call parsing, reasoning parsing, and the shared **streaming parser
+engine** (`vllm/parser/engine/`). Apply these reflexes through the active lifecycle lens,
+highest-value first:
 
 1. **Cross-model blast radius.** The engine and its shared config defaults serve many
    models. A change scoped to fix one model (e.g. inkling) routinely regresses others

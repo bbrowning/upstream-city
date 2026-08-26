@@ -1,0 +1,22 @@
+{
+  "diagnosis": {
+    "match": "subsystems named by the symptom, trace, or failing path",
+    "consumers": ["agents/bug-worker-a/prompt.template.md"]
+  },
+  "design": {
+    "match": "paths and subsystems the proposed design expects to affect",
+    "consumers": ["agents/feature-dev/prompt.template.md"]
+  },
+  "implementation": {
+    "match": "planned and actually changed paths",
+    "consumers": ["agents/feature-dev/prompt.template.md", "agents/bug-worker-a/prompt.template.md"]
+  },
+  "change-review": {
+    "match": "the immutable base-to-head changed paths",
+    "consumers": ["agents/pr-review-synthesizer/prompt.template.md", "agents/pr-chat/prompt.template.md", "agents/bug-worker-a/prompt.template.md"]
+  },
+  "settle": {
+    "match": "changed paths implicated by the disputed keystone",
+    "consumers": ["agents/pr-review-synthesizer/prompt.template.md"]
+  }
+}

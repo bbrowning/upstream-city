@@ -43,14 +43,18 @@ If `pwd` is the rig root, stop: report `blocked` with
    fetch as recovery; the operator owns ref refresh and commit export.
    Use the bead id you were assigned (e.g. `paude/vllm-1234`). One branch per
    assignment; do not reuse another assignment's branch.
-2. **Implement the change.** Make the smallest change that fully does the job.
+2. **Design through the matched domain lens before editing.** Derive likely paths
+   from the bead and inspect enough surrounding code to make them concrete.
+{{template "persona-load" "design"}}
+3. **Implement the change.** Make the smallest change that fully does the job.
    Keep unrelated edits out of the diff — a reviewer will flag scope creep.
-3. **Prove it.** Build and run the relevant tests *in your worktree*. Record the
+{{template "persona-load" "implementation"}}
+4. **Prove it.** Build and run the relevant tests *in your worktree*. Record the
    exact commands and their results; you will report them. If you cannot run a
    check that matters, say so explicitly rather than implying it passed.
-4. **Commit** in coherent steps with clear messages describing *why*, not just
+5. **Commit** in coherent steps with clear messages describing *why*, not just
    *what*.
-5. **Make the local handoff durable.** Verify that every intended change is
+6. **Make the local handoff durable.** Verify that every intended change is
    committed, resolve the immutable commit id, and record the worktree state:
    ```bash
    git rev-parse HEAD
@@ -90,6 +94,8 @@ verbatim as `local_change`, then atomically MERGE-write and close the step with
 - `failure_class`: one of `none`, `transient`, `hard`
 - `failure_reason`: stable reason string, or "" when `none`
 - `local_change`: the complete `local-change.v1` object emitted after commit
+- `persona_traces`: design and implementation lens provenance, including only
+  reflexes that materially affected a decision (empty influences are valid)
 
 If you were blocked by transient infrastructure (provider down), close with
 `gc.outcome=fail`, `gc.failure_class=transient`, and a stable

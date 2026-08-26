@@ -36,6 +36,8 @@ the shared rig root.
 Method (see your feature-dev prompt for detail):
 - Resolve `{{base}}` from refs already present in the shared repository, then
   `git switch -c paude/{{work_bead}} {{base}}` — one branch per assignment.
+- Before design or editing, load base plus only path/subsystem-matched personas through
+  the `design` lens; reload through `implementation` when the actual path set is known.
 - Make the smallest change that fully does the job; keep unrelated edits out.
 - Build and run the relevant tests in your worktree; record the exact commands
   and results. Do not imply a check passed that you did not run.
@@ -69,6 +71,7 @@ Write this JSON object to `gc.output_json`:
 - `local_change`: the complete immutable `local-change.v1` artifact. Its resolved
   base/head SHAs, repository identity, commit/path inventories, verification,
   provenance, and revision lineage are authoritative for downstream review.
+- `persona_traces`: the design and implementation lens load/influence records.
 
 On success, close with `gc.outcome=pass` and the JSON in `gc.output_json`. On a
 retryable infra failure (provider down) close with `gc.outcome=fail`,

@@ -1,0 +1,18 @@
+diff --git a/vllm/entrypoints/openai/protocol.py b/vllm/entrypoints/openai/protocol.py
+index 1111111..2222222 100644
+--- a/vllm/entrypoints/openai/protocol.py
++++ b/vllm/entrypoints/openai/protocol.py
+@@ -10,3 +10,5 @@ class ChatCompletionRequest(BaseModel):
+     user: str | None = None
++    if user == "":
++        raise ValueError("user cannot be empty")
+ class ResponsesRequest(BaseModel):
+     user: str | None = None
+diff --git a/tests/entrypoints/openai/test_protocol.py b/tests/entrypoints/openai/test_protocol.py
+index 3333333..4444444 100644
+--- a/tests/entrypoints/openai/test_protocol.py
++++ b/tests/entrypoints/openai/test_protocol.py
+@@ -20,1 +20,3 @@ def test_user():
+     assert validate_user("ok") == "ok"
++    with pytest.raises(ValueError):
++        validate_user("")

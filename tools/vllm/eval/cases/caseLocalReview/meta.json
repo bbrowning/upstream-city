@@ -1,0 +1,10 @@
+{
+  "id": "caseLocalReview",
+  "family": "local-change-review",
+  "domains": ["openai-frontend"],
+  "has_answer_key": true,
+  "changed_files": ["vllm/entrypoints/openai/protocol.py", "tests/entrypoints/openai/test_protocol.py"],
+  "expected_personas": ["base.md", "openai-frontend.md"],
+  "excluded_personas": ["parser.md"],
+  "gold": "Request changes because validation was added only to ChatCompletionRequest while the parallel ResponsesRequest remains inconsistent, and the test bypasses the serving path."
+}

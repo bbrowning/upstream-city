@@ -38,9 +38,6 @@ and `failure_reason=work_dir-misresolved-to-rig-root`.
    exact **JSON schema** to emit, and — from round 2 on — a **peer bead** to weigh as
    a second opinion plus a short coordinator relay note. Your own step-bead id is in
    your `gc` context (from `gc prime`).
-5. **Load the domain lens.**
-{{template "persona-load" "diagnosis"}}
-
 Your task is one of four; pick the matching playbook by the schema your step names:
 
 | Step schema | Task |
@@ -70,6 +67,9 @@ dismiss one without addressing its evidence.
 ---
 
 ## Task: Diagnose (phase `root_cause`) — read-only
+
+Before tracing the cause, load the diagnosis lens:
+{{template "persona-load" "diagnosis"}}
 
 1. **Understand the bug** (you read the bead + any linked upstream issue in Startup).
    Trace the reported behavior through the code. **Prefer static analysis** — reading
@@ -126,6 +126,9 @@ Emit **`hard-bug-diagnosis.v1`** (see **Output**).
 
 ## Task: Reconsider the fix (phase `fix`) — read-only
 
+Reload the diagnosis lens against the converged symptom/trace before comparing fixes:
+{{template "persona-load" "diagnosis"}}
+
 Root cause is already agreed (it's in the arc state / your relay note; confirm it
 against `bug_bead`). Now converge the **fix plan**:
 
@@ -140,6 +143,10 @@ Apply the second-opinion discipline to the peer's `proposed_fix`. Emit
 `proposed_fix` as the focus.
 
 ## Task: Implement — WRITE task
+
+Before editing, load the implementation lens against the agreed subsystem and planned
+paths; reload if the actual changed paths expand:
+{{template "persona-load" "implementation"}}
 
 You were chosen to implement the converged fix. Work only in your worktree.
 
@@ -172,6 +179,9 @@ the initial implementation. A revision produced after review names the prior
 artifact id, producing feedback bead, and verdict so lineage is explicit.
 
 ## Task: Cross-review — read-only
+
+Resolve the immutable base/head first, then load the same changed-path lens used for PRs:
+{{template "persona-load" "change-review"}}
 
 The other lane implemented the fix on a branch (its `hard-bug-implement.v2` is on the
 `implement` step you depend on: walk your `needs` edge, or read the branch named in
@@ -239,17 +249,20 @@ status:"could_not_verify", source:"code path only — needs a live run"}`); any
 `could_not_verify` keystone caps `confidence` at `medium` — `proposed_fix{summary, changes:[{file, what}], tests_to_add:[…],
 verification_plan:[…]}`, `considered_second_opinion{peer_bead | null, stance
 (adopted|refined|rejected|none), why}`, `evidence:[{kind (file|line|repro|trace|test),
-ref, note}]`, `failure_class`, `failure_reason`.
+ref, note}]`, `failure_class`, `failure_reason`, and `persona_traces` (diagnosis
+lens load provenance and only reflexes that materially influenced the result).
 
 **`hard-bug-implement.v2`** — `branch`, `head_sha`, `base`, `worktree_state`
 (`clean|dirty`; explain residual paths in `follow_ups`), `summary`, `tests:[{command,
 result}]`, `files_changed:[…]`, `follow_ups:[…]`, `failure_class`, `failure_reason`,
-and `local_change` (the complete canonical `local-change.v1` object).
+and `local_change` (the complete canonical `local-change.v1` object), plus
+`persona_traces` for the implementation lens.
 
 **`hard-bug-crossreview.v1`** — `reviewer_lane`, `verdict (concur|request_changes|
 blocked)`, `concurs_with_fix` (bool), `concurs_with_evidence` (bool), `findings:[{
 severity, title, detail, file, line, suggested_fix}]`, `evidence_assessment` (what you
-actually verified vs what was claimed), `summary`, `failure_class`, `failure_reason`.
+actually verified vs what was claimed), `summary`, `failure_class`, `failure_reason`,
+and `persona_traces` for the shared changed-path `change-review` lens.
 
 ## Handoff (context cycling)
 
