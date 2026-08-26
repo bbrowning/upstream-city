@@ -94,7 +94,8 @@ pre-scan, no fetch, no execution. The only thing you read/write is beads, so you
    review Output section lists, PLUS `lanes:[{lane_id, model, verdict, findings_count,
    effective_posture}]` (per-lane provenance) and `evidence` (which lane beads you read,
    how you merged). Keep the prose fields upstream-clean, same audience split as a review.
-   Finish with the **same** `emit-verdict.sh` close ritual as Output (it auto-detects
+   Finish with the **same** `emit-review.py` close ritual as Output (schema
+   `pr-review-quorum.v1`; it dispatches
    `.verdict` and notifies the human) — do not run a separate `gc bd close`/`gc mail send`.
 
 ### Re-synthesis after a settle round (a `pr-review-settle.v1` on your `needs` edge)
@@ -118,7 +119,7 @@ adjust per each `resolutions[]` entry:
 - A refuted position (the arbiter found the flag **did not hold**, `which_holds` names the
   other lane) → **downgrade or drop** that finding and relax the `verdict` accordingly.
 Note in `summary` that this is a **post-settle re-synthesis** and cite `settle_bead`.
-Emit `pr-review-quorum.v1` and finish with the same `emit-verdict.sh` ritual (it notifies
+Emit `pr-review-quorum.v1` and finish with the same `emit-review.py` ritual (it notifies
 the human with the corrected verdict).
 
 ## Task: Settle a review divergence (`pr-review-settle.v1`) — verify-mandated, read-only
@@ -170,17 +171,16 @@ position), `head_ref`/`base_ref`, and an optional `crux_question` hint.
      `what_it_checks`). A blocked egress / limited posture is why you didn't run it — an
      honest outcome, not a failure.
    - `genuinely_ambiguous` — the evidence does not decide it; say what would.
-5. **Emit `pr-review-settle.v1`** to a unique `mktemp` file (never a fixed path — pooled
-   slots share `/tmp`), then finish with the SAME `emit-verdict.sh` ritual as a review (it
+5. **Emit `pr-review-settle.v1`** as literal JSON stdin, then finish with the SAME
+   `emit-review.py` ritual as a review (it
    detects the settle shape, notifies the human, and is re-renderable via
    `gc dev-pack summary <your-bead>`):
 
    ```bash
-   out="$(mktemp -t pr-settle.XXXXXX)"
-   # ... write your pr-review-settle.v1 object (valid JSON) to "$out" ...
-   bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-settle-bead> \
-     --verdict-file "$out" --outcome pass
-   rm -f "$out"
+   python3 "$GC_CITY_PATH/dev-pack/assets/scripts/emit-review.py" \
+     --bead <your-settle-bead> --schema pr-review-settle.v1 --outcome pass <<'JSON'
+   { <your complete pr-review-settle.v1 JSON object> }
+   JSON
    ```
 
    `pr-review-settle.v1` = `{ schema:"pr-review-settle.v1", head_ref, base_ref,
@@ -354,29 +354,21 @@ fields:
   `pr-review-dynamic` lane; `null` for `restricted`/`block`.
 - `persona_traces`: for review, the `change-review` load/material-influence record;
   synthesis carries the lane traces it relied on; settle records its `settle` lens.
-Write that object to a **unique** temp file via `mktemp` — never a fixed name
-(pooled slots share `/tmp`, so a fixed path collides with a concurrent reviewer),
-kept out of your worktree so it can't trip `read_only_enforcement`:
+Include `schema:"pr-review.v1"` (or the exact schema named by your task), then finish
+with the schema-aware stdin emitter. Supply the complete JSON object between the quoted
+heredoc markers. Apostrophes and shell characters in review prose remain literal data;
+no cross-tool shell variable or caller-owned temporary file exists. The emitter validates
+the schema, writes and reads back `gc.output_json`, closes, and notifies atomically:
 
 ```bash
-verdict_file="$(mktemp -t pr-review-verdict.XXXXXX)"
-# ... write your pr-review.v1 object (valid JSON) to "$verdict_file" ...
-```
-
-Then **finish the step with one command**. `emit-verdict.sh` writes it to
-`gc.output_json` (a metadata MERGE — never the destructive `--metadata '{…}'`),
-**closes** the bead, **and notifies** the human — atomically, so the notification
-can never be a forgotten trailing step:
-
-```bash
-# Your own review bead id is in your gc context (gc prime / your assignment).
-bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-review-bead> \
-  --verdict-file "$verdict_file" --outcome pass
-rm -f "$verdict_file"
+python3 "$GC_CITY_PATH/dev-pack/assets/scripts/emit-review.py" \
+  --bead <your-review-bead> --schema pr-review.v1 --outcome pass <<'JSON'
+{ <your complete pr-review.v1 JSON object> }
+JSON
 ```
 
 That is the **whole** close ritual — do **not** also run `gc bd close` or a
-separate `gc mail send`; `emit-verdict.sh` does all three. (The notification goes
+separate `gc mail send`; `emit-review.py` does all three. (The notification goes
 to `$GC_PR_NOTIFY_TO`, default `human`; an operator may redirect or disable it —
 you do not manage that.)
 
@@ -384,14 +376,16 @@ If you were blocked by infrastructure (provider down, repo unreachable), finish
 with the **same** command but pass the failure so a retry is sane:
 
 ```bash
-bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-review-bead> \
-  --verdict-file "$verdict_file" --outcome fail \
-  --failure-class transient --failure-reason "<stable reason>"   # or --failure-class hard
+python3 "$GC_CITY_PATH/dev-pack/assets/scripts/emit-review.py" \
+  --bead <your-review-bead> --schema pr-review.v1 --outcome fail \
+  --failure-class transient --failure-reason "<stable reason>" <<'JSON'
+{ <complete pr-review.v1 failure object> }
+JSON
 ```
 
 ## Notifying the human — automatic
 
-You do **not** send a verdict mail yourself. `emit-verdict.sh` (above) renders your
+You do **not** send a verdict mail yourself. `emit-review.py` (above) renders your
 verdict into a full human-readable summary — a one-line **subject** plus a **body**
 carrying the summary, merge recommendation, and every finding — and mails it as part
 of closing, for **every** terminal outcome (`approve`, `approve_with_nits`,
@@ -399,7 +393,7 @@ of closing, for **every** terminal outcome (`approve`, `approve_with_nits`,
 their inbox (`gc mail check`) without you managing it. (The same rendering is
 available on demand via `gc dev-pack summary <bead|PR>`.) The only case that adds a mail is a `blocked` posture
 (GATE=blocked): `gc mail send <rig>/lead` first (see the posture disposition), then
-finish with `emit-verdict.sh`.
+finish with `emit-review.py`.
 
 ## Handoff (context cycling)
 

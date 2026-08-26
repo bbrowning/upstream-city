@@ -25,7 +25,7 @@ set -euo pipefail
 GC="${GC_BIN:-gc}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NORMALIZE="$SCRIPT_DIR/normalize-pr-target.sh"
-BEAD="" ; ROOT="" ; AF="" ; OUTCOME="pass" ; FCLASS="none" ; FREASON="" ; REASON=""
+BEAD="" ; ROOT="" ; AF="" ; OUTCOME="pass" ; FCLASS="none" ; FREASON="" ; REASON="" ; CONSUME=0
 
 die() { printf '%s\n' "emit-followup: $*" >&2; exit 2; }
 
@@ -45,6 +45,7 @@ while [ $# -gt 0 ]; do
         --failure-reason=*) FREASON="${1#*=}"; shift ;;
         --reason)          REASON="${2:?}"; shift 2 ;;
         --reason=*)        REASON="${1#*=}"; shift ;;
+        --consume)         CONSUME=1; shift ;;
         -*)                die "unknown option '$1'" ;;
         *)                 die "unexpected argument '$1'" ;;
     esac
@@ -54,6 +55,7 @@ done
 [ -n "$ROOT" ] || die "usage: --root-bead is required"
 [ -n "$AF" ] && [ -f "$AF" ] || die "usage: --answer-file must be an existing file"
 OUT=$(jq -c . "$AF") || die "answer file is not valid JSON: $AF"
+[ "$CONSUME" -eq 0 ] || trap 'rm -f -- "$AF"' EXIT
 pr=$(printf '%s' "$OUT" | jq -r '.pr // empty')
 if [ -n "$pr" ]; then
     [ -x "$NORMALIZE" ] || die "target normalizer not found/executable: $NORMALIZE"

@@ -20,7 +20,7 @@
 # gc.review_quorum_lane), so emit-verdict.sh lets it notify the human directly.
 
 scope = "rig"
-nudge = "You have a settle assignment. Run `gc prime`, read your bead (schema pr-review-settle.v1), read the synthesis + both lane verdicts, VERIFY the disputed keystone by file:line reads (never a vote), write your pr-review-settle.v1 report to gc.output_json, then close the step and notify the human."
+nudge = "You have a settle assignment. Run `gc prime`, read your bead (schema pr-review-settle.v1), read the synthesis + both lane verdicts, VERIFY the disputed keystone by file:line reads (never a vote), then submit pr-review-settle.v1 once through the schema-aware emit-review.py stdin command in your prompt; it validates, stores, closes, and notifies."
 idle_timeout = "30m"
 min_active_sessions = 0
 max_active_sessions = 1

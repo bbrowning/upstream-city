@@ -234,8 +234,7 @@ metadata MERGE — never the destructive `--metadata '{…}'`):
 out="$(mktemp -t hb-output.XXXXXX)"   # <schema> is the schema your step named
 # ... write your task's JSON object (valid JSON) to "$out" ...
 bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-step-bead> \
-  --json-file "$out" --schema <schema> --outcome pass
-rm -f "$out"
+  --json-file "$out" --schema <schema> --outcome pass --consume
 ```
 
 On a retryable infrastructure failure (provider down) finish with the same command plus:

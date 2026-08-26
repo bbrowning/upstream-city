@@ -215,7 +215,8 @@ template-fragments/persona-load.template.md     # load base + activated personas
 assets/scripts/pr-prescan.sh          # deterministic, injection-proof posture ceiling (review)
 assets/scripts/posture-latitude.sh    # pure posture → FETCH/EXEC/GATE table (review)
 assets/scripts/run-scoped-check.sh    # the deterministic EXEC gate for dynamic checks (review)
-assets/scripts/emit-verdict.sh        # review-lane atomic finish: write verdict + close + notify human
+assets/scripts/emit-review.py         # schema-aware review stdin: validate + own temp lifecycle + atomic finish
+assets/scripts/emit-verdict.sh        # low-level review finish: write verdict + verify storage + close + notify
 assets/scripts/lineup-options.sh      # valid model/effort values per provider (API-first, allowlist fallback) — validate a new profile's option_defaults
 assets/valid-options.txt              # offline fallback allowlist for lineup-options.sh (keep in sync on gascity upgrade)
 assets/scripts/emit-followup.sh       # follow-up atomic finish: write answer + chain + close + thread + notify
@@ -614,8 +615,11 @@ Keep `UV_CACHE_DIR` on the same (btrfs) filesystem as the worktrees so uv reflin
 the shared wheels instead of copying. Without any of these set, dynamic checks
 simply report `could_not_verify` (no runnable env) — the review still lands.
 
-**Notifications are operator policy, not the pack's.** Every review/check finishes
-with `emit-verdict.sh`, which writes the verdict, closes the bead, **and** mails the
+**Notifications are operator policy, not the pack's.** Every review/check submits one
+complete JSON object on stdin to `emit-review.py`. This schema-aware entrypoint rejects
+missing or inconsistent fields, keeps prose out of shell expressions, owns its temporary
+file for the whole call, and delegates to `emit-verdict.sh`, which verifies the exact
+stored JSON before it closes the bead and mails the
 full human-readable summary (a one-line subject + a body with the summary, merge
 recommendation, and every finding, via `render-verdict.sh`) to `$GC_PR_NOTIFY_TO`
 (default `human`) — atomically, so the notification can't be skipped. The scanning

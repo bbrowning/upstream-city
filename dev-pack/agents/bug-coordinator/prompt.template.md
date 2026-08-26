@@ -176,17 +176,17 @@ note}] }` (a few load-bearing evidence items, not the whole list). Keep it faith
 lane — do not re-diagnose. (This is the same substance you record in `agreed_root_cause` on
 the arc state; `report` is its human-facing render.) Write it to a **unique** temp file via `mktemp` — never a fixed name (your
 slot is reused across rounds/arcs) and out of your worktree (you `git diff` there in
-finalize) — then close your step:
+finalize). When the run will continue automatically, close your step with:
 
 ```bash
 out="$(mktemp -t hb-reconcile.XXXXXX)"
 # ... write your hard-bug-reconcile.v1 object (valid JSON) to "$out" ...
 bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-reconcile-bead> \
   --json-file "$out" --schema hard-bug-reconcile.v1 --outcome pass
-rm -f "$out"
 ```
 
-**Notify the human atomically — in this SAME close command — whenever the run is pausing
+**When the run is pausing, replace the close command above with this notifying form** —
+do not run both. Notify the human atomically in this SAME close command whenever
 for a human: when `next_action` is `report_only` or `escalate` (NOT on
 `relay_next_round`/`advance_phase`/`choose_implementer`, which continue on their own).
 Folding `--notify` + `--render` + `--subject` into the close means the mail can never be a
@@ -200,7 +200,7 @@ bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-reconcile
   --json-file "$out" --schema hard-bug-reconcile.v1 --outcome pass \
   --notify "${GC_HARDBUG_NOTIFY_TO:-human}" \
   --render "$GC_CITY_PATH/dev-pack/assets/scripts/render-hardbug.sh" \
-  --subject "<subject>"
+  --subject "<subject>" --consume
 ```
 where `<subject>` speaks the run's N: at **N>=2** use
 `"bug <bug_bead> <phase> r<round>: aligned=<true|false> stronger=<lane> next=<next_action>"`;
@@ -215,7 +215,7 @@ state_file="$(mktemp -t hb-state.XXXXXX)"
 # ... write the MERGE-updated arc state (valid JSON) to "$state_file" ...
 state=$(jq -c . "$state_file")
 gc bd update <bug_bead> --set-metadata "gc.output_json=$state"
-rm -f "$state_file"
+unlink "$state_file"
 ```
 Set `last_reconcile` (include `n`, the opinion count — `last_reconcile.n`, so
 `gc dev-pack status` renders a solo run in N=1 language) and — when root cause aligns —

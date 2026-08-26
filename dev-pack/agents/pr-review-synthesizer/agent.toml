@@ -17,7 +17,7 @@
 #                           output contract it must emit.
 
 scope = "rig"
-nudge = "You have a review assignment. Run `gc prime`, read your bead, review the diff, dispose by posture (on a trusted PR auto-run one in-scope check via run-scoped-check.sh), write your pr-review.v1 verdict to gc.output_json, then close the step and notify the human."
+nudge = "You have a review assignment. Run `gc prime`, read your bead, review the diff, dispose by posture (on a trusted PR auto-run one in-scope check via run-scoped-check.sh), then submit the required review schema once through the schema-aware emit-review.py stdin command in your prompt; it validates, stores, closes, and notifies."
 idle_timeout = "30m"
 min_active_sessions = 0
 max_active_sessions = 2

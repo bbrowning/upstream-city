@@ -65,18 +65,16 @@ Assemble a `pr-review-dynamic.v1` object from the gate's result plus your contex
 (`head_ref`, `base_ref`, `command`, `approved_reason` from the `reason` var,
 `authorized_by="human-sling"`, and the gate's `ceiling`, `outcome`, `rc`,
 `env_used`, `output_tail`, `duration_s`, `git_clean_before`/`after`,
-`mutations_delta`, `reason_if_skipped`). Write it to a **unique** temp file via
-`mktemp` — never a fixed name (runner slots share `/tmp`), kept out of your
-worktree. Then **finish with one command** — `emit-verdict.sh` writes it to
+`mutations_delta`, `reason_if_skipped`) plus `schema:"pr-review-dynamic.v1"`.
+Submit it as literal JSON stdin and **finish with one command** — `emit-review.py` writes it to
 `gc.output_json` (a metadata MERGE), closes the bead, **and notifies** the human,
 atomically:
 
 ```bash
-result_file="$(mktemp -t pr-review-dynamic.XXXXXX)"
-# ... write your pr-review-dynamic.v1 object (valid JSON) to "$result_file" ...
-bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-bead> \
-  --verdict-file "$result_file" --outcome pass
-rm -f "$result_file"
+python3 "$GC_CITY_PATH/dev-pack/assets/scripts/emit-review.py" \
+  --bead <your-bead> --schema pr-review-dynamic.v1 --outcome pass <<'JSON'
+{ <your complete pr-review-dynamic.v1 JSON object> }
+JSON
 ```
 
 Use `--outcome pass` for **every** honest result — including `skipped`,
@@ -85,7 +83,7 @@ its job). Only pass `--outcome fail --failure-class transient` (or `hard`) with 
 stable `--failure-reason` if the INFRASTRUCTURE broke (provider down, repo
 unreachable, prescan infra error, or the worktree misresolved to the rig root).
 
-Do **not** run a separate `gc bd close` or `gc mail send`: `emit-verdict.sh` does
+Do **not** run a separate `gc bd close` or `gc mail send`: `emit-review.py` does
 the metadata MERGE, the close, and the human notification (to `$GC_PR_NOTIFY_TO`,
 default `human`; operator-configurable) for you.
 

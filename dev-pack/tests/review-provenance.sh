@@ -37,6 +37,13 @@ mkdir -p "$TMP/bin"
 cat >"$TMP/bin/gc" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$MOCK_GC_LOG"
+if [ "${1-} ${2-}" = "bd show" ]; then
+  line=$(grep "bd update $3 --set-metadata gc.output_json=" "$MOCK_GC_LOG" | tail -n 1)
+  out=${line#*gc.output_json=}; out=${out% --set-metadata gc.outcome=*}
+  outcome=${line##*gc.outcome=}; outcome=${outcome%% *}
+  jq -cn --arg out "$out" --arg outcome "$outcome" \
+    '[{metadata:{"gc.output_json":$out,"gc.outcome":$outcome}}]'
+fi
 EOF
 chmod +x "$TMP/bin/gc"
 

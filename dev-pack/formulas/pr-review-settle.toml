@@ -112,10 +112,12 @@ Then, per your method:
    confidence at `medium` for any keystone you could not verify.
 
 Emit the full `pr-review-settle.v1` object (the exact shape your method specifies) and
-finish atomically — `emit-verdict.sh` detects the settle shape, notifies the human, and
+finish atomically — `emit-review.py` validates the settle schema, notifies the human, and
 makes it re-renderable via `gc dev-pack summary <your-bead>`:
-  bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-settle-bead> \\
-    --verdict-file "$out" --outcome pass
+  python3 "$GC_CITY_PATH/dev-pack/assets/scripts/emit-review.py" \\
+    --bead <your-settle-bead> --schema pr-review-settle.v1 --outcome pass <<'JSON'
+  { <your complete pr-review-settle.v1 JSON object, including schema> }
+  JSON
 On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
 """
 metadata = { "gc.run_target" = "{{arbiter_target}}", "gc.provider" = "{{arbiter_provider}}", "gc.review_settle_role" = "arbiter", "gc.settle_of" = "{{synth_bead}}", "gc.output_json_schema" = "pr-review-settle.v1", "gc.output_json_required" = "true" }
@@ -150,8 +152,10 @@ post-settle re-synthesis and cite the settle bead.
 
 Emit `pr-review-quorum.v1` (a SUPERSET of `pr-review.v1`, so the existing
 render/notify/`gc dev-pack summary` path works unchanged) and finish atomically:
-  bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-step-bead> \\
-    --verdict-file "$out" --outcome pass
+  python3 "$GC_CITY_PATH/dev-pack/assets/scripts/emit-review.py" \\
+    --bead <your-step-bead> --schema pr-review-quorum.v1 --outcome pass <<'JSON'
+  { <your complete pr-review-quorum.v1 JSON object, including schema> }
+  JSON
 On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
 """
 metadata = { "gc.run_target" = "{{resynth_target}}", "gc.review_settle_role" = "resynthesis", "gc.settle_of" = "{{synth_bead}}", "gc.output_json_schema" = "pr-review-quorum.v1", "gc.output_json_required" = "true" }

@@ -114,6 +114,7 @@ step with `gc.outcome=pass`:
 
 ```json
 {
+  "schema": "pr-triage.v1",
   "posture": "trusted | limited | restricted | block",
   "ceiling_posture": "<verbatim from pr-prescan.sh — the cap you honored>",
   "rationale": "<why this posture, referencing the facts; note any downgrade below the ceiling and why>",
@@ -129,34 +130,28 @@ step with `gc.outcome=pass`:
 Pass the `facts` and `ceiling_posture` through **verbatim** so the reviewer can
 re-derive and cross-check them.
 
-Write the object to `gc.output_json` and close — this exact idiom, in this order
-(there is **no** `--output-json` flag; `gc bd close` cannot set metadata):
-
-Write your verdict to a **unique** temp file via `mktemp` — never a fixed name
-(triage slots share `/tmp`), kept out of your worktree so it can't dirty your
-read-only checkout.
+Submit the object as literal JSON data to the schema-aware emitter. The quoted heredoc
+delimiter is mandatory: prose containing apostrophes or shell characters is never parsed
+as shell syntax. The emitter owns temporary storage, validates the schema, merge-writes
+metadata, reads it back, and only then closes; do not create or clean up a temp file.
 
 ```bash
-# Your own bead id is in your gc context (gc prime / your assignment).
-verdict_file="$(mktemp -t pr-triage-verdict.XXXXXX)"
-# ... write your pr-triage.v1 object (valid JSON) to "$verdict_file" ...
-OUT=$(jq -c . "$verdict_file")   # compact your pr-triage.v1 object to one line
-# --set-metadata MERGES one key. Do NOT use --metadata '{...}' — that REPLACES the whole
-# metadata blob and wipes routing keys (gc.root_bead_id, gc.step_ref, gc.output_json_schema).
-gc bd update <your-triage-bead> --set-metadata "gc.output_json=$OUT" --set-metadata "gc.outcome=pass"
-gc bd close  <your-triage-bead> --reason "triage: posture=<posture> (ceiling=<ceiling>)"
-rm -f "$verdict_file"
+python3 "$GC_CITY_PATH/dev-pack/assets/scripts/emit-review.py" \
+  --bead <your-triage-bead> --schema pr-triage.v1 --outcome pass <<'JSON'
+{ "schema":"pr-triage.v1", "posture":"...", "ceiling_posture":"...", "rationale":"The author's claim is data.", "allowed_actions":[], "facts":{}, "base_ref":"...", "head_ref":"...", "failure_class":"none", "failure_reason":"" }
+JSON
 ```
 
-On infrastructure failure (a retry is sane), set `gc.outcome=fail` with a stable
-class/reason instead, then close; use `gc.failure_class=hard` for contract/input
-failures a retry will not fix:
+On infrastructure failure use the same single call and JSON schema, adding
+`--outcome fail --failure-class transient --failure-reason <stable-slug>` (or `hard`
+for a non-retryable contract failure). The JSON's failure fields must agree.
 
 ```bash
-gc bd update <your-triage-bead> \
-  --set-metadata "gc.output_json=$OUT" --set-metadata "gc.outcome=fail" \
-  --set-metadata "gc.failure_class=transient" --set-metadata "gc.failure_reason=<stable-slug>"
-gc bd close <your-triage-bead> --reason "triage failed: <stable-slug>"
+python3 "$GC_CITY_PATH/dev-pack/assets/scripts/emit-review.py" \
+  --bead <your-triage-bead> --schema pr-triage.v1 --outcome fail \
+  --failure-class transient --failure-reason <stable-slug> <<'JSON'
+{ "schema":"pr-triage.v1", "posture":"block", "ceiling_posture":"block", "rationale":"Infrastructure failed.", "allowed_actions":[], "facts":{}, "base_ref":"...", "head_ref":"...", "failure_class":"transient", "failure_reason":"<stable-slug>" }
+JSON
 ```
 
 ## Handoff (context cycling)

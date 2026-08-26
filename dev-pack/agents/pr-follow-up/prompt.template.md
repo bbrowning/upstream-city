@@ -84,8 +84,7 @@ result_file="$(mktemp -t pr-followup.XXXXXX)"
 # ... write your pr-followup.v1 object (valid JSON) to "$result_file" ...
 bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-followup.sh" --bead <your-step-bead-id-from-gc-prime> \
   --root-bead <root_bead from your bead> \
-  --answer-file "$result_file" --outcome pass
-rm -f "$result_file"
+  --answer-file "$result_file" --outcome pass --consume
 ```
 
 Use `--outcome pass` for every honest answer, including "I could not determine

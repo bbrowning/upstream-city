@@ -141,6 +141,20 @@ if [ "$FCLASS" != "none" ]; then
     "$GC" bd update "$BEAD" --set-metadata "gc.failure_class=$FCLASS" --set-metadata "gc.failure_reason=$FREASON"
 fi
 
+# Fail closed before close: prove the exact normalized verdict/outcome survived the
+# metadata write. Empty/truncated storage can never become a successful logical step.
+stored_bead=$("$GC" bd show "$BEAD" --json) || die "could not verify stored output for $BEAD"
+stored_out=$(printf '%s' "$stored_bead" | jq -ce '
+    (if type == "array" then .[0] else . end).metadata["gc.output_json"]
+    | if type == "string" then fromjson else . end') \
+    || die "stored gc.output_json is empty or invalid for $BEAD"
+stored_outcome=$(printf '%s' "$stored_bead" | jq -er '
+    (if type == "array" then .[0] else . end).metadata["gc.outcome"] // empty') \
+    || die "stored gc.outcome is empty for $BEAD"
+[ "$(printf '%s' "$stored_out" | jq -S -c .)" = "$(printf '%s' "$OUT" | jq -S -c .)" ] \
+    || die "stored gc.output_json does not match submitted output for $BEAD"
+[ "$stored_outcome" = "$OUTCOME" ] || die "stored gc.outcome does not match submitted outcome for $BEAD"
+
 # --- CLOSE the step ----------------------------------------------------------
 if [ -z "$REASON" ]; then
     if jq -e '.resolutions' "$VF" >/dev/null 2>&1; then

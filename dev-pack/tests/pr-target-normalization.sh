@@ -18,6 +18,12 @@ elif [[ "$args" == *" bd list "* ]]; then
     jq -cn '[{id:"vllm-root",closed_at:"2026-08-25T00:00:00Z",close_reason:"review: approve",metadata:{"gc.root_bead_id":"vllm-run","gc.output_json_schema":"pr-review.v1","gc.output_json":"{\"schema\":\"pr-review.v1\",\"head_ref\":\"vllm#53174\",\"base_ref\":\"origin/main\",\"verdict\":\"approve\",\"findings_count\":0,\"summary\":\"ok\"}"}}]'
 elif [[ "$args" == *" bd show vllm-root --json "* ]]; then
     jq -cn '[{id:"vllm-root",metadata:{"gc.root_bead_id":"vllm-run","gc.output_json_schema":"pr-review.v1","gc.output_json":"{\"schema\":\"pr-review.v1\",\"head_ref\":\"vllm#53174\",\"base_ref\":\"origin/main\",\"verdict\":\"approve\",\"findings_count\":0,\"summary\":\"ok\"}"}}]'
+elif [[ "$args" == *" bd show vllm-step --json "* ]]; then
+    line=$(grep 'bd update vllm-step --set-metadata gc.output_json=' "${GC_TEST_LOG:?}" | tail -n 1)
+    out=${line#*gc.output_json=}; out=${out% --set-metadata gc.outcome=*}
+    outcome=${line##*gc.outcome=}; outcome=${outcome%% *}
+    jq -cn --arg out "$out" --arg outcome "$outcome" \
+      '[{id:"vllm-step",metadata:{"gc.output_json":$out,"gc.outcome":$outcome}}]'
 elif [[ "$args" == *" bd update "* || "$args" == *" bd close "* ]]; then
     printf '%s\n' "$*" >> "${GC_TEST_LOG:?}"
 else

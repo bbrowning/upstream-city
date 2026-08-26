@@ -20,7 +20,7 @@
 set -euo pipefail
 
 GC="${GC_BIN:-gc}"
-BEAD="" ; JF="" ; SCHEMA="" ; OUTCOME="pass" ; FCLASS="none" ; FREASON="" ; REASON="" ; NOTIFY="" ; SUBJECT="" ; RENDER=""
+BEAD="" ; JF="" ; SCHEMA="" ; OUTCOME="pass" ; FCLASS="none" ; FREASON="" ; REASON="" ; NOTIFY="" ; SUBJECT="" ; RENDER="" ; CONSUME=0
 
 die() { printf '%s\n' "emit-json: $*" >&2; exit 2; }
 
@@ -46,6 +46,7 @@ while [ $# -gt 0 ]; do
         --subject=*)        SUBJECT="${1#*=}"; shift ;;
         --render)           RENDER="${2:?}"; shift 2 ;;
         --render=*)         RENDER="${1#*=}"; shift ;;
+        --consume)          CONSUME=1; shift ;;
         -*)                 die "unknown option '$1'" ;;
         *)                  die "unexpected argument '$1'" ;;
     esac
@@ -54,6 +55,7 @@ done
 [ -n "$BEAD" ] || die "usage: --bead is required"
 [ -n "$JF" ] && [ -f "$JF" ] || die "usage: --json-file must be an existing file"
 OUT=$(jq -c . "$JF") || die "json file is not valid JSON: $JF"
+[ "$CONSUME" -eq 0 ] || trap 'rm -f -- "$JF"' EXIT
 
 # --- write metadata (MERGE — never --metadata '{…}', which wipes routing keys) ---
 "$GC" bd update "$BEAD" --set-metadata "gc.output_json=$OUT" --set-metadata "gc.outcome=$OUTCOME"
@@ -67,6 +69,19 @@ OUT=$(jq -c . "$JF") || die "json file is not valid JSON: $JF"
 if [ "$FCLASS" != "none" ]; then
     "$GC" bd update "$BEAD" --set-metadata "gc.failure_class=$FCLASS" --set-metadata "gc.failure_reason=$FREASON"
 fi
+
+# Fail closed before close: prove the exact JSON/outcome survived the metadata write.
+stored_bead=$("$GC" bd show "$BEAD" --json) || die "could not verify stored output for $BEAD"
+stored_out=$(printf '%s' "$stored_bead" | jq -ce '
+    (if type == "array" then .[0] else . end).metadata["gc.output_json"]
+    | if type == "string" then fromjson else . end') \
+    || die "stored gc.output_json is empty or invalid for $BEAD"
+stored_outcome=$(printf '%s' "$stored_bead" | jq -er '
+    (if type == "array" then .[0] else . end).metadata["gc.outcome"] // empty') \
+    || die "stored gc.outcome is empty for $BEAD"
+[ "$(printf '%s' "$stored_out" | jq -S -c .)" = "$(printf '%s' "$OUT" | jq -S -c .)" ] \
+    || die "stored gc.output_json does not match submitted output for $BEAD"
+[ "$stored_outcome" = "$OUTCOME" ] || die "stored gc.outcome does not match submitted outcome for $BEAD"
 
 # --- CLOSE the step ----------------------------------------------------------
 [ -n "$REASON" ] || REASON="bug step: ${SCHEMA:-output} ($OUTCOME)"

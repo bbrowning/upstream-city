@@ -92,7 +92,7 @@ Write this JSON object (schema `pr-review-dynamic.v1`) to `gc.output_json`:
 - `summary`: 1–3 sentences — what ran, the result, and any honesty note
 - `failure_class`: one of `none`, `transient`, `hard`; `failure_reason`: stable string or ""
 
-Finish the step with the single `emit-verdict.sh` command (see your runner method):
+Finish the step with the single schema-aware `emit-review.py` stdin command (see your runner method):
 it writes the JSON to `gc.output_json`, closes the bead, AND notifies the human,
 atomically. Use `--outcome pass` for every honest result (including `skipped`,
 `could_not_verify`, and a real `fail` — the *check* failed but your *step* did its

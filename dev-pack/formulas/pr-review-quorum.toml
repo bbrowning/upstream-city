@@ -116,6 +116,7 @@ Method (see your triage method for detail):
 
 Write this JSON object (schema `pr-triage.v1`) to `gc.output_json`:
 
+- `schema`: `pr-triage.v1`
 - `posture`: one of `trusted`, `limited`, `restricted`, `block`
 - `ceiling_posture`: verbatim from the pre-scan (the cap you honored)
 - `rationale`: why this posture, citing the facts; note any downgrade and why
@@ -129,6 +130,11 @@ On success close with `gc.outcome=pass` and the JSON in `gc.output_json`. If the
 pre-scan fails on infrastructure (missing `gh`, unreachable PR) close with
 `gc.outcome=fail`, `gc.failure_class=transient`, and a stable `gc.failure_reason`.
 Use `gc.failure_class=hard` for contract/input failures a retry will not fix.
+Submit it in one safety-wrapper-compatible call:
+  python3 "$GC_CITY_PATH/dev-pack/assets/scripts/emit-review.py" \\
+    --bead <your-step-bead> --schema pr-triage.v1 --outcome pass <<'JSON'
+  { <your complete pr-triage.v1 JSON object, including schema> }
+  JSON
 """
 metadata = { "gc.run_target" = "{{triage_target}}", "gc.output_json_schema" = "pr-triage.v1", "gc.output_json_required" = "true" }
 
@@ -170,14 +176,16 @@ merge_recommendation, findings_count, findings[], dynamic_check, dynamic_request
 implementation_provenance (artifact ref/id, repository id, branch, revision, and
 exact base/head SHAs; null for PRs), evidence, read_only_enforcement, failure_class,
 failure_reason) and finish atomically:
-  bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-step-bead> \\
-    --verdict-file "$out" --outcome pass --repo . \\
+  python3 "$GC_CITY_PATH/dev-pack/assets/scripts/emit-review.py" \\
+    --bead <your-step-bead> --schema pr-review.v1 --outcome pass --repo . \\
     --implementation-artifact-ref "{{implementation_artifact_ref}}" \\
     --implementation-artifact-id "{{implementation_artifact_id}}" \\
     --implementation-repository-id "{{implementation_repository_id}}" \\
     --implementation-branch "{{implementation_branch}}" \\
     --implementation-revision "{{implementation_revision}}" \\
-    --implementation-base-sha "{{base_ref}}" --implementation-head-sha "{{head_ref}}"
+    --implementation-base-sha "{{base_ref}}" --implementation-head-sha "{{head_ref}}" <<'JSON'
+  { <your complete pr-review.v1 JSON object, including schema> }
+  JSON
 On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
 """
 metadata = { "gc.run_target" = "{{lane_a_target}}", "gc.provider" = "{{lane_a_provider}}", "opt_model" = "{{lane_a_model}}", "opt_effort" = "{{lane_a_effort}}", "gc.review_quorum_lane" = "{{lane_a_id}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true" }
@@ -220,14 +228,16 @@ merge_recommendation, findings_count, findings[], dynamic_check, dynamic_request
 implementation_provenance (artifact ref/id, repository id, branch, revision, and
 exact base/head SHAs; null for PRs), evidence, read_only_enforcement, failure_class,
 failure_reason) and finish atomically:
-  bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-step-bead> \\
-    --verdict-file "$out" --outcome pass --repo . \\
+  python3 "$GC_CITY_PATH/dev-pack/assets/scripts/emit-review.py" \\
+    --bead <your-step-bead> --schema pr-review.v1 --outcome pass --repo . \\
     --implementation-artifact-ref "{{implementation_artifact_ref}}" \\
     --implementation-artifact-id "{{implementation_artifact_id}}" \\
     --implementation-repository-id "{{implementation_repository_id}}" \\
     --implementation-branch "{{implementation_branch}}" \\
     --implementation-revision "{{implementation_revision}}" \\
-    --implementation-base-sha "{{base_ref}}" --implementation-head-sha "{{head_ref}}"
+    --implementation-base-sha "{{base_ref}}" --implementation-head-sha "{{head_ref}}" <<'JSON'
+  { <your complete pr-review.v1 JSON object, including schema> }
+  JSON
 On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
 """
 metadata = { "gc.run_target" = "{{lane_b_target}}", "gc.provider" = "{{lane_b_provider}}", "opt_model" = "{{lane_b_model}}", "opt_effort" = "{{lane_b_effort}}", "gc.review_quorum_lane" = "{{lane_b_id}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true" }
@@ -280,9 +290,11 @@ existing renderer/notify/summary work unchanged) PLUS:
 - `evidence`: which lane beads you read and how you merged (internal provenance).
 - `read_only_enforcement`: `{clean:true, mutations_delta:[]}` (you only read beads).
 
-Finish atomically (emit-verdict.sh auto-detects `.verdict` -> review-shaped notify):
-  bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-verdict.sh" --bead <your-step-bead> \\
-    --verdict-file "$out" --outcome pass
+Finish atomically with the schema-aware stdin emitter:
+  python3 "$GC_CITY_PATH/dev-pack/assets/scripts/emit-review.py" \\
+    --bead <your-step-bead> --schema pr-review-quorum.v1 --outcome pass <<'JSON'
+  { <your complete pr-review-quorum.v1 JSON object, including schema> }
+  JSON
 On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
 
 SETTLE ROUND (the divergence dial), AFTER you close above:
