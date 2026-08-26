@@ -63,18 +63,19 @@ RIG=$(printf '%s' "$NORM" | jq -r '.rig')
 # beads that do NOT carry gc.review_quorum_lane (a genuine N=1 solo run).
 # Every formula step ALSO leaves a "logical" mirror bead with the same
 # gc.output_json but close_reason=null (not the one emit-verdict.sh actually
-# mailed from) — the canon filter still applies, but only as a tie-break
-# WITHIN whichever tier (synthesis, or solo) was already selected, never across
-# tiers.
+# mailed from). Collapse each work/logical pair via gc.logical_bead_id before
+# choosing a tier, preferring the canonical emitted work bead within the pair.
+#
+# Do not use --metadata-field here. That index is eventually consistent, which
+# is exactly how a just-finished synthesis used to disappear from this lookup
+# while its lanes were already visible. Listing once and filtering the complete
+# snapshot locally also prevents the two schema queries from observing
+# different points in time.
 if printf '%s' "$SPEC" | grep -qE '^[0-9]+$'; then
     N="$SPEC"
     RESULT=$(
-        {
-            "$GC" --city "$CITY" --rig "$RIG" bd list --all --json \
-                --metadata-field "gc.output_json_schema=pr-review.v1" -n 0 2>/dev/null || true
-            "$GC" --city "$CITY" --rig "$RIG" bd list --all --json \
-                --metadata-field "gc.output_json_schema=pr-review-quorum.v1" -n 0 2>/dev/null || true
-        } | jq -s 'add // []' | jq -c --arg n "$N" --arg rig "$RIG" '
+        ("$GC" --city "$CITY" --rig "$RIG" bd list --all --json -n 0 2>/dev/null || printf '[]') \
+        | jq -c --arg n "$N" --arg rig "$RIG" '
             [ .[]?
               | . as $b
               | ($b.metadata["gc.output_json"] // "" | fromjson?) as $vj
@@ -82,15 +83,22 @@ if printf '%s' "$SPEC" | grep -qE '^[0-9]+$'; then
                        and ((($vj.head_ref // "") | tostring) as $head
                             | ($head == $n or $head == ($rig + "#" + $n))))
               | {id: $b.id,
+                 mirror_key: ($b.metadata["gc.logical_bead_id"] // $b.id),
                  ts: ($b.closed_at // $b.updated_at // $b.created_at // ""),
                  canon: (($b.close_reason // "") | test("^(review|dynamic check):")),
-                 schema: ($b.metadata["gc.output_json_schema"] // ""),
+                 is_synthesis: (($b.metadata["gc.output_json_schema"] // "") == "pr-review-quorum.v1"
+                                or ($b.metadata["gc.review_quorum_role"] // "") == "synthesis"),
                  is_lane: ($b.metadata["gc.review_quorum_lane"] != null)}
             ] as $all
-            | ($all | map(select(.schema == "pr-review-quorum.v1"))) as $synth
-            | (if ($synth|length) > 0 then $synth else ($all | map(select(.is_lane | not))) end) as $tier
-            | (($tier | map(select(.canon))) as $c | if ($c|length) > 0 then $c else $tier end) as $final
-            | if ($final|length) > 0 then {bead: ($final | sort_by(.ts) | last | .id), reason: null}
+            | ($all
+               | sort_by(.mirror_key)
+               | group_by(.mirror_key)
+               | map((map(select(.canon))) as $canon
+                     | (if ($canon | length) > 0 then $canon else . end)
+                     | sort_by(.ts) | last)) as $steps
+            | ($steps | map(select(.is_synthesis))) as $synth
+            | (if ($synth|length) > 0 then $synth else ($steps | map(select(.is_lane | not))) end) as $tier
+            | if ($tier|length) > 0 then {bead: ($tier | sort_by(.ts) | last | .id), reason: null}
               elif ($all|length) == 0 then {bead: null, reason: "none"}
               else {bead: null, reason: "lanes-only"}
               end' 2>/dev/null || printf '{"bead":null,"reason":"none"}'

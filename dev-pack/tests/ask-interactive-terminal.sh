@@ -30,12 +30,10 @@ printf '%s\n' "$*" >> "${GC_TEST_LOG:?}"
 args=" $* "
 if [[ "$args" == *" rig list --json "* ]]; then
     printf '%s\n' '{"rigs":[{"name":"vllm","path":"/tmp/vllm"}]}'
-elif [[ "$args" == *" bd list "* && "$args" == *"gc.output_json_schema=pr-review.v1"* ]]; then
-    jq -cn '[{id:"vllm-root",closed_at:"2026-08-25T00:00:00Z",metadata:{"gc.output_json_schema":"pr-review.v1","gc.output_json":"{\"head_ref\":\"53174\",\"verdict\":\"approve\",\"findings_count\":0,\"summary\":\"ok\"}"}}]'
-elif [[ "$args" == *" bd list "* && "$args" == *"gc.output_json_schema=pr-review-quorum.v1"* ]]; then
-    printf '%s\n' '[]'
 elif [[ "$args" == *" bd list "* && "$args" == *"gc.followup_of="* ]]; then
     printf '%s\n' '[]'
+elif [[ "$args" == *" bd list "* ]]; then
+    jq -cn '[{id:"vllm-root",closed_at:"2026-08-25T00:00:00Z",close_reason:"review: approve",metadata:{"gc.output_json_schema":"pr-review.v1","gc.output_json":"{\"head_ref\":\"53174\",\"verdict\":\"approve\",\"findings_count\":0,\"summary\":\"ok\"}"}}]'
 elif [[ "$args" == *" bd show vllm-root --json "* ]]; then
     jq -cn '[{id:"vllm-root",metadata:{"gc.output_json":"{\"head_ref\":\"53174\",\"verdict\":\"approve\",\"findings_count\":0,\"summary\":\"ok\"}"}}]'
 elif [[ "$args" == *" session list "* ]]; then
