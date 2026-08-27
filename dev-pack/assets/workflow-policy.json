@@ -1,0 +1,30 @@
+{
+  "schema": "dev-pack-workflow-policy.v1",
+  "defaults": {
+    "base_ref": "origin/main",
+    "max_rounds": 3,
+    "max_review_iterations": 3,
+    "local_only": true,
+    "completion_checkpoint": "approved"
+  },
+  "presets": {
+    "quality": {
+      "feature": { "review_n": 2, "formula": "feature-dev" },
+      "bug": { "diagnosis_n": 2, "enable_loop": true, "review_n": 2, "formula": "hard-bug-round" },
+      "review": { "n": 2, "formula": "pr-review-quorum" }
+    },
+    "fast": {
+      "feature": { "review_n": 1 },
+      "bug": { "diagnosis_n": 1, "enable_loop": true, "review_n": 1, "formula": "hard-bug-round-solo" },
+      "review": { "n": 1, "formula": "pr-review" }
+    },
+    "report_only": {
+      "bug": { "diagnosis_n": 2, "enable_loop": false, "review_n": 2 }
+    }
+  },
+  "reviewers": {
+    "lane_a": "pr-reviewer-sonnet-xhigh",
+    "lane_b": "pr-reviewer-gpt56luna-xhigh",
+    "solo": "pr-reviewer-gpt56luna-xhigh"
+  }
+}

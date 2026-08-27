@@ -18,12 +18,17 @@ set -euo pipefail
 
 GC="${GC_BIN:-gc}"
 CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+POLICY="$SCRIPT_DIR/../../assets/workflow-policy.json"
+[ -r "$POLICY" ] || { printf '%s\n' "bug: workflow policy not found: $POLICY" >&2; exit 2; }
 
-BEAD="" ; RIG="" ; LOOP="" ; MAXR="3" ; BASEREF="origin/main"
+BEAD="" ; RIG="" ; LOOP="" ; MAXR="$(jq -er '.defaults.max_rounds' "$POLICY")"
+BASEREF="$(jq -er '.defaults.base_ref' "$POLICY")"
 N="" ; MODELS="" ; PRESET="quality"
 LANE_A_MODEL="" ; LANE_B_MODEL="" ; LANE_A_TARGET="" ; LANE_B_TARGET=""
 BRANCH_PREFIX=""
-REVIEW_N="2" ; REVIEW_LANES="" ; MAX_REVIEW_ITERATIONS="3"
+REVIEW_N="$(jq -er '.presets.quality.bug.review_n' "$POLICY")" ; REVIEW_N_SET=false ; REVIEW_LANES=""
+MAX_REVIEW_ITERATIONS="$(jq -er '.defaults.max_review_iterations' "$POLICY")"
 DRYRUN="no"
 
 usage() {
@@ -84,8 +89,8 @@ while [ $# -gt 0 ]; do
         --lane-b-target=*) LANE_B_TARGET="${1#*=}"; shift ;;
         --branch-prefix)   BRANCH_PREFIX="${2:?}"; shift 2 ;;
         --branch-prefix=*) BRANCH_PREFIX="${1#*=}"; shift ;;
-        --review-n)        REVIEW_N="${2:?}"; shift 2 ;;
-        --review-n=*)      REVIEW_N="${1#*=}"; shift ;;
+        --review-n)        REVIEW_N_SET=true; REVIEW_N="${2:?}"; shift 2 ;;
+        --review-n=*)      REVIEW_N_SET=true; REVIEW_N="${1#*=}"; shift ;;
         --review-lanes)    REVIEW_LANES="${2:?}"; shift 2 ;;
         --review-lanes=*)  REVIEW_LANES="${1#*=}"; shift ;;
         --max-review-iterations) MAX_REVIEW_ITERATIONS="${2:?}"; shift 2 ;;
@@ -101,10 +106,16 @@ done
 [ -n "$BEAD" ] || { usage >&2; die "missing <arc-bead>"; }
 
 case "$PRESET" in
-    quality)     [ -n "$N" ] || N=2; [ -n "$LOOP" ] || LOOP=true ;;
-    fast)        [ -n "$N" ] || N=1; [ -n "$LOOP" ] || LOOP=true ;;
-    report_only) [ -n "$N" ] || N=2; [ -n "$LOOP" ] || LOOP=false ;;
+    quality)     [ -n "$N" ] || N=$(jq -er '.presets.quality.bug.diagnosis_n' "$POLICY");
+                 [ -n "$LOOP" ] || LOOP=$(jq -r '.presets.quality.bug.enable_loop' "$POLICY") ;;
+    fast)        [ -n "$N" ] || N=$(jq -er '.presets.fast.bug.diagnosis_n' "$POLICY");
+                 [ -n "$LOOP" ] || LOOP=$(jq -r '.presets.fast.bug.enable_loop' "$POLICY") ;;
+    report_only) [ -n "$N" ] || N=$(jq -er '.presets.report_only.bug.diagnosis_n' "$POLICY");
+                 [ -n "$LOOP" ] || LOOP=$(jq -r '.presets.report_only.bug.enable_loop' "$POLICY") ;;
 esac
+if [ "$REVIEW_N_SET" = false ]; then
+    REVIEW_N=$(jq -er ".presets.${PRESET}.bug.review_n" "$POLICY")
+fi
 
 # Only two lane-steps exist today, so N is 1 or 2 (the structure extends to N>2 by
 # adding lane-count formula variants).
@@ -132,15 +143,15 @@ fi
 COORD="$RIG/bug-coordinator"
 [ -n "$LANE_A_TARGET" ] || LANE_A_TARGET="$RIG/bug-worker-a"
 [ -n "$LANE_B_TARGET" ] || LANE_B_TARGET="$RIG/bug-worker-b"
-REVIEW_LANE_A="$RIG/pr-reviewer-sonnet-xhigh"
-REVIEW_LANE_B="$RIG/pr-reviewer-gpt56luna-xhigh"
+REVIEW_LANE_A="$RIG/$(jq -er '.reviewers.lane_a' "$POLICY")"
+REVIEW_LANE_B="$RIG/$(jq -er '.reviewers.lane_b' "$POLICY")"
 if [ -n "$REVIEW_LANES" ]; then
     IFS=',' read -r REVIEW_LANE_A REVIEW_LANE_B _ <<<"$REVIEW_LANES" || true
     [ -n "$REVIEW_LANE_A" ] || die "--review-lanes requires a lane A profile"
     if [ "$REVIEW_N" = "2" ]; then [ -n "$REVIEW_LANE_B" ] || die "--review-n 2 requires two --review-lanes profiles"
     else
         [ -z "$REVIEW_LANE_B" ] || die "--review-n 1 accepts one --review-lanes profile"
-        REVIEW_LANE_B="$RIG/pr-reviewer-gpt56luna-xhigh"
+        REVIEW_LANE_B="$RIG/$(jq -er '.reviewers.lane_b' "$POLICY")"
     fi
 fi
 

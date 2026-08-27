@@ -13,10 +13,14 @@ set -euo pipefail
 
 GC="${GC_BIN:-gc}"
 CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+POLICY="$SCRIPT_DIR/../../assets/workflow-policy.json"
+[ -r "$POLICY" ] || { printf '%s\n' "feature: workflow policy not found: $POLICY" >&2; exit 2; }
 
-RIG="" ; BASE="origin/main" ; BEAD="" ; DRYRUN="no" ; FETCH_BASE="true"
+RIG="" ; BASE="$(jq -er '.defaults.base_ref' "$POLICY")" ; BEAD="" ; DRYRUN="no" ; FETCH_BASE="true"
 REVISION="1" ; PREVIOUS_ARTIFACT="" ; FEEDBACK_BEAD="" ; PRODUCING_VERDICT=""
-REVIEW_N="2" ; MAX_REVIEW_ITERATIONS="3"
+REVIEW_N="$(jq -er '.presets.quality.feature.review_n' "$POLICY")"
+MAX_REVIEW_ITERATIONS="$(jq -er '.defaults.max_review_iterations' "$POLICY")"
 REVIEW_LANE_A="" ; REVIEW_LANE_B=""
 REVIEW_LANES_SET="false" ; REVIEW_N_SET="false" ; PRESET="quality"
 
@@ -78,7 +82,10 @@ done
 [ $# -eq 0 ] || { [ -z "$BEAD" ] && BEAD="$1"; }
 [ -n "$BEAD" ] || { usage >&2; die "missing <bead>"; }
 if [ "$REVIEW_N_SET" = false ]; then
-    case "$PRESET" in quality) REVIEW_N=2 ;; fast) REVIEW_N=1 ;; esac
+    case "$PRESET" in
+        quality) REVIEW_N=$(jq -er '.presets.quality.feature.review_n' "$POLICY") ;;
+        fast) REVIEW_N=$(jq -er '.presets.fast.feature.review_n' "$POLICY") ;;
+    esac
 fi
 case "$REVISION" in ''|*[!0-9]*) die "--revision must be a positive integer" ;; esac
 [ "$REVISION" -ge 1 ] || die "--revision must be a positive integer"
@@ -98,14 +105,14 @@ if [ -z "$RIG" ]; then
     RIG="${BEAD%-*}"
     [ -n "$RIG" ] && [ "$RIG" != "$BEAD" ] || die "cannot infer rig from bead '$BEAD'; pass --rig NAME"
 fi
-[ -n "$REVIEW_LANE_A" ] || REVIEW_LANE_A="$RIG/pr-reviewer-sonnet-xhigh"
+[ -n "$REVIEW_LANE_A" ] || REVIEW_LANE_A="$RIG/$(jq -er '.reviewers.lane_a' "$POLICY")"
 if [ "$REVIEW_N" = "2" ]; then
     [ "$REVIEW_LANES_SET" = "false" ] || [ -n "$REVIEW_LANE_B" ] \
         || die "--review-n 2 requires two --review-lanes profiles"
-    [ -n "$REVIEW_LANE_B" ] || REVIEW_LANE_B="$RIG/pr-reviewer-gpt56luna-xhigh"
+    [ -n "$REVIEW_LANE_B" ] || REVIEW_LANE_B="$RIG/$(jq -er '.reviewers.lane_b' "$POLICY")"
 else
     [ -z "$REVIEW_LANE_B" ] || die "--review-n 1 accepts exactly one --review-lanes profile"
-    REVIEW_LANE_B="$RIG/pr-reviewer-gpt56luna-xhigh"
+    REVIEW_LANE_B="$RIG/$(jq -er '.reviewers.lane_b' "$POLICY")"
 fi
 
 set -- "$RIG/feature-dev" feature-dev --formula \

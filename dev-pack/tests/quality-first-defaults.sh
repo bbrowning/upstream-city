@@ -29,6 +29,7 @@ bug_fast=$(GC_BIN=gc "$BUG" paude-bug-1 --rig paude --fast --dry-run)
 expect "$bug_fast" 'preset=fast' 'bug fast preset not exposed'
 expect "$bug_fast" 'hard-bug-round-solo --formula' 'bug fast preset did not select solo formula'
 expect "$bug_fast" 'loop=true' 'bug fast preset silently became report-only'
+expect "$bug_fast" 'review_n=1' 'bug fast preset did not opt implementation review down to N=1'
 bug_report=$(GC_BIN=gc "$BUG" paude-bug-1 --rig paude --report-only --dry-run)
 expect "$bug_report" 'preset=report_only' 'bug report-only preset not explicit'
 expect "$bug_report" 'diagnosis_n=2' 'bug report-only lost quality diagnosis fan-out'

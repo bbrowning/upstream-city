@@ -8,17 +8,16 @@ get from N separate containers by hand — but from **native gascity mechanics
 alone** (no phantom `isolation="worktree"` primitive; that does not exist in
 v1.4.0). Each agent slot runs inside its **own git worktree**.
 
-Review and bug carry an orthogonal **opinion-count dial** (`--n`): N=1 is a single
-lane that self-verifies its own keystones; N≥2 fans out N independent opinions
-(different models/vendors) into a synthesis/judge step that takes the best. N is
+Review and bug carry an orthogonal **opinion-count dial** (`--n`). Quality defaults
+to N=2 independent opinions; `--fast`/`--solo` explicitly opts down to N=1. N is
 *breadth* (how many opinions per stage) — orthogonal to the bug lane's `--max-rounds`
 *depth* (how many convergence iterations those opinions go through).
 
 | Lane | Kick off | What it does |
 |---|---|---|
-| **review** | `gc dev-pack review <PR> [--n N] [--lineup p:m:e,…]` | posture-gated PR review → a structured merge verdict (read-only + one trusted auto-check); N≥2 runs a reviewer quorum → synthesis; `--lineup` names provider/model/effort per opinion, validated before dispatch |
-| **bug** | `gc dev-pack bug <bead> [--n N]` | converge root cause/fix, implement locally, then enter shared N=2 immutable-artifact review/settle/revise |
-| **feature** | `gc dev-pack feature <bead>` | implement locally, then enter the same bounded N=2 review/settle/revise lifecycle |
+| **review** | `gc dev-pack review <PR> [--lanes A,B]` | posture-gated, read-only N=2 review quorum → strict synthesis → readable verdict |
+| **bug** | `gc dev-pack bug <bead>` | N=2 diagnosis → bounded convergence → local implementation → shared N=2 review/settle/revise |
+| **feature** | `gc dev-pack feature <bead>` | local implementation → shared bounded N=2 review/settle/revise |
 
 Helpers: `gc dev-pack materialize <PR>` (durable human checkout) ·
 `gc dev-pack summary <bead|PR>` (re-render a stored verdict) ·
@@ -50,7 +49,7 @@ hunting for its result:
      │
      ├─ verdict + reasoning + nits are already in the body → make the merge call. Done.
      │
-     ├─ want it again later? (verdict mail is ephemeral)
+     ├─ want it again later? (even if the mail is archived)
      │      gc dev-pack summary 51296       ← re-render the verdict, LLM-free
      │
      ├─ have a specific followup question?
@@ -93,19 +92,134 @@ A few things make this ergonomic instead of a scavenger hunt:
 
 Everything below is the detail behind those arrows.
 
+## Canonical operator contract
+
+Ask the owning rig lead “implement this feature,” “fix this bug,” or “review PR N.”
+The lead creates or identifies the rig bead and selects the same quality-first commands
+shown below. Formula and agent names are implementation details; direct `gc sling` is a
+power-user diagnostic path, not the normal human entrypoint.
+
+### One lifecycle, three entrypoints
+
+```text
+human request
+  ├─ feature ───────────────▶ isolated local implementation
+  ├─ hard bug ─▶ N=2 diagnosis ─▶ bounded convergence ─▶ isolated local implementation
+  └─ PR review ─────────────▶ N=2 read-only reviews ─▶ strict synthesis ─▶ human verdict
+                                             │
+local feature/bug implementation ─▶ immutable artifact (branch + exact HEAD SHA)
+                                             │
+                                             ▼
+                      N=2 independent review ─▶ strict synthesis
+                                             │
+                         disputed major? ─yes─┴─▶ evidence settlement
+                                             │
+                           ┌──── approved ────┴──── request changes ────┐
+                           ▼                                            ▼
+                    close parent at exact                     new commit + artifact
+                    approved artifact/SHA                    (maximum 3 revisions)
+                                                                        │
+                                                          exhausted ────┴──▶ rig /lead
+                                                          (evidence, no mayor hold)
+```
+
+No implementation path pushes, publishes, opens a PR, mutates a remote, or merges.
+Only the approved exact-artifact checkpoint closes feature/bug parent work. PR review is
+read-only and leaves the merge call to the human.
+
+### Presets, knobs, and defaults
+
+The machine-readable source is `assets/workflow-policy.json`; wrappers consume it and
+`tests/workflow-contract.sh` rejects drift in formulas, docs, help, or dry-runs.
+
+| Workflow | Quality default | Explicit opt-downs | Bounds / profiles |
+|---|---|---|---|
+| Feature | `--quality`, review N=2, full review/revise/settle | `--fast` or `--solo` → review N=1 | base `origin/main`; max review iterations 3; `sonnet-xhigh` + `gpt56luna-xhigh` |
+| Hard bug | `--quality`, diagnosis `--n 2`, convergence on, implementation review `--review-n 2` | `--fast`/`--solo` → diagnosis N=1 + review N=1 with convergence; `--report-only` → N=2 diagnosis only | max rounds 3 per phase; max review iterations 3; base `origin/main` |
+| PR review | `--quality`, `--n 2` quorum | `--fast` or `--solo` → N=1 | base `origin/main`; `--lanes` selects reviewer profiles |
+
+For bugs, `--n` controls **diagnosis opinions**. `--review-n` separately controls
+**reviewers of the implemented fix**. Changing one never silently changes the other.
+Use `--review-lanes A[,B]` for feature/bug implementation review profiles and `--lanes
+A[,B]` for standalone PR reviewer profiles.
+
+### Launch, monitor, and retrieve results
+
+```bash
+# Quality defaults
+gc dev-pack feature vllm-123
+gc dev-pack bug vllm-456
+gc dev-pack review 53174 --rig vllm
+
+# Inspect the exact selection before launch
+gc dev-pack feature vllm-123 --dry-run
+gc dev-pack bug vllm-456 --dry-run
+gc dev-pack review 53174 --rig vllm --dry-run
+
+# Monitor durable state
+gc bd show vllm-123                         # gc.lifecycle_json: branch/artifact/SHA/revision
+gc dev-pack status vllm-456                # bug phase, round, status, implementer
+gc bd show vllm-456                         # lifecycle + lead-escalation evidence
+gc mail inbox                              # verdict/final/lead-escalation notifications
+
+# Re-render a stored PR verdict
+gc dev-pack summary 53174
+
+# Extract and verify the final local handoff
+gc bd show vllm-123 --json | \
+  jq -r '.[0].metadata["gc.lifecycle_json"] | fromjson | [.branch,.head_sha] | @tsv'
+git -C rigs/vllm rev-parse <branch>          # must equal the recorded head_sha
+```
+
+Feature and bug completion returns a **local branch and exact HEAD SHA** in the final
+`change-lifecycle-final.v1` output and the parent bead's `gc.lifecycle_json`. Verify the
+branch still resolves to that SHA before extracting or publishing it yourself. Review
+results arrive as readable mail and remain durable on their verdict bead.
+
+### Outcomes, recovery, and escalation
+
+| Outcome | Durable state | Operator action |
+|---|---|---|
+| Approved | parent closed at the exact artifact, branch, and SHA | inspect/extract locally; publish only by explicit human action |
+| Request changes below cap | parent open; feedback bead and revision lineage recorded | no action normally; a new bounded implementation/review iteration starts |
+| Blocked | parent open with `gc.lifecycle_json.disposition=blocked` | fix the named local prerequisite, then authorize/re-run a bounded attempt |
+| Routine revision/convergence exhaustion | parent open with `gc.lead_escalation_json`; `<rig>/lead` notified/woken | lead re-scopes, changes bounded configuration, or authorizes another bounded attempt |
+| Human/cross-rig/resource/city-policy decision | lead uses `escalate-rig-work-to-mayor.sh`; sanctioned `hold:mayor` | mayor/human resolves the named second-tier decision |
+
+There is no `hold:lead`, and routine exhaustion does not apply `hold:mayor`. A replay of
+the same completed escalation does not duplicate lead notification. Approved-only
+closure and local-only guarantees remain in force during recovery.
+
+### Copy-paste verification
+
+Run this after changing workflow defaults, flags, formulas, lead routing, or docs:
+
+```bash
+gc lint dev-pack
+for test in dev-pack/tests/*.sh; do "$test"; done
+gc --rig paude formula show change-lifecycle >/dev/null
+gc --rig paude formula show change-lifecycle-solo >/dev/null
+gc --rig vllm formula show change-lifecycle >/dev/null
+gc --rig vllm formula show change-lifecycle-solo >/dev/null
+gc dev-pack feature --help
+gc dev-pack bug --help
+gc dev-pack review --help
+```
+
+`gc doctor` currently has unrelated city-level checks; use the pack lint, contract test,
+and full dev-pack suite above as the workflow acceptance gate.
+
 ## How you drive it (through the rig `lead`)
 
 This city gives each rig a **`lead`** — a rig-scoped singleton planner/dispatcher
 that is your entrypoint for that rig (the `mayor` is reserved for cross-rig /
 citywide work). Since almost all work here is single-rig, the normal flow is:
 
-- **You talk to `vllm/lead`** ("review PR 12345", "implement X"). The lead plans,
-  files/《claims》 the bead, and **dispatches** to the right lane — a `reviewer`
-  slot for a review, `feature-dev` for a change — then surfaces the result back to
-  you. (It files/claims a bead for the work first.) It discovers those lanes and
-  formulas dynamically (`gc agent list` /
-  `gc formula list`) once this pack is attached to the rig, so the shared lead
-  prompt needs no pack-specific edits.
+- **You talk to `<rig>/lead`** ("review PR 12345", "implement this feature", "fix
+  this bug"). The lead plans, files/claims the bead, and **dispatches** through the
+  quality-first command: N=2 quorum for PR review, `feature-dev` plus the shared
+  lifecycle for a feature, or N=2 hard-bug convergence plus that lifecycle for a bug.
+  The substantial change is never implemented ad hoc in the rig root.
 - **Direct sling is the manual / power-user path** (`gc sling vllm/pr-review-synthesizer …`,
   shown below). Use it to kick something off yourself, or for scripting; it's the
   exact mechanism the lead uses under the hood.
@@ -115,19 +229,16 @@ is no automated merge gate.
 
 ### The `lead` and the "nobody works in the rig root" rule
 
-The lead's working dir **is** the rig root (by design — it plans with the code
-warm in front of it, and may do low-volume work directly there). That is a
-*sanctioned* exception, and it does not weaken this pack's guarantee, because:
+The lead's working dir **is** the rig root so it can plan with the code warm in
+front of it. That does not make the rig root an implementation fallback:
 
 - The isolation guarantee is about the **parallel / pool agents** (the reviewers
   and feature-dev) — the ones that could actually collide. Those never touch the
   rig root; each is in its own worktree.
-- The lead is a **singleton** (one per rig), so it cannot race itself, and it
-  sits in a *different* working dir than the worktree agents — no file collision
-  between the lead and a reviewer/feature-dev running at the same time.
-- **Guidance:** for anything that wants isolation or parallelism (concurrent
-  reviews, a change you'll iterate on a branch), have the lead **dispatch to the
-  lanes** rather than editing in the rig root itself. The read-only `fetch-origin`
+- The lead is a **singleton** (one per rig) and uses the root for inspection,
+  planning, bead management, and small operational/configuration work.
+- **Required routing:** substantial feature and bug changes go through the isolated
+  quality-first lanes and shared lifecycle. The read-only `fetch-origin`
   order only updates refs, so it's safe alongside the lead working in the root.
 
 ## How the isolation actually works (the one idea to understand)
@@ -211,6 +322,7 @@ commands/materialize/                 # `gc dev-pack materialize <PR>`— durabl
 commands/summary/                     # `gc dev-pack summary <bead|PR>`— re-render a verdict readably
 commands/ask/                         # `gc dev-pack ask <bead|PR> "<question>"` — one-shot follow-up Q&A
 commands/status/                      # `gc dev-pack status <bead>`   — a bug arc's durable state
+assets/workflow-policy.json           # authoritative quality/fast/report-only defaults + profiles
 template-fragments/recovery-header.template.md  # `gc prime` recovery note (every prompt)
 template-fragments/worktree-guard.template.md   # "you're in your own worktree; abort in rig root" guard
 template-fragments/persona-load.template.md     # load base + activated personas; lens-parameterized
@@ -228,6 +340,7 @@ assets/scripts/emit-json.sh           # implementation/bug schema-agnostic atomi
 assets/scripts/emit-local-change.sh    # committed git state → canonical content-addressed local-change.v1
 assets/scripts/resolve-local-change.sh # artifact/bead/ref → validated immutable same-repository review input
 assets/scripts/fetch-origin.sh        # the fetch order's exec body
+tests/workflow-contract.sh            # policy ↔ formulas ↔ help ↔ docs ↔ dry-run drift gate
 # worktree-setup.sh lives at //tools/shared/ (shared spine — see "How the isolation actually works")
 ```
 
@@ -327,9 +440,10 @@ back. This is the normal flow and needs no command memorization on your part.
 itself), a branch, or a sha:
 
 ```bash
-gc dev-pack review 51296                 # defaults: --rig vllm --base origin/main --n 1, gpt-5.6-luna @ xhigh
+gc dev-pack review 51296                 # quality default: N=2 sonnet + gpt-5.6-luna quorum
+gc dev-pack review 51296 --fast          # explicit N=1 gpt-5.6-luna review
 gc dev-pack review my-branch --rig vllm --base v0.6.0
-gc dev-pack review 51296 --n 2           # 2-opinion quorum → synthesis (default profiles: sonnet-xhigh + gpt56luna-xhigh)
+gc dev-pack review 51296 --n 2           # explicit custom N, same default quorum profiles
 gc dev-pack review 51296 --dry-run       # validate + print the gc sling it would run
 ```
 
@@ -367,8 +481,8 @@ silently drops it at launch (a data gap, not a limit; see the recipe in `city.to
 (`provider = "codex"`) — the `codex` CLI is installed and ChatGPT-OAuth authenticated, so **no
 `OPENAI_API_KEY` is needed**. Seeded: `gpt56sol-medium` (`gpt-5.6-sol` @ medium),
 `gpt56sol-xhigh` (`gpt-5.6-sol` @ xhigh), `gpt56luna-xhigh` (`gpt-5.6-luna` @ xhigh — codex tops
-out at `xhigh`, there is no `max`). All are **opt-in** (not default lanes); use one solo or pair it
-in a cross-vendor quorum:
+out at `xhigh`, there is no `max`). `gpt56luna-xhigh` is the quality-default lane B;
+the other codex profiles are opt-in. Use one solo or pair profiles in a custom quorum:
 
 ```bash
 gc dev-pack review 51296 --lanes gpt56sol-medium                # N=1 solo on codex
@@ -387,8 +501,9 @@ reviewer lanes → a synthesis step that dedups findings and takes the strictest
 merge call), emitting `pr-review-quorum.v1` — a superset of `pr-review.v1`, so the
 same summary/notify path works.
 
-**Power-user path — direct sling.** The verb above is a thin wrapper around this
-(what the lead uses under the hood):
+**Power-user path — direct sling.** The commands above select the policy defaults and
+should be preferred. This low-level N=1 example bypasses preset selection and is useful
+only for formula diagnostics or deliberate custom orchestration:
 
 ```bash
 gc sling vllm/pr-review-synthesizer pr-review --formula \
@@ -641,17 +756,15 @@ ships a sensible default; the city decides.
 
 ## Run a feature
 
-**Primary path — ask the lead.** Describe the change to `vllm/lead`; it scopes a
-bead and dispatches it to the single `feature-dev` lane (or, for a quick
-low-volume tweak, may just do it itself in the rig root — its prerogative as the
-planner). For anything you want isolated on a branch, the lead routes it to the
-lane below.
+**Primary path — ask the lead.** Describe the change to `<rig>/lead`; it scopes a
+bead and dispatches it to the isolated `feature-dev` lane and shared lifecycle.
 
 **Manual path — the `feature` command** (rig inferred from the bead prefix, e.g.
 `vllm-123` → `vllm`):
 
 ```bash
-gc dev-pack feature vllm-123               # infers rig; --base origin/main
+gc dev-pack feature vllm-123               # quality: N=2 lifecycle; infers rig
+gc dev-pack feature vllm-123 --fast        # explicit N=1 lifecycle
 gc dev-pack feature vllm-123 --rig vllm --base origin/main
 gc dev-pack feature vllm-123 --dry-run
 gc dev-pack feature vllm-123 --review-n 2 --review-lanes pr-reviewer-opus48-xhigh,pr-reviewer-gpt56sol-xhigh
@@ -716,11 +829,11 @@ as `implementation_provenance`, the stable seam for later review/revise rounds.
 
 The **bug** lane carries an opinion-count dial, `--n`:
 
-- **`--n 1` (default) — solo.** One lane produces a root cause + fix sketch and
+- **`--n 1` / `--fast` — solo opt-down.** One lane produces a root cause + fix sketch and
   **self-verifies its keystones**; the coordinator's synthesis is a keystone
   self-verify pass (no second lane to reconcile against). Cheapest; good when a bug
   is unlikely to hinge on a confident-but-wrong guess.
-- **`--n 2` — two opinions.** Two independent worker lanes (different models) run the
+- **`--n 2` (quality default) — two opinions.** Two independent worker lanes (different models) run the
   same bug and act as each other's **second opinion** ("consider or refute — not a
   mandate"). The coordinator relays those opinions, makes the subjective call on when
   root cause then fix have converged, and applies the **correlated-convergence gate**
@@ -734,13 +847,14 @@ confidence and hedges the mechanism. That self-verify discipline (the "B" seam) 
 at every N; the correlated-convergence gate (the "C" seam) exists only at N≥2. `--n` is
 *breadth* (opinions per stage); `--max-rounds` is *depth* (convergence iterations).
 
-**Primary path — ask the lead** ("investigate vllm-123"). **Manual path — the
+**Primary path — ask the lead** ("fix this bug"). **Manual path — the
 `bug` command** (rig inferred from the bead prefix; targets filled in for you):
 
 ```bash
-gc dev-pack bug vllm-123                    # N=1 solo, Stage-1 report-only (defaults)
-gc dev-pack bug vllm-123 --n 2 --models opus,sonnet   # two cross-model opinions
-gc dev-pack bug vllm-123 --n 2 --loop      # drive the full convergence loop
+gc dev-pack bug vllm-123                    # quality: N=2, full convergence + review
+gc dev-pack bug vllm-123 --fast             # diagnosis/review N=1, still full bounded workflow
+gc dev-pack bug vllm-123 --report-only      # N=2 diagnosis only; do not implement
+gc dev-pack bug vllm-123 --n 2 --models opus,sonnet   # custom diagnosis models
 gc dev-pack bug vllm-123 --max-rounds 3 --lane-b-model sonnet
 gc dev-pack bug vllm-123 --review-n 1 --review-lanes pr-reviewer-opus48-xhigh
 gc dev-pack bug vllm-123 --dry-run         # print the gc sling it would run

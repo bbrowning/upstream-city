@@ -24,13 +24,16 @@ CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NORMALIZE="$SCRIPT_DIR/../../assets/scripts/normalize-pr-target.sh"
 RESOLVE_LOCAL="$SCRIPT_DIR/../../assets/scripts/resolve-local-change.sh"
+POLICY="$SCRIPT_DIR/../../assets/workflow-policy.json"
+[ -r "$POLICY" ] || { printf '%s\n' "review: workflow policy not found: $POLICY" >&2; exit 2; }
 
-RIG="vllm" ; BASE="origin/main" ; SPEC="" ; ARTIFACT="" ; DRYRUN="no"
+RIG="vllm" ; BASE="$(jq -er '.defaults.base_ref' "$POLICY")" ; SPEC="" ; ARTIFACT="" ; DRYRUN="no"
 RIG_EXPLICIT=0
 N="" ; LANES="" ; PRESET="quality"
 # Default solo profile and quorum lanes when --lanes is not given (must be existing profiles).
-DEFAULT_SOLO_LANE="pr-reviewer-gpt56luna-xhigh"
-DEFAULT_LANE_A="pr-reviewer-sonnet-xhigh" ; DEFAULT_LANE_B="pr-reviewer-gpt56luna-xhigh"
+DEFAULT_SOLO_LANE="$(jq -er '.reviewers.solo' "$POLICY")"
+DEFAULT_LANE_A="$(jq -er '.reviewers.lane_a' "$POLICY")"
+DEFAULT_LANE_B="$(jq -er '.reviewers.lane_b' "$POLICY")"
 
 usage() {
     cat <<'EOF'
@@ -159,7 +162,10 @@ if [ -n "$LANES" ]; then
     i=0; for e in "${LE[@]}"; do resolve_lane "$e"; LT[$i]="$RESOLVED"; i=$((i + 1)); done
 else
     if [ -z "$N" ]; then
-        case "$PRESET" in quality) N=2 ;; fast) N=1 ;; esac
+        case "$PRESET" in
+            quality) N=$(jq -er '.presets.quality.review.n' "$POLICY") ;;
+            fast) N=$(jq -er '.presets.fast.review.n' "$POLICY") ;;
+        esac
     fi
 fi
 
