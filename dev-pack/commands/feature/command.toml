@@ -1,1 +1,1 @@
-description = "Start a single-lane feature implementation: sling the feature-dev formula to <rig>/feature-dev on a paude/<bead> branch (rig inferred from the bead prefix)"
+description = "Start quality-first feature work: local implementation then default N=2 bounded review/revise/settle (explicit --fast/--solo opts down)"

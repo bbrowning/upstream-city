@@ -3,8 +3,9 @@
 #
 #   gc dev-pack bug <arc-bead> [options]
 #
-# N = the opinion count (the fan-out dial). --n 1 (default) runs a single lane
-# (hard-bug-round-solo: solo diagnosis + keystone self-verify); --n 2 runs two lanes
+# N = the opinion count (the fan-out dial). Quality defaults to --n 2 with the full
+# convergence loop. --fast/--solo runs one lane; --report-only pauses after diagnosis.
+# hard-bug-round-solo provides solo diagnosis + keystone self-verify; --n 2 runs two lanes
 # that act as each other's second opinion (hard-bug-round + the correlated-convergence
 # gate). Resolves the RIG (explicit --rig wins, else inferred from the bead prefix, e.g.
 # vllm-123 -> vllm), then slings the round formula to <rig>/bug-coordinator with the
@@ -18,8 +19,8 @@ set -euo pipefail
 GC="${GC_BIN:-gc}"
 CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
 
-BEAD="" ; RIG="" ; LOOP="false" ; MAXR="3" ; BASEREF="origin/main"
-N="1" ; MODELS=""
+BEAD="" ; RIG="" ; LOOP="" ; MAXR="3" ; BASEREF="origin/main"
+N="" ; MODELS="" ; PRESET="quality"
 LANE_A_MODEL="" ; LANE_B_MODEL="" ; LANE_A_TARGET="" ; LANE_B_TARGET=""
 BRANCH_PREFIX=""
 REVIEW_N="2" ; REVIEW_LANES="" ; MAX_REVIEW_ITERATIONS="3"
@@ -34,10 +35,13 @@ formula (N=1 -> hard-bug-round-solo, N=2 -> hard-bug-round) to <rig>/bug-coordin
 with the <rig>/bug-worker-* lane targets filled in.
 
   --rig NAME          run in this rig (default: infer from the bead prefix)
-  --n N               opinion count / fan-out: 1 (solo, default) or 2 (two lanes)
+  --quality           N=2 full diagnosis, convergence, implementation, and review (default)
+  --fast, --solo      lower-cost N=1 full bounded workflow
+  --report-only       N=2 diagnosis report; do not converge or implement
+  --n N               custom diagnosis opinion count / fan-out: 1 or 2
   --models M[,M]      per-run models, positional to the lanes (e.g. opus,sonnet);
                       empty entries defer to each agent's city.toml option_defaults
-  --loop              drive the full convergence loop (default OFF = Stage-1 report-only)
+  --loop              explicitly drive the full convergence loop (already on for quality/fast)
   --max-rounds N      per-phase iteration cap (default 3)
   --base-ref REF      baseline ref the lanes read against (default origin/main)
   --lane-a-model M    pin lane A's model (overrides --models; default -> option_defaults)
@@ -58,6 +62,9 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --rig)             RIG="${2:?}"; shift 2 ;;
         --rig=*)           RIG="${1#*=}"; shift ;;
+        --quality)         PRESET="quality"; shift ;;
+        --fast|--solo)     PRESET="fast"; shift ;;
+        --report-only)     PRESET="report_only"; shift ;;
         --n)               N="${2:?}"; shift 2 ;;
         --n=*)             N="${1#*=}"; shift ;;
         --models)          MODELS="${2:?}"; shift 2 ;;
@@ -92,6 +99,12 @@ while [ $# -gt 0 ]; do
 done
 [ $# -eq 0 ] || { [ -z "$BEAD" ] && BEAD="$1"; }
 [ -n "$BEAD" ] || { usage >&2; die "missing <arc-bead>"; }
+
+case "$PRESET" in
+    quality)     [ -n "$N" ] || N=2; [ -n "$LOOP" ] || LOOP=true ;;
+    fast)        [ -n "$N" ] || N=1; [ -n "$LOOP" ] || LOOP=true ;;
+    report_only) [ -n "$N" ] || N=2; [ -n "$LOOP" ] || LOOP=false ;;
+esac
 
 # Only two lane-steps exist today, so N is 1 or 2 (the structure extends to N>2 by
 # adding lane-count formula variants).
@@ -170,7 +183,8 @@ if [ -n "$BRANCH_PREFIX" ]; then set -- "$@" --var "branch_prefix=$BRANCH_PREFIX
 set -- "$@" --title "bug root-cause round 1: $BEAD" --json
 
 if [ "$DRYRUN" = "yes" ]; then
-    printf 'DRY RUN — would run (rig=%s, n=%s, loop=%s):\n  %s --rig %s sling' "$RIG" "$N" "$LOOP" "$GC" "$RIG"
+    printf 'DRY RUN — would run (rig=%s, preset=%s, diagnosis_n=%s, loop=%s, review_n=%s, local_only=true, completion=approved):\n  %s --rig %s sling' \
+        "$RIG" "$PRESET" "$N" "$LOOP" "$REVIEW_N" "$GC" "$RIG"
     for a in "$@"; do printf ' %q' "$a"; done
     printf '\n'
     exit 0

@@ -3,7 +3,8 @@
 #
 #   gc dev-pack review <PR-number | rig#PR | ref> [options]
 #
-# The opinion count N is the fan-out dial. --n 1 (default) slings the pr-review formula
+# The opinion count N is the fan-out dial. Quality defaults to N=2 quorum.
+# --fast/--solo opts down to N=1 and slings the pr-review formula
 # (triage -> single posture-gated read-only review). --n 2 slings pr-review-quorum
 # (triage -> two independent reviewer lanes -> a synthesis step that takes the strictest
 # merge call). The verdict lands in the human inbox (`gc mail check`) and can be
@@ -26,7 +27,7 @@ RESOLVE_LOCAL="$SCRIPT_DIR/../../assets/scripts/resolve-local-change.sh"
 
 RIG="vllm" ; BASE="origin/main" ; SPEC="" ; ARTIFACT="" ; DRYRUN="no"
 RIG_EXPLICIT=0
-N="" ; LANES=""
+N="" ; LANES="" ; PRESET="quality"
 # Default solo profile and quorum lanes when --lanes is not given (must be existing profiles).
 DEFAULT_SOLO_LANE="pr-reviewer-gpt56luna-xhigh"
 DEFAULT_LANE_A="pr-reviewer-sonnet-xhigh" ; DEFAULT_LANE_B="pr-reviewer-gpt56luna-xhigh"
@@ -42,7 +43,9 @@ Sling the review formula (N=1 -> pr-review, N=2 -> pr-review-quorum) to <rig>/pr
   --artifact X     local-change.v1 JSON file or implementation-output bead.
                    Validates repository identity, immutable commits, and that
                    the recorded local branch still points at the recorded HEAD.
-  --n N            opinion count / fan-out: 1 (single reviewer, default) or 2 (quorum).
+  --quality        N=2 independent review + strict synthesis quorum (default)
+  --fast, --solo   lower-cost N=1 posture-gated review
+  --n N            custom opinion count / fan-out: 1 or 2.
                    Cross-checked against --lanes when both are given.
   --lanes A[,B]    reviewer PROFILE(s) to run, by name; the count IS N (1 or 2). Each
                    name resolves to an agent: '<name>' or the short 'pr-reviewer-<name>'.
@@ -87,6 +90,8 @@ while [ $# -gt 0 ]; do
         --base=*)    BASE="${1#*=}"; shift ;;
         --artifact)  ARTIFACT="${2:?}"; shift 2 ;;
         --artifact=*) ARTIFACT="${1#*=}"; shift ;;
+        --quality)   PRESET="quality"; shift ;;
+        --fast|--solo) PRESET="fast"; shift ;;
         --n)         N="${2:?}"; shift 2 ;;
         --n=*)       N="${1#*=}"; shift ;;
         --lanes)     LANES="${2:?}"; shift 2 ;;
@@ -153,7 +158,9 @@ if [ -n "$LANES" ]; then
     N="$LN"
     i=0; for e in "${LE[@]}"; do resolve_lane "$e"; LT[$i]="$RESOLVED"; i=$((i + 1)); done
 else
-    [ -n "$N" ] || N=1
+    if [ -z "$N" ]; then
+        case "$PRESET" in quality) N=2 ;; fast) N=1 ;; esac
+    fi
 fi
 
 # Only two reviewer lane-steps exist today, so N is 1 or 2.
@@ -199,7 +206,8 @@ else
 fi
 
 if [ "$DRYRUN" = "yes" ]; then
-    printf 'DRY RUN — would run (rig=%s, n=%s):\n  %s --rig %s sling' "$RIG" "$N" "$GC" "$RIG"
+    printf 'DRY RUN — would run (rig=%s, preset=%s, n=%s, local_only=true, completion=human_checkpoint):\n  %s --rig %s sling' \
+        "$RIG" "$PRESET" "$N" "$GC" "$RIG"
     for a in "$@"; do printf ' %q' "$a"; done
     printf '\n'
     exit 0

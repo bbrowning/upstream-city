@@ -11,7 +11,7 @@ args=" $* "
 if [[ "$args" == *" rig list --json "* ]]; then
     printf '%s\n' '{"rigs":[{"name":"vllm","path":"/tmp/vllm"},{"name":"paude","path":"/tmp/paude"}]}'
 elif [[ "$args" == *" agent list "* ]]; then
-    printf '%s\n' 'vllm/pr-review-synthesizer' 'vllm/pr-reviewer-gpt56luna-xhigh' 'vllm/pr-arbiter'
+    printf '%s\n' 'vllm/pr-review-synthesizer' 'vllm/pr-reviewer-sonnet-xhigh' 'vllm/pr-reviewer-gpt56luna-xhigh' 'vllm/pr-arbiter'
 elif [[ "$args" == *" bd list "* && "$args" == *"gc.followup_of="* ]]; then
     printf '%s\n' '[]'
 elif [[ "$args" == *" bd list "* ]]; then

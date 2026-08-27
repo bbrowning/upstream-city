@@ -1,1 +1,1 @@
-description = "Start a posture-gated solo/quorum review for a PR, immutable local-change artifact/bead, or explicit local ref"
+description = "Start a quality-first read-only review: default N=2 independent quorum for a PR or immutable local change; --fast/--solo opts down to N=1"

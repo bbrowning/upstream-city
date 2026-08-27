@@ -1,1 +1,1 @@
-description = "Launch a hard-bug run: resolve the rig (--rig or inferred from the bead prefix) and sling hard-bug-round with <rig>/bug-coordinator + <rig>/worker-* targets filled in"
+description = "Start a quality-first hard-bug workflow: default N=2 diagnosis through bounded convergence and shared review; --fast/--solo and --report-only are explicit opt-downs"

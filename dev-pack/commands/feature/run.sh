@@ -18,7 +18,7 @@ RIG="" ; BASE="origin/main" ; BEAD="" ; DRYRUN="no" ; FETCH_BASE="true"
 REVISION="1" ; PREVIOUS_ARTIFACT="" ; FEEDBACK_BEAD="" ; PRODUCING_VERDICT=""
 REVIEW_N="2" ; MAX_REVIEW_ITERATIONS="3"
 REVIEW_LANE_A="" ; REVIEW_LANE_B=""
-REVIEW_LANES_SET="false"
+REVIEW_LANES_SET="false" ; REVIEW_N_SET="false" ; PRESET="quality"
 
 usage() {
     cat <<'EOF'
@@ -30,6 +30,8 @@ feature-dev formula to <rig>/feature-dev.
   --rig NAME     run in this rig (default: infer from the bead prefix)
   --base REF     branch point / merge target (default: origin/main)
   --offline      do not fetch the selected remote base; mark freshness unverified
+  --quality      N=2 bounded review/revise lifecycle (default)
+  --fast, --solo lower-cost N=1 lifecycle; still local-only and approval-gated
   --revision N   artifact revision number (default: 1)
   --previous-artifact ID  required with revision N>1
   --feedback-bead ID      review/synthesis bead producing revision N>1
@@ -50,6 +52,8 @@ while [ $# -gt 0 ]; do
         --base)     BASE="${2:?}"; shift 2 ;;
         --base=*)   BASE="${1#*=}"; shift ;;
         --offline)  FETCH_BASE="false"; shift ;;
+        --quality)  PRESET="quality"; shift ;;
+        --fast|--solo) PRESET="fast"; shift ;;
         --revision) REVISION="${2:?}"; shift 2 ;;
         --revision=*) REVISION="${1#*=}"; shift ;;
         --previous-artifact) PREVIOUS_ARTIFACT="${2:?}"; shift 2 ;;
@@ -58,8 +62,8 @@ while [ $# -gt 0 ]; do
         --feedback-bead=*) FEEDBACK_BEAD="${1#*=}"; shift ;;
         --verdict) PRODUCING_VERDICT="${2:?}"; shift 2 ;;
         --verdict=*) PRODUCING_VERDICT="${1#*=}"; shift ;;
-        --review-n) REVIEW_N="${2:?}"; shift 2 ;;
-        --review-n=*) REVIEW_N="${1#*=}"; shift ;;
+        --review-n) REVIEW_N_SET=true; REVIEW_N="${2:?}"; shift 2 ;;
+        --review-n=*) REVIEW_N_SET=true; REVIEW_N="${1#*=}"; shift ;;
         --max-review-iterations) MAX_REVIEW_ITERATIONS="${2:?}"; shift 2 ;;
         --max-review-iterations=*) MAX_REVIEW_ITERATIONS="${1#*=}"; shift ;;
         --review-lanes) REVIEW_LANES_SET=true; IFS=',' read -r REVIEW_LANE_A REVIEW_LANE_B _ <<<"${2:?}"; shift 2 ;;
@@ -73,6 +77,9 @@ while [ $# -gt 0 ]; do
 done
 [ $# -eq 0 ] || { [ -z "$BEAD" ] && BEAD="$1"; }
 [ -n "$BEAD" ] || { usage >&2; die "missing <bead>"; }
+if [ "$REVIEW_N_SET" = false ]; then
+    case "$PRESET" in quality) REVIEW_N=2 ;; fast) REVIEW_N=1 ;; esac
+fi
 case "$REVISION" in ''|*[!0-9]*) die "--revision must be a positive integer" ;; esac
 [ "$REVISION" -ge 1 ] || die "--revision must be a positive integer"
 case "$REVIEW_N" in 1|2) ;; *) die "--review-n must be 1 or 2" ;; esac
@@ -110,7 +117,8 @@ set -- "$RIG/feature-dev" feature-dev --formula \
     --title "feature-dev: $BEAD" --json
 
 if [ "$DRYRUN" = "yes" ]; then
-    printf 'DRY RUN — would run (rig=%s):\n  %s --rig %s sling' "$RIG" "$GC" "$RIG"
+    printf 'DRY RUN — would run (rig=%s, preset=%s, review_n=%s, local_only=true, completion=approved):\n  %s --rig %s sling' \
+        "$RIG" "$PRESET" "$REVIEW_N" "$GC" "$RIG"
     for a in "$@"; do printf ' %q' "$a"; done
     printf '\n'
     exit 0
