@@ -101,6 +101,28 @@ for phrase in 'N=2 independent review' 'strict synthesis' 'evidence settlement' 
   'Copy-paste verification' 'local-only'; do
   grep -q "$phrase" "$ROOT/dev-pack/README.md" || fail "canonical guide missing lifecycle contract: $phrase"
 done
+for phrase in '## Presets and defaults' '## Feature work' '## Hard-bug work' \
+  '## Review a PR or local change' '### Materialize a reviewed PR' \
+  '## Monitor and retrieve results' '## Recovery and escalation' \
+  'gc dev-pack bug vllm-456 --report-only' 'gc dev-pack status vllm-456' \
+  'gc dev-pack review --artifact' 'gc dev-pack materialize 53174'; do
+  grep -Fq -- "$phrase" "$ROOT/dev-pack/README.md" \
+    || fail "operator runbook missing current workflow content: $phrase"
+done
+
+# The canonical README stays an operator runbook, not an inventory/design/backlog dump.
+[ "$(wc -l < "$ROOT/dev-pack/README.md")" -le 350 ] \
+  || fail 'canonical operator runbook grew beyond 350 lines'
+! rg -n -- '## What.s here|## Growing up|Remaining: Phase 3|Quorum: add a second reviewer|Review local commits / working-tree changes' \
+  "$ROOT/dev-pack/README.md" "$ROOT/docs/dev-pack-design.md" >/dev/null \
+  || fail 'maintained docs contain removed inventory or implemented-as-future claims'
+for phrase in '## Worktree isolation and reaping' '## Durable schemas and closure' \
+  '## Review posture and dynamic execution' '## Personas'; do
+  grep -Fq -- "$phrase" "$ROOT/docs/dev-pack-design.md" \
+    || fail "design reference missing durable internals: $phrase"
+done
+grep -Fq -- '## Enable dev-pack on the rig' "$ROOT/docs/rig-bootstrap.md" \
+  || fail 'rig bootstrap guide missing pack installation and test-environment wiring'
 ! rg -n -- '--lineup|N=1 \(default\)|report-only \(defaults\)|may just do it itself' \
   "$ROOT/README.md" "$ROOT/dev-pack/README.md" >/dev/null \
   || fail 'operator docs contain a stale flag, opinion default, or direct fallback'
