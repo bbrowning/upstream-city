@@ -77,6 +77,21 @@ for spec in \
   done
 done
 
+# Ask must expose both supported modes, including their different durability.
+ask_help=$(gc dev-pack ask --help)
+for phrase in 'question present' 'no question' 'terminal required' 'Ctrl-b d' \
+  'One reattachable session per PR' 'emits, closes, and mails nothing' \
+  'original review verdict' 'prior asynchronous Q&A'; do
+  printf '%s' "$ask_help" | grep -Fq -- "$phrase" || fail "ask help missing two-mode contract: $phrase"
+done
+for phrase in 'gc dev-pack ask 51296 "does this handle empty batches?"' \
+  'gc dev-pack ask 51296' 'one persistent coding-assistant session per PR' \
+  'Requires a terminal' 'Ctrl-b d' 'emits no result bead' \
+  'original verdict and every earlier asynchronous Q&A'; do
+  grep -Fq -- "$phrase" "$ROOT/dev-pack/README.md" \
+    || fail "canonical guide missing ask contract: $phrase"
+done
+
 docs=$(printf '%s\n' "$ROOT/README.md" "$ROOT/dev-pack/README.md")
 for phrase in 'Implement this feature' 'Fix this bug' 'Review PR N'; do
   grep -q "$phrase" $docs || fail "quickstart missing human request: $phrase"
