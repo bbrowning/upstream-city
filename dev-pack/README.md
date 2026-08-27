@@ -21,8 +21,8 @@ to N=2 independent opinions; `--fast`/`--solo` explicitly opts down to N=1. N is
 
 Helpers: `gc dev-pack materialize <PR>` (durable human checkout) ·
 `gc dev-pack summary <bead|PR>` (re-render a stored verdict) ·
-`gc dev-pack ask <bead|PR> "<question>"` (one-shot agent answers a follow-up,
-in the real code, mailed back threaded) ·
+`gc dev-pack ask <bead|PR> ["<question>"]` (durable async answer or interactive
+per-PR coding session, both in the real code) ·
 `gc dev-pack status <bead>` (a bug arc's phase/round/status).
 
 All lanes share one persona corpus (`$GC_PERSONAS`) and one method spine
@@ -52,10 +52,9 @@ hunting for its result:
      ├─ want it again later? (even if the mail is archived)
      │      gc dev-pack summary 51296       ← re-render the verdict, LLM-free
      │
-     ├─ have a specific followup question?
-     │      gc dev-pack ask 51296 "does this handle empty batches?"
-     │      # one-shot agent, real code, mails the answer back — threaded
-     │      # ask again later; it still remembers every prior round
+     ├─ want an agent in the real code?
+     │      gc dev-pack ask 51296 "does this handle empty batches?"  # durable async answer
+     │      gc dev-pack ask 51296                                    # interactive PR chat
      │
      └─ want to see/run the code yourself?
             gc dev-pack materialize 51296   ← durable checkout on disk
@@ -80,11 +79,10 @@ A few things make this ergonomic instead of a scavenger hunt:
    `gc stop --clean` never touch. See
    [Materialize a PR for human review](#materialize-a-pr-for-human-review).
 3. **Followups get an agent, not just a checkout.** `gc dev-pack ask <PR>
-   "<question>"` reuses that same durable worktree and slings a one-shot agent to
-   answer from the real code, mailed back threaded into the same conversation.
-   It's one-shot per question but not stateless: every round is chained to the
-   verdict bead, so later rounds still see earlier ones. See
-   [Ask a follow-up question](#ask-a-follow-up-question).
+   "<question>"` mails a durable, chained one-shot answer; omit the question to
+   open or reattach a persistent interactive coding session in the same real
+   worktree. Both start with the verdict and prior async Q&A. See
+   [Ask about a reviewed PR](#ask-about-a-reviewed-pr).
 4. **Trusted PRs get tested, not just read.** When the deterministic ceiling is
    `trusted`, the reviewer auto-runs one in-scope check and folds the result into
    the verdict; a `limited` PR surfaces a scoped check you can approve with one
@@ -586,37 +584,30 @@ gc dev-pack materialize 51296 --remove
 > `.venv/bin/python -m pytest …` — the very same venv the reviewer/runner use. See
 > [Dynamic checks](#dynamic-checks-running-a-prs-tests).
 
-## Ask a follow-up question
+## Ask about a reviewed PR
 
-The verdict mail answers what the reviewer already thought to say. When you have
-a **specific followup** ("does this handle empty batches?") you want answered
-*from the code*, not from memory of the summary, `gc dev-pack ask` gets you an
-agent that has the PR's actual code checked out — not the reviewer's transient
-per-slot scratch, and not an interactive session with no local checkout either:
+`ask` has two modes with the same setup. Both resolve the stored `pr-review.v1`
+verdict and materialize the actual PR into its durable, PR-keyed worktree; both
+load the original verdict and every earlier asynchronous Q&A before the agent
+starts.
 
-```bash
-gc dev-pack ask 51296 "does this handle empty batches?"
-```
+| Durable async answer (question present) | Interactive PR chat (no question) |
+|---|---|
+| `gc dev-pack ask 51296 "does this handle empty batches?"` | `gc dev-pack ask 51296` |
+| One-shot agent answers from the real worktree, then mails and durably chains the answer. | Opens or reattaches one persistent coding-assistant session per PR in the real worktree. |
+| Later async questions see the verdict and every prior async round. | Requires a terminal. Detach with `Ctrl-b d`; run the same command to reattach with session history intact. |
 
-Under the hood this: resolves `51296` to its stored `pr-review.v1` verdict bead
-(the same lookup `summary` uses); runs `gc dev-pack materialize` for you so the
-PR's code is on disk in the durable, PR-keyed worktree described above; slings a
-**one-shot** agent (`pr-follow-up`) into that worktree with your question; and
-mails the answer back, threaded into the same mail conversation as the original
-verdict (`gc mail thread <verdict-mail-id>` shows both).
+Interactive history is session-only: the conversation emits no result bead,
+closes nothing, and mails nothing. Use the question-present form for an answer
+that must be durable, mailed, chained, or loaded by a later async or newly opened
+interactive session. Detaching does not stop the interactive agent; it leaves the
+per-PR session available while you work elsewhere.
 
-**It's one-shot, but it isn't stateless.** Ask a second question later —
-
-```bash
-gc dev-pack ask 51296 "does that also cover the batching concern from before?"
-```
-
-— and the fresh agent still sees the first round: every prior follow-up on a PR
-is chained to the original verdict bead (`gc.followup_of` metadata), so `ask`
-rebuilds the full conversation (verdict recap + every Q&A so far) into a context
-file in the worktree before slinging. There is no persistent session to keep
-alive between rounds, and no risk of it going stale — the record lives on the
-beads, not in a session's memory.
+For asynchronous questions, each fresh agent sees earlier rounds because every
+answer is chained to the original verdict bead (`gc.followup_of` metadata). `ask`
+rebuilds the verdict recap and prior Q&A in the materialized worktree before
+slinging the one-shot `pr-follow-up` agent. The answer is threaded into the
+original verdict mail conversation (`gc mail thread <verdict-mail-id>`).
 
 You can also pass any bead in the chain instead of the PR number (the verdict
 bead id, or an earlier follow-up bead id) — both resolve to the same
