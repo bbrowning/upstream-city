@@ -17,8 +17,8 @@ lane that self-verifies its own keystones; N≥2 fans out N independent opinions
 | Lane | Kick off | What it does |
 |---|---|---|
 | **review** | `gc dev-pack review <PR> [--n N] [--lineup p:m:e,…]` | posture-gated PR review → a structured merge verdict (read-only + one trusted auto-check); N≥2 runs a reviewer quorum → synthesis; `--lineup` names provider/model/effort per opinion, validated before dispatch |
-| **bug** | `gc dev-pack bug <bead> [--n N]` | N=1 solo diagnosis + keystone self-verify; N≥2 independent lanes act as each other's second opinion until root cause & fix converge, then the stronger implements + tests and the other cross-reviews |
-| **feature** | `gc dev-pack feature <bead>` | implement an assignment on a local `paude/<bead>` branch, run tests, commit, and hand off its HEAD SHA |
+| **bug** | `gc dev-pack bug <bead> [--n N]` | converge root cause/fix, implement locally, then enter shared N=2 immutable-artifact review/settle/revise |
+| **feature** | `gc dev-pack feature <bead>` | implement locally, then enter the same bounded N=2 review/settle/revise lifecycle |
 
 Helpers: `gc dev-pack materialize <PR>` (durable human checkout) ·
 `gc dev-pack summary <bead|PR>` (re-render a stored verdict) ·
@@ -191,15 +191,17 @@ formulas/pr-review-quorum.toml        # N=2: triage → two reviewer PROFILE lan
 formulas/pr-review-dynamic.toml       # human-approved check TASK + pr-review-dynamic.v1 contract
 formulas/pr-followup.toml             # per-question follow-up TASK + pr-followup.v1 contract
 # --- bug lane (N-opinion dial: solo self-verify, or opinions until convergence) ---
-agents/bug-worker-a/                  # lane A / sole lane at N=1: diagnose / reconsider / implement / cross-review (1 slot)
+agents/bug-worker-a/                  # lane A / sole diagnosis lane at N=1: diagnose / reconsider / implement (1 slot)
 agents/bug-worker-b/                  # lane B (N≥2): same method (shares worker-a's prompt), different model
 agents/bug-coordinator/               # synthesis/judge driver (1 slot): self-verify (N=1) or convergence call + relays (N≥2), cap, escalation
 formulas/hard-bug-round.toml          # N≥2 round: the lanes + coordinator reconcile fan-in
 formulas/hard-bug-round-solo.toml     # N=1 round: one lane + coordinator self-verify synthesis
-formulas/hard-bug-finalize.toml       # implement → cross-review → finalize
+formulas/hard-bug-finalize.toml       # implement → shared lifecycle handoff
 # --- feature lane ---
 agents/feature-dev/                   # single write lane (1 slot): local branch/commit, never self-close arc
 formulas/feature-dev.toml             # per-run implement TASK + feature-dev.v2/local-change.v1 contract
+formulas/change-lifecycle.toml        # shared N=2 exact-SHA review → settle → revise/approve
+formulas/change-lifecycle-solo.toml   # selectable N=1 shape with the same bounded closure contract
 # --- shared ---
 orders/fetch-origin.toml              # read-only `git fetch --prune` on a cooldown (warm refs)
 commands/review/                      # `gc dev-pack review <PR>`     — start a PR review
@@ -297,7 +299,8 @@ on-demand slot auto-materializes the rig and the session.
                                  # disk (the pre-start-scripts check) — not gc lint
    gc formula list               # expect: pr-review, pr-review-quorum, pr-review-dynamic,
                                  #         pr-followup, feature-dev, hard-bug-round,
-                                 #         hard-bug-round-solo, hard-bug-finalize
+                                 #         hard-bug-round-solo, hard-bug-finalize,
+                                 #         change-lifecycle, change-lifecycle-solo
    gc agent list                 # expect: vllm/pr-triage, vllm/pr-review-synthesizer, vllm/pr-runner,
                                  #         vllm/pr-follow-up, vllm/bug-coordinator,
                                  #         vllm/bug-worker-a, vllm/bug-worker-b, vllm/feature-dev
@@ -651,6 +654,7 @@ lane below.
 gc dev-pack feature vllm-123               # infers rig; --base origin/main
 gc dev-pack feature vllm-123 --rig vllm --base origin/main
 gc dev-pack feature vllm-123 --dry-run
+gc dev-pack feature vllm-123 --review-n 2 --review-lanes pr-reviewer-opus48-xhigh,pr-reviewer-gpt56sol-xhigh
 ```
 
 **Power-user path — direct sling:**
@@ -664,11 +668,15 @@ gc sling vllm/feature-dev feature-dev --formula \
 feature-dev branches `paude/<work_bead>` off the named local base **in its own
 worktree**, implements, runs tests, and commits coherently. Its durable handoff is
 the local branch, immutable HEAD SHA, worktree state, and verification results.
+It then automatically hands the canonical artifact to the shared lifecycle. Review
+defaults to two independent profiles (`--review-n 1` selects solo review), takes the
+strictest verdict, settles disputed major findings by evidence when necessary, and
+routes request-changes back to this same lane for a new commit and artifact revision.
 Every implementation lane is strictly local-only: it never pushes, creates or
 modifies a PR, or otherwise mutates a remote—even when an assignment requests
 publication. The operator extracts commits to a local host and alone decides
 whether and where to publish them. The lane also **never closes the arc/tracking
-bead**; that closes on an operator-controlled checkpoint, not on self-report.
+bead**; that closes only at the approved exact-artifact human-safe checkpoint, not on self-report.
 
 ### Canonical local-change handoff
 
@@ -717,7 +725,7 @@ The **bug** lane carries an opinion-count dial, `--n`:
   mandate"). The coordinator relays those opinions, makes the subjective call on when
   root cause then fix have converged, and applies the **correlated-convergence gate**
   (agreement on a keystone *both* lanes only guessed is not convergence — it bounces a
-  directed verify round). The stronger lane implements + tests; the other cross-reviews
+  directed verify round). The stronger lane implements + tests; shared reviewer profiles review
   the diff **and its evidence**.
 
 Either way, load-bearing keystones (a token id, a config default, or a causal step in
@@ -734,21 +742,22 @@ gc dev-pack bug vllm-123                    # N=1 solo, Stage-1 report-only (def
 gc dev-pack bug vllm-123 --n 2 --models opus,sonnet   # two cross-model opinions
 gc dev-pack bug vllm-123 --n 2 --loop      # drive the full convergence loop
 gc dev-pack bug vllm-123 --max-rounds 3 --lane-b-model sonnet
+gc dev-pack bug vllm-123 --review-n 1 --review-lanes pr-reviewer-opus48-xhigh
 gc dev-pack bug vllm-123 --dry-run         # print the gc sling it would run
 ```
 
-The coordinator re-slings the same-arity round formula each round
+The coordinator re-slings the same-arity diagnosis formula each round
 (`hard-bug-round-solo` at N=1, `hard-bug-round` at N≥2) and `hard-bug-finalize` to
-implement + cross-review. Track the arc's durable state any time (LLM-free):
+implement + hand the artifact to the shared review lifecycle. Track the arc's durable state any time (LLM-free):
 
 ```bash
 gc dev-pack status vllm-123                  # phase / round / status / chosen implementer
 ```
 
-The hard-bug implementation and cross-review handoff is local-only too. The
+The hard-bug implementation and shared-review handoff is local-only too. The
 implementer commits on the named branch and emits its full HEAD SHA and
-worktree state; the reviewer verifies that local branch still resolves to the
-same SHA and reviews the SHA directly. Missing or moved local refs block the
+worktree state; both default reviewers verify that local branch still resolves to the
+same SHA and review the SHA directly. Missing or moved local refs block the
 handoff instead of triggering a remote fallback. As in the feature lane, only
 the operator may extract or publish the resulting commit.
 

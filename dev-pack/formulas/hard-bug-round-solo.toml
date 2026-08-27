@@ -53,6 +53,19 @@ default = "false"
 description = "Prefix for the eventual fix branch, forwarded unchanged to hard-bug-finalize when the coordinator advances to implement. Empty (the default) means the branch is just the bug-bead id."
 default = ""
 
+[vars.review_n]
+description = "Shared post-implementation review fan-out (1 or 2)."
+default = "2"
+[vars.max_review_iterations]
+description = "Shared lifecycle artifact revision cap."
+default = "3"
+[vars.review_lane_a_target]
+description = "Shared lifecycle reviewer profile A."
+default = "pr-reviewer-sonnet-xhigh"
+[vars.review_lane_b_target]
+description = "Shared lifecycle reviewer profile B."
+default = "pr-reviewer-gpt56luna-xhigh"
+
 [vars.lane_a_id]
 description = "Durable identity for the sole lane (survives slot churn)."
 default = "bug-worker-a"
@@ -130,13 +143,16 @@ when root cause is verified — record agreed_root_cause).
 Then act on the outer loop per your protocol, using THESE run vars:
   bug_bead={{bug_bead}} phase={{phase}} round={{round}} max_rounds={{max_rounds}}
   enable_loop={{enable_loop}} base_ref={{base_ref}} branch_prefix={{branch_prefix}}
+  review_n={{review_n}} max_review_iterations={{max_review_iterations}}
+  review profiles: A={{review_lane_a_target}} B={{review_lane_b_target}}
   lane_a: id={{lane_a_id}} target={{lane_a_target}} provider={{lane_a_provider}} model={{lane_a_model}} (empty = agent's option_defaults)
   coordinator_target={{coordinator_target}}
 
 - enable_loop=false (Stage 1): after emitting the synthesis verdict, mail the human a
   summary and STOP — do not launch another round.
 - enable_loop=true: advance root_cause->fix (re-sling hard-bug-round-solo phase=fix) /
-  choose the sole lane as implementer AND reviewer and sling hard-bug-finalize / escalate
+  choose the sole lane as implementer and sling hard-bug-finalize, preserving every
+  review var above / escalate
   to the human when a cheap keystone is unverified and cannot be self-resolved, or a next
   round would exceed {{max_rounds}}. (There is no relay_next_round at N=1: with one lane
   there is no peer to relay and no divergence to resolve by another round.)

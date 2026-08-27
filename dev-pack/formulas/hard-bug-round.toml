@@ -51,6 +51,19 @@ default = "false"
 description = "Prefix for the eventual fix branch, forwarded unchanged to hard-bug-finalize when the coordinator advances to implement. Empty (the default) means the branch is just the bug-bead id."
 default = ""
 
+[vars.review_n]
+description = "Shared post-implementation review fan-out (1 or 2)."
+default = "2"
+[vars.max_review_iterations]
+description = "Shared lifecycle artifact revision cap."
+default = "3"
+[vars.review_lane_a_target]
+description = "Shared lifecycle reviewer profile A."
+default = "pr-reviewer-sonnet-xhigh"
+[vars.review_lane_b_target]
+description = "Shared lifecycle reviewer profile B."
+default = "pr-reviewer-gpt56luna-xhigh"
+
 [vars.lane_a_id]
 description = "Durable identity for lane A (survives slot churn)."
 default = "bug-worker-a"
@@ -194,6 +207,8 @@ when root cause aligns — record agreed_root_cause).
 Then act on the outer loop per your protocol, using THESE run vars:
   bug_bead={{bug_bead}} phase={{phase}} round={{round}} max_rounds={{max_rounds}}
   enable_loop={{enable_loop}} base_ref={{base_ref}} branch_prefix={{branch_prefix}}
+  review_n={{review_n}} max_review_iterations={{max_review_iterations}}
+  review profiles: A={{review_lane_a_target}} B={{review_lane_b_target}}
   lane_a: id={{lane_a_id}} target={{lane_a_target}} provider={{lane_a_provider}} model={{lane_a_model}} (empty = agent's option_defaults)
   lane_b: id={{lane_b_id}} target={{lane_b_target}} provider={{lane_b_provider}} model={{lane_b_model}} (empty = agent's option_defaults)
   coordinator_target={{coordinator_target}}
@@ -202,7 +217,7 @@ Then act on the outer loop per your protocol, using THESE run vars:
   summary and STOP — do not launch another round.
 - enable_loop=true: relay + launch round {{round}}+1 (passing each lane the other's
   prior bead as a second opinion) / advance root_cause→fix / choose implementer and
-  sling hard-bug-finalize / escalate to the human when a next round would exceed
+  sling hard-bug-finalize (preserving every review var above) / escalate to the human when a next round would exceed
   {{max_rounds}} or the lanes are stuck.
 """
 metadata = { "gc.run_target" = "{{coordinator_target}}", "gc.hard_bug_phase" = "{{phase}}", "gc.hard_bug_round" = "{{round}}", "gc.output_json_schema" = "hard-bug-reconcile.v1", "gc.output_json_required" = "true" }

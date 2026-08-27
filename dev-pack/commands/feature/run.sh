@@ -16,6 +16,9 @@ CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
 
 RIG="" ; BASE="origin/main" ; BEAD="" ; DRYRUN="no" ; FETCH_BASE="true"
 REVISION="1" ; PREVIOUS_ARTIFACT="" ; FEEDBACK_BEAD="" ; PRODUCING_VERDICT=""
+REVIEW_N="2" ; MAX_REVIEW_ITERATIONS="3"
+REVIEW_LANE_A="" ; REVIEW_LANE_B=""
+REVIEW_LANES_SET="false"
 
 usage() {
     cat <<'EOF'
@@ -31,6 +34,9 @@ feature-dev formula to <rig>/feature-dev.
   --previous-artifact ID  required with revision N>1
   --feedback-bead ID      review/synthesis bead producing revision N>1
   --verdict VERDICT       verdict producing revision N>1
+  --review-n N            lifecycle review fan-out: 1 or 2 (default: 2)
+  --max-review-iterations N  artifact revision cap (default: 3)
+  --review-lanes A[,B]    reviewer profile targets; count must match --review-n
   --dry-run      print the gc sling command without running it
   -h, --help
 EOF
@@ -52,6 +58,12 @@ while [ $# -gt 0 ]; do
         --feedback-bead=*) FEEDBACK_BEAD="${1#*=}"; shift ;;
         --verdict) PRODUCING_VERDICT="${2:?}"; shift 2 ;;
         --verdict=*) PRODUCING_VERDICT="${1#*=}"; shift ;;
+        --review-n) REVIEW_N="${2:?}"; shift 2 ;;
+        --review-n=*) REVIEW_N="${1#*=}"; shift ;;
+        --max-review-iterations) MAX_REVIEW_ITERATIONS="${2:?}"; shift 2 ;;
+        --max-review-iterations=*) MAX_REVIEW_ITERATIONS="${1#*=}"; shift ;;
+        --review-lanes) REVIEW_LANES_SET=true; IFS=',' read -r REVIEW_LANE_A REVIEW_LANE_B _ <<<"${2:?}"; shift 2 ;;
+        --review-lanes=*) REVIEW_LANES_SET=true; IFS=',' read -r REVIEW_LANE_A REVIEW_LANE_B _ <<<"${1#*=}"; shift ;;
         --dry-run)  DRYRUN="yes"; shift ;;
         -h|--help)  usage; exit 0 ;;
         --)         shift; break ;;
@@ -63,6 +75,9 @@ done
 [ -n "$BEAD" ] || { usage >&2; die "missing <bead>"; }
 case "$REVISION" in ''|*[!0-9]*) die "--revision must be a positive integer" ;; esac
 [ "$REVISION" -ge 1 ] || die "--revision must be a positive integer"
+case "$REVIEW_N" in 1|2) ;; *) die "--review-n must be 1 or 2" ;; esac
+case "$MAX_REVIEW_ITERATIONS" in ''|*[!0-9]*) die "--max-review-iterations must be a positive integer" ;; esac
+[ "$MAX_REVIEW_ITERATIONS" -ge 1 ] || die "--max-review-iterations must be a positive integer"
 if [ "$REVISION" -eq 1 ]; then
     [ -z "$PREVIOUS_ARTIFACT$FEEDBACK_BEAD$PRODUCING_VERDICT" ] \
         || die "revision 1 cannot name prior review lineage"
@@ -76,11 +91,22 @@ if [ -z "$RIG" ]; then
     RIG="${BEAD%-*}"
     [ -n "$RIG" ] && [ "$RIG" != "$BEAD" ] || die "cannot infer rig from bead '$BEAD'; pass --rig NAME"
 fi
+[ -n "$REVIEW_LANE_A" ] || REVIEW_LANE_A="$RIG/pr-reviewer-sonnet-xhigh"
+if [ "$REVIEW_N" = "2" ]; then
+    [ "$REVIEW_LANES_SET" = "false" ] || [ -n "$REVIEW_LANE_B" ] \
+        || die "--review-n 2 requires two --review-lanes profiles"
+    [ -n "$REVIEW_LANE_B" ] || REVIEW_LANE_B="$RIG/pr-reviewer-gpt56luna-xhigh"
+else
+    [ -z "$REVIEW_LANE_B" ] || die "--review-n 1 accepts exactly one --review-lanes profile"
+    REVIEW_LANE_B="$RIG/pr-reviewer-gpt56luna-xhigh"
+fi
 
 set -- "$RIG/feature-dev" feature-dev --formula \
     --var "work_bead=$BEAD" --var "base=$BASE" --var "fetch_base=$FETCH_BASE" \
     --var "revision=$REVISION" --var "previous_artifact_id=$PREVIOUS_ARTIFACT" \
     --var "feedback_bead=$FEEDBACK_BEAD" --var "producing_verdict=$PRODUCING_VERDICT" \
+    --var "review_n=$REVIEW_N" --var "max_review_iterations=$MAX_REVIEW_ITERATIONS" \
+    --var "review_lane_a_target=$REVIEW_LANE_A" --var "review_lane_b_target=$REVIEW_LANE_B" \
     --title "feature-dev: $BEAD" --json
 
 if [ "$DRYRUN" = "yes" ]; then

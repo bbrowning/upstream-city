@@ -46,8 +46,10 @@ export GC_BIN="$TMP/bin/gc" MOCK_GC_LOG="$TMP/gc.log" MOCK_GC_STATE="$TMP/state.
 
 for contract in "$ROOT/dev-pack/formulas/feature-dev.toml" \
   "$ROOT/dev-pack/formulas/hard-bug-finalize.toml" \
-  "$ROOT/dev-pack/agents/bug-coordinator/prompt.template.md"; do
-  grep -q 'update-work-lifecycle.sh' "$contract" || fail "lifecycle helper missing from $contract"
+  "$ROOT/dev-pack/formulas/change-lifecycle.toml" \
+  "$ROOT/dev-pack/assets/scripts/decide-change-lifecycle.sh"; do
+  grep -Eq 'update-work-lifecycle.sh|sling-change-lifecycle.sh|decide-change-lifecycle.sh' "$contract" \
+    || fail "shared lifecycle contract missing from $contract"
 done
 
 update() { "$UPDATE" --bead work-1 --intent feature "$@"; }

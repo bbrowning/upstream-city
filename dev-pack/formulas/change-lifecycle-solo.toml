@@ -1,0 +1,108 @@
+description = """
+N=1 shape of the shared bounded feature/hard-bug local-change lifecycle. It preserves
+the same immutable artifact, revision, approval, escalation, and parent-closure contract
+as change-lifecycle; only the review fan-out/synthesis/settlement stages collapse to one
+reviewer because there can be no reviewer disagreement.
+"""
+formula = "change-lifecycle-solo"
+[requires]
+formula_compiler = ">=2.0.0"
+
+[vars]
+[vars.work_bead]
+required = true
+[vars.intent_kind]
+required = true
+[vars.implementation_artifact_ref]
+required = true
+[vars.implementation_artifact_id]
+required = true
+[vars.implementation_repository_id]
+required = true
+[vars.implementation_branch]
+required = true
+[vars.implementation_revision]
+required = true
+[vars.base_ref]
+required = true
+[vars.head_ref]
+required = true
+[vars.max_iterations]
+default = "3"
+[vars.revision_formula]
+required = true
+[vars.revision_target]
+required = true
+[vars.implementation_base]
+required = true
+[vars.branch_prefix]
+default = ""
+[vars.implementer_target]
+default = ""
+[vars.reviewer_target]
+default = ""
+[vars.coordinator_target]
+default = ""
+[vars.triage_target]
+default = "pr-triage"
+[vars.lane_a_target]
+default = "pr-reviewer-gpt56luna-xhigh"
+[vars.lane_b_target]
+default = ""
+[vars.synthesis_target]
+default = "pr-review-synthesizer"
+[vars.arbiter_target]
+default = ""
+
+[[steps]]
+id = "triage"
+title = "Validate immutable artifact and classify review posture"
+description = """
+Offline local-change triage. Run resolve-local-change.sh and require artifact
+`{{implementation_artifact_id}}`, repository `{{implementation_repository_id}}`, branch
+`{{implementation_branch}}`, revision {{implementation_revision}}, and exact
+`{{base_ref}}...{{head_ref}}`; never fetch. Emit standard pr-triage.v1.
+"""
+metadata = { "gc.run_target" = "{{triage_target}}", "gc.output_json_schema" = "pr-triage.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"
+
+[[steps]]
+id = "review"
+title = "Solo review of exact artifact revision {{implementation_revision}}"
+needs = ["triage"]
+description = """
+Apply the standard pr-review.v1 method and change-review personas. Independently
+re-resolve the artifact immediately before reading, preserve exact implementation
+provenance, remain read-only/offline, and emit pr-review.v1.
+"""
+metadata = { "gc.run_target" = "{{lane_a_target}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"
+
+[[steps]]
+id = "close-or-revise"
+title = "Approve, revise with a new artifact, or escalate"
+needs = ["review"]
+description = """
+Apply decide-change-lifecycle.sh for `{{work_bead}}` / `{{intent_kind}}` using the
+solo pr-review.v1 verdict. Approval alone records disposition=approved and closes the
+parent at artifact `{{implementation_artifact_id}}`, head `{{head_ref}}`, branch
+`{{implementation_branch}}`. Request_changes below max_iterations={{max_iterations}}
+records feedback and re-slings `{{revision_formula}}` to `{{revision_target}}` for a new
+commit and revision+1 with explicit lineage; that implementation must hand its new
+immutable artifact back to this lifecycle. Blocked/exhausted escalates and leaves the
+parent open. Emit change-lifecycle-final.v1. Never mutate a remote.
+
+Write the review JSON to a unique temporary synthesis file, adding
+has_disputed_major=false, then invoke decide-change-lifecycle.sh with every exact value
+named by this step (artifact/head/branch/revision/bound, revision formula/target/base,
+and hard-bug targets when present), `--feedback-bead <review-step-bead>`, and
+`--review-n 1 --lane-a-target {{lane_a_target}}`. Emit the helper's stdout verbatim.
+"""
+metadata = { "gc.run_target" = "{{synthesis_target}}", "gc.output_json_schema" = "change-lifecycle-final.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"

@@ -22,6 +22,7 @@ BEAD="" ; RIG="" ; LOOP="false" ; MAXR="3" ; BASEREF="origin/main"
 N="1" ; MODELS=""
 LANE_A_MODEL="" ; LANE_B_MODEL="" ; LANE_A_TARGET="" ; LANE_B_TARGET=""
 BRANCH_PREFIX=""
+REVIEW_N="2" ; REVIEW_LANES="" ; MAX_REVIEW_ITERATIONS="3"
 DRYRUN="no"
 
 usage() {
@@ -44,6 +45,9 @@ with the <rig>/bug-worker-* lane targets filled in.
   --lane-a-target T   override lane A target (default <rig>/bug-worker-a)
   --lane-b-target T   override lane B target (default <rig>/bug-worker-b; N=2 only)
   --branch-prefix P   prefix the eventual fix branch (default: unset -> no prefix)
+  --review-n N        shared lifecycle review fan-out: 1 or 2 (default: 2)
+  --review-lanes A[,B] reviewer profile targets; count must match --review-n
+  --max-review-iterations N  artifact revision cap (default: 3)
   --dry-run           print the gc sling command without running it (skips live checks)
   -h, --help
 EOF
@@ -73,6 +77,12 @@ while [ $# -gt 0 ]; do
         --lane-b-target=*) LANE_B_TARGET="${1#*=}"; shift ;;
         --branch-prefix)   BRANCH_PREFIX="${2:?}"; shift 2 ;;
         --branch-prefix=*) BRANCH_PREFIX="${1#*=}"; shift ;;
+        --review-n)        REVIEW_N="${2:?}"; shift 2 ;;
+        --review-n=*)      REVIEW_N="${1#*=}"; shift ;;
+        --review-lanes)    REVIEW_LANES="${2:?}"; shift 2 ;;
+        --review-lanes=*)  REVIEW_LANES="${1#*=}"; shift ;;
+        --max-review-iterations) MAX_REVIEW_ITERATIONS="${2:?}"; shift 2 ;;
+        --max-review-iterations=*) MAX_REVIEW_ITERATIONS="${1#*=}"; shift ;;
         --dry-run)         DRYRUN="yes"; shift ;;
         -h|--help)         usage; exit 0 ;;
         --)                shift; break ;;
@@ -89,6 +99,9 @@ case "$N" in
     1|2) ;;
     *) die "--n must be 1 or 2 (got '$N')" ;;
 esac
+case "$REVIEW_N" in 1|2) ;; *) die "--review-n must be 1 or 2" ;; esac
+case "$MAX_REVIEW_ITERATIONS" in ''|*[!0-9]*) die "--max-review-iterations must be a positive integer" ;; esac
+[ "$MAX_REVIEW_ITERATIONS" -ge 1 ] || die "--max-review-iterations must be a positive integer"
 
 # Resolve per-lane models: explicit --lane-X-model wins; else positional from --models.
 if [ -n "$MODELS" ]; then
@@ -106,6 +119,17 @@ fi
 COORD="$RIG/bug-coordinator"
 [ -n "$LANE_A_TARGET" ] || LANE_A_TARGET="$RIG/bug-worker-a"
 [ -n "$LANE_B_TARGET" ] || LANE_B_TARGET="$RIG/bug-worker-b"
+REVIEW_LANE_A="$RIG/pr-reviewer-sonnet-xhigh"
+REVIEW_LANE_B="$RIG/pr-reviewer-gpt56luna-xhigh"
+if [ -n "$REVIEW_LANES" ]; then
+    IFS=',' read -r REVIEW_LANE_A REVIEW_LANE_B _ <<<"$REVIEW_LANES" || true
+    [ -n "$REVIEW_LANE_A" ] || die "--review-lanes requires a lane A profile"
+    if [ "$REVIEW_N" = "2" ]; then [ -n "$REVIEW_LANE_B" ] || die "--review-n 2 requires two --review-lanes profiles"
+    else
+        [ -z "$REVIEW_LANE_B" ] || die "--review-n 1 accepts one --review-lanes profile"
+        REVIEW_LANE_B="$RIG/pr-reviewer-gpt56luna-xhigh"
+    fi
+fi
 
 # Pick the formula by opinion count.
 if [ "$N" = "1" ]; then
@@ -129,6 +153,8 @@ fi
 set -- "$COORD" "$FORMULA" --formula \
     --var "bug_bead=$BEAD" --var "phase=root_cause" --var "round=1" \
     --var "max_rounds=$MAXR" --var "enable_loop=$LOOP" --var "base_ref=$BASEREF" \
+    --var "review_n=$REVIEW_N" --var "max_review_iterations=$MAX_REVIEW_ITERATIONS" \
+    --var "review_lane_a_target=$REVIEW_LANE_A" --var "review_lane_b_target=$REVIEW_LANE_B" \
     --var "lane_a_target=$LANE_A_TARGET" \
     --var "coordinator_target=$COORD"
 # Lane B exists only at N=2.

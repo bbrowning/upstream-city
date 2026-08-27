@@ -1,16 +1,16 @@
 description = """
 Finalize a converged hard-bug arc: the stronger lane implements the agreed fix on a
-real local branch (writes tests, runs them, fixes, commits), the OTHER lane
-cross-reviews the immutable local commit AND its verification evidence, then the
-coordinator concludes.
+real local branch (writes tests, runs them, fixes, commits), emits the canonical
+immutable artifact, then automatically hands it to the shared bounded
+review-settle-revise lifecycle used by feature work.
 
 Slung by the coordinator once the fix phase converges. Which lane implements vs
 reviews is decided at runtime (implementer_target / reviewer_target) from the
 coordinator's stronger_lane call — so both roles are provider-agnostic.
 
-The coordinator's finalize step closes the arc as done on concurrence, or re-enters
-the fix phase / escalates on rejection. It never mutates a remote; export,
-publication, and merge are operator actions outside Gas City.
+The shared lifecycle alone closes the arc at an approved exact-artifact checkpoint,
+requests a new commit/artifact revision, or escalates at the configured bound. It never
+mutates a remote; export, publication, and merge are operator actions outside Gas City.
 """
 formula = "hard-bug-finalize"
 
@@ -35,7 +35,7 @@ description = "Agent target that implements (the stronger lane). Required."
 required = true
 
 [vars.reviewer_target]
-description = "Agent target that cross-reviews (the other lane). Required."
+description = "Legacy bug peer target preserved across revision relaunches. Required for compatible coordinator handoff."
 required = true
 
 [vars.coordinator_target]
@@ -49,6 +49,38 @@ default = "3"
 [vars.enable_loop]
 description = "Passed through so a re-opened fix phase keeps driving the loop."
 default = "true"
+
+[vars.revision]
+description = "Positive local-change artifact revision controlled by the shared lifecycle."
+default = "1"
+
+[vars.previous_artifact_id]
+description = "Prior local-change artifact id for review-driven revisions."
+default = ""
+
+[vars.feedback_bead]
+description = "Review/settlement bead that requested this revision."
+default = ""
+
+[vars.producing_verdict]
+description = "Verdict that requested this revision."
+default = ""
+
+[vars.review_n]
+description = "Review fan-out for the shared lifecycle."
+default = "2"
+
+[vars.max_review_iterations]
+description = "Maximum artifact revisions before human escalation."
+default = "3"
+
+[vars.review_lane_a_target]
+description = "Reviewer profile target for shared lifecycle lane A."
+default = "pr-reviewer-sonnet-xhigh"
+
+[vars.review_lane_b_target]
+description = "Reviewer profile target for shared lifecycle lane B."
+default = "pr-reviewer-gpt56luna-xhigh"
 
 [[steps]]
 id = "implement"
@@ -75,7 +107,9 @@ alone exports or publishes commits. Do NOT close the arc bead.
 
 After committing, run `emit-local-change.sh` with intent `hard_bug`, workflow
 `hard-bug-finalize`, this rig and bug bead, the exact base/branch, claimed checks,
-and revision lineage. Revision 1 has no predecessor; each later revision names
+and revision lineage `--revision {{revision}} --previous-artifact
+{{previous_artifact_id}} --feedback-bead {{feedback_bead}} --verdict
+{{producing_verdict}}`. Revision 1 has no predecessor; each later revision names
 the prior artifact id plus the feedback bead and verdict that produced it. Embed
 the resulting immutable `local-change.v1` verbatim as `local_change` in
 `hard-bug-implement.v2`, alongside the compatibility fields `branch`, `head_sha`,
@@ -99,62 +133,26 @@ max_attempts = 2
 on_exhausted = "hard_fail"
 
 [[steps]]
-id = "cross-review"
-title = "Cross-review the fix and its verification evidence"
+id = "review-handoff"
+title = "Hand immutable hard-bug artifact to the shared lifecycle"
 needs = ["implement"]
 description = """
-You are the OTHER lane, cross-reviewing the fix for arc `{{bug_bead}}` — read-only.
-Read the implementer's `hard-bug-implement.v2` (walk your `needs` edge), then
-validate its embedded artifact with `resolve-local-change.sh --rig <rig>
---artifact <implement-step-bead>`. Your worktree and theirs are linked worktrees
-of the SAME repo; review the returned exact `<base_sha>...<head_sha>`. If the
-artifact, local ref, repository, or commit is absent
-or mismatched, report `blocked`; never contact a remote as fallback. Judge (1)
-The resolver includes the explicit guard `git rev-parse <branch> == head_sha`;
-do not review if that branch-to-SHA check fails.
-whether the diff
-actually fixes the agreed ROOT CAUSE with no scope creep or new defects
-(`concurs_with_fix`), and (2) whether the claimed tests exist and genuinely assert
-the corrected behavior — re-run them if feasible (`concurs_with_evidence`). Verdict:
-concur / request_changes / blocked.
+Read hard-bug-implement.v2 from the implement step, then start the same lifecycle used
+by feature work:
 
-Load personas through the same `change-review` changed-path lens as local-change and PR
-reviewers, and include its load/material-influence record in `persona_traces`.
+  bash "$GC_CITY_PATH/dev-pack/assets/scripts/sling-change-lifecycle.sh" \\
+    --rig {{.Rig}} --work-bead {{bug_bead}} --intent hard_bug \\
+    --artifact <implement-step-bead> --n {{review_n}} \\
+    --max-iterations {{max_review_iterations}} --revision-formula hard-bug-finalize \\
+    --revision-target {{implementer_target}} --base {{base}} \\
+    --branch-prefix "{{branch_prefix}}" --implementer-target {{implementer_target}} \\
+    --reviewer-target {{reviewer_target}} --coordinator-target {{coordinator_target}} \\
+    --lane-a-target {{review_lane_a_target}} --lane-b-target {{review_lane_b_target}}
 
-Emit `hard-bug-crossreview.v1` to gc.output_json, then finish:
-  bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-step-bead> \\
-    --json-file "$out" --schema hard-bug-crossreview.v1 --outcome pass
+The helper resolves and pins the canonical artifact's exact immutable SHAs. Emit
+change-lifecycle-handoff.v1 and close only this step; never close the bug parent here.
 """
-metadata = { "gc.run_target" = "{{reviewer_target}}", "gc.output_json_schema" = "hard-bug-crossreview.v1", "gc.output_json_required" = "true" }
-
-[steps.retry]
-max_attempts = 2
-on_exhausted = "hard_fail"
-
-[[steps]]
-id = "finalize"
-title = "Coordinator finalize: conclude or re-open"
-needs = ["cross-review"]
-description = """
-Conclude the hard-bug arc `{{bug_bead}}`. Read the cross-reviewer's
-`hard-bug-crossreview.v1` (walk your `needs` edge) and the implementer's
-`hard-bug-implement.v2` (see your finalize playbook):
-
-- Concur (verdict=concur AND concurs_with_fix AND concurs_with_evidence) → the arc is
-  DONE. After closing this finalize step, call `update-work-lifecycle.sh` with
-  disposition `approved` and the exact final artifact/head/branch; that helper
-  closes the parent idempotently at this validated checkpoint. Mail the human the
-  branch, fix summary, and evidence.
-  Do NOT merge, publish, or otherwise mutate a remote.
-- Reject → if rounds.fix < {{max_rounds}}, re-enter the fix phase (sling hard-bug-round
-  phase=fix, relaying the cross-review findings); else escalate (hold=mayor + notify the
-  human).
-
-Emit `hard-bug-final.v1` via emit-json.sh. On request_changes, blocked, or
-escalation, call `update-work-lifecycle.sh` with the matching nonterminal
-disposition and durable reason; those outcomes must leave the parent open.
-"""
-metadata = { "gc.run_target" = "{{coordinator_target}}", "gc.output_json_schema" = "hard-bug-final.v1", "gc.output_json_required" = "true" }
+metadata = { "gc.run_target" = "pr-review-synthesizer", "gc.output_json_schema" = "change-lifecycle-handoff.v1", "gc.output_json_required" = "true" }
 
 [steps.retry]
 max_attempts = 2

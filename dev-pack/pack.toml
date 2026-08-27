@@ -49,8 +49,8 @@
 #             each other's second opinion ("consider or refute — not a mandate") until
 #             root cause, then fix, converge (coordinator-judged, with the
 #             correlated-convergence gate); the stronger lane implements + tests, the
-#             other cross-reviews the diff AND its evidence.
-#     agents/bug-worker-a/  lane A: diagnose / reconsider / implement / cross-review,
+#             shared reviewer profiles review the immutable artifact and evidence.
+#     agents/bug-worker-a/  lane A: diagnose / reconsider / implement,
 #                           single slot, its OWN detached worktree.
 #     agents/bug-worker-b/  lane B (N>=2): identical method (shares worker-a's prompt),
 #                           different model. A real second vendor is a one-line
@@ -83,11 +83,13 @@
 #                                     pr-followup.v1 contract, chained to the root
 #                                     verdict bead via gc.followup_of.
 #     formulas/feature-dev.toml       per-run implement task + feature-dev.v2/local-change.v1 report.
+#     formulas/change-lifecycle.toml  shared N=2 immutable review -> settle -> revise/approve.
+#     formulas/change-lifecycle-solo.toml N=1 shape of the same bounded lifecycle.
 #     formulas/hard-bug-round.toml    N>=2 round: the lanes + a coordinator reconcile
 #                                     fan-in. Re-slung per round.
 #     formulas/hard-bug-round-solo.toml N=1 round: one lane + a coordinator self-verify
 #                                     synthesis. Re-slung per round.
-#     formulas/hard-bug-finalize.toml implement -> cross-review -> finalize.
+#     formulas/hard-bug-finalize.toml implement -> shared lifecycle handoff.
 #     orders/fetch-origin.toml        read-only `git fetch --prune` on a cooldown.
 #
 # COMMANDS (namespaced: `gc dev-pack <cmd>`)
@@ -156,4 +158,4 @@
 [pack]
 name = "dev-pack"
 schema = 2
-description = "One engineering-workflow pack, three lanes over a shared spine: posture-gated PR review (triage → review or N-opinion quorum, trusted auto-run + human-approved dynamic-check lane, plus an `ask` follow-up lane — one-shot Q&A by mail, or a live interactive per-PR chat when no question is given), bug fix with an N-opinion dial (solo self-verify or two-opinion diagnose → converge → implement → cross-review), and a feature-dev write lane — each isolated in its own git worktree (native work_dir + pre_start), sharing one persona corpus via $GC_PERSONAS."
+description = "One engineering-workflow pack, three lanes over a shared spine: posture-gated standalone PR/local-ref review, bug diagnosis and feature implementation front ends, and one bounded immutable-artifact review → settle → revise/approve lifecycle (default N=2) shared by feature and hard-bug work. Write lanes are local-only and worktree-isolated; review lanes share one persona corpus via $GC_PERSONAS."

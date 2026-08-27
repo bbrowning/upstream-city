@@ -1,0 +1,190 @@
+description = """
+Shared bounded review-settle-revise lifecycle for committed feature and hard-bug work.
+Two independent reviewers inspect one canonical local-change artifact at its exact
+immutable base/head SHAs. Strict synthesis is followed by a conditional evidence-based
+settle gate and one coordinator decision: approve and close the parent, request a new
+artifact revision, or escalate at the configured bound. It never contacts or mutates a
+remote. Standalone PR/local-ref review remains in pr-review(-quorum).
+"""
+formula = "change-lifecycle"
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[vars]
+[vars.work_bead]
+required = true
+[vars.intent_kind]
+description = "feature or hard_bug"
+required = true
+[vars.implementation_artifact_ref]
+required = true
+[vars.implementation_artifact_id]
+required = true
+[vars.implementation_repository_id]
+required = true
+[vars.implementation_branch]
+required = true
+[vars.implementation_revision]
+required = true
+[vars.base_ref]
+description = "Exact immutable base SHA from local-change.v1"
+required = true
+[vars.head_ref]
+description = "Exact immutable head SHA from local-change.v1"
+required = true
+[vars.max_iterations]
+default = "3"
+[vars.revision_formula]
+required = true
+[vars.revision_target]
+required = true
+[vars.implementation_base]
+required = true
+[vars.branch_prefix]
+default = ""
+[vars.implementer_target]
+default = ""
+[vars.reviewer_target]
+default = ""
+[vars.coordinator_target]
+default = ""
+[vars.triage_target]
+default = "pr-triage"
+[vars.lane_a_target]
+default = "pr-reviewer-sonnet-xhigh"
+[vars.lane_b_target]
+default = "pr-reviewer-gpt56luna-xhigh"
+[vars.synthesis_target]
+default = "pr-review-synthesizer"
+[vars.arbiter_target]
+default = "pr-arbiter"
+
+[[steps]]
+id = "triage"
+title = "Validate immutable artifact and classify review posture"
+description = """
+This is an offline local-change triage for `{{work_bead}}`. Before emitting
+pr-triage.v1, run resolve-local-change.sh with `--artifact
+{{implementation_artifact_ref}}` and require artifact id
+`{{implementation_artifact_id}}`, repository `{{implementation_repository_id}}`, branch
+`{{implementation_branch}}`, revision {{implementation_revision}}, and the exact range
+`{{base_ref}}...{{head_ref}}`. Fail hard on drift; never fetch. Then apply the normal
+deterministic pre-scan/posture contract used by pr-review-quorum.
+"""
+metadata = { "gc.run_target" = "{{triage_target}}", "gc.output_json_schema" = "pr-triage.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"
+
+[[steps]]
+id = "review-lane-a"
+title = "Reviewer A: exact immutable artifact revision {{implementation_revision}}"
+needs = ["triage"]
+description = """
+Follow the standard pr-review.v1 reviewer method and change-review persona lens. Re-run
+resolve-local-change.sh immediately before reading the diff and require the supplied
+artifact/repository/branch/revision plus exact `{{base_ref}}...{{head_ref}}`. Review
+read-only and offline. Preserve all values in implementation_provenance. Emit
+pr-review.v1 with skeptical findings and an independently reached verdict.
+"""
+metadata = { "gc.run_target" = "{{lane_a_target}}", "gc.review_quorum_lane" = "reviewer-a", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
+[steps.retry]
+max_attempts = 2
+on_exhausted = "soft_fail"
+
+[[steps]]
+id = "review-lane-b"
+title = "Reviewer B: exact immutable artifact revision {{implementation_revision}}"
+needs = ["triage"]
+description = """
+Follow the standard pr-review.v1 reviewer method and change-review persona lens. Re-run
+resolve-local-change.sh immediately before reading the diff and require the supplied
+artifact/repository/branch/revision plus exact `{{base_ref}}...{{head_ref}}`. Review
+read-only and offline, independently of lane A. Preserve implementation_provenance and
+emit pr-review.v1.
+"""
+metadata = { "gc.run_target" = "{{lane_b_target}}", "gc.review_quorum_lane" = "reviewer-b", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
+[steps.retry]
+max_attempts = 2
+on_exhausted = "soft_fail"
+
+[[steps]]
+id = "synthesize"
+title = "Strictest-verdict quorum synthesis"
+needs = ["review-lane-a", "review-lane-b"]
+description = """
+Apply the complete pr-review-quorum.v1 synthesis contract: require identical immutable
+implementation_provenance across surviving lanes, take the strictest verdict, union and
+deduplicate findings, and structurally mark disputed major findings and their factual
+crux. Never bless a different SHA and never review code in this judging step. Emit
+pr-review-quorum.v1.
+"""
+metadata = { "gc.run_target" = "{{synthesis_target}}", "gc.review_quorum_role" = "synthesis", "gc.output_json_schema" = "pr-review-quorum.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"
+
+[[steps]]
+id = "settle-gate"
+title = "Settle load-bearing disagreement when present"
+needs = ["synthesize", "review-lane-a", "review-lane-b"]
+description = """
+Read the synthesis and both lanes. If has_disputed_major=true, apply the normal
+pr-review-settle.v1 contract: verify each keystone by file:line evidence (never a vote),
+then resolve/refute/hold it. This is one bounded settle round. If there is no disputed
+major, emit a no-op pr-review-settle.v1 with disputes_examined=[], resolutions=[], and
+settled_verdict equal to the synthesis verdict. Always preserve the exact base/head and
+read-only discipline; never fetch. Emit pr-review-settle.v1.
+"""
+metadata = { "gc.run_target" = "{{arbiter_target}}", "gc.review_settle_role" = "conditional-arbiter", "gc.output_json_schema" = "pr-review-settle.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"
+
+[[steps]]
+id = "close-or-revise"
+title = "Approve, revise with a new artifact, or escalate"
+needs = ["synthesize", "settle-gate"]
+description = """
+Apply the shared lifecycle finalizer with decide-change-lifecycle.sh for work `{{work_bead}}`, intent
+`{{intent_kind}}`, artifact `{{implementation_artifact_id}}` revision
+{{implementation_revision}}, exact head `{{head_ref}}`, branch
+`{{implementation_branch}}`, and max_iterations={{max_iterations}}. The settle gate is
+authoritative only for disputed findings; otherwise the strict synthesis is.
+
+Write the synthesis and settle JSON from your needs edge to unique temporary files, then
+run:
+  bash "$GC_CITY_PATH/dev-pack/assets/scripts/decide-change-lifecycle.sh" \
+    --rig {{.Rig}} --work-bead {{work_bead}} --intent {{intent_kind}} \
+    --artifact-id {{implementation_artifact_id}} --head-sha {{head_ref}} \
+    --branch {{implementation_branch}} --revision {{implementation_revision}} \
+    --max-iterations {{max_iterations}} --synthesis-file <synthesis.json> \
+    --settle-file <settle.json> --feedback-bead <authoritative-verdict-bead> \
+    --revision-formula {{revision_formula}} --revision-target {{revision_target}} \
+    --base {{implementation_base}} --branch-prefix "{{branch_prefix}}" \
+    --implementer-target "{{implementer_target}}" --reviewer-target "{{reviewer_target}}" \
+    --coordinator-target "{{coordinator_target}}" --review-n 2 \
+    --lane-a-target {{lane_a_target}} --lane-b-target {{lane_b_target}}
+Emit its stdout verbatim as change-lifecycle-final.v1.
+
+Approve/approve_with_nits: call update-work-lifecycle.sh with checkpoint=review,
+disposition=approved and the exact artifact/head/branch. This is the only automatic
+parent-close checkpoint. Notify the human with final branch, SHA, and verification.
+
+Request_changes: first record disposition=request_changes and the synthesis/settle
+feedback bead. If revision {{implementation_revision}} is below the bound, sling
+`{{revision_formula}}` to `{{revision_target}}` for revision+1, passing the prior
+artifact id, feedback bead, and producing verdict. Feature uses work_bead/base/offline;
+hard_bug uses bug_bead/base/branch_prefix/implementer/reviewer/coordinator plus the same
+revision lineage. The implementer must add a new commit, emit a new artifact, and its
+handoff starts this lifecycle again. Never re-review or bless the old SHA.
+
+Blocked or an exhausted bound: record blocked/escalated, hold=mayor, notify the human,
+and leave the parent open. Emit change-lifecycle-final.v1 describing the exact terminal
+or next action. Never push, publish, open a PR, or mutate a remote.
+"""
+metadata = { "gc.run_target" = "{{synthesis_target}}", "gc.output_json_schema" = "change-lifecycle-final.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"

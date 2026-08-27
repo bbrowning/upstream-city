@@ -23,7 +23,7 @@ path you run and which formula you re-sling; do not assume 2.**
   `hard-bug-round`.
 
 Either way you move the arc forward — round by round, phase by phase — until the fix is
-implemented and cross-reviewed, or until you must hand it to a human. Keep any relay
+implemented and handed to the shared bounded review lifecycle, or until you must hand it to a human. Keep any relay
 honest and non-coercive.
 
 **B (self-verify keystones) applies at every N; C (the correlated-convergence gate)
@@ -33,13 +33,14 @@ exists only at N>=2.**
 
 ```
 diagnose(root_cause) → converge-root-cause → converge-fix
-                     → implement → cross-review → done | escalated
+                     → implement → review → settle? → revise* → done | escalated
 ```
 
 The round formula runs one round (the N lanes + your `reconcile`/synthesis step):
-`hard-bug-round` at N>=2, `hard-bug-round-solo` at N=1. The `finalize` formula
-(`hard-bug-finalize`) runs implement → cross-review → your `finalize` step. You are
-routed the **reconcile** and **finalize** steps; the workers get the rest.
+`hard-bug-round` at N>=2, `hard-bug-round-solo` at N=1. `hard-bug-finalize`
+implements and hands its canonical artifact to `change-lifecycle`, the same N=2
+review-settle-revise formula feature work uses. You are routed the **reconcile** steps;
+the shared review synthesizer owns the final lifecycle decision.
 
 ## Startup, every wake
 
@@ -272,6 +273,9 @@ cheap-unverified N=1 arc **escalates** instead.
   **Branch prefix:** forward `branch_prefix` unchanged from your own run vars (see
   step 3) on every round-advance AND into `hard-bug-finalize` below — it defaults to
   empty, so passing it through costs nothing when unset.
+  **Review lifecycle:** likewise forward `review_n`, `max_review_iterations`,
+  `review_lane_a_target`, and `review_lane_b_target` unchanged on every round and into
+  hard-bug-finalize. Diagnosis N and review N are independent dials.
   Keep each `relay_note` a neutral, specific summary of the *other* lane's position —
   "Lane B argues the cause is X in file:line because Y; consider or refute" — never
   "adopt this." Lane A gets B's note (`relay_note_a`), lane B gets A's; for N>2 each
@@ -284,12 +288,10 @@ cheap-unverified N=1 arc **escalates** instead.
   --var prior_peer_bead_b=` (empty relay vars); at N=1 `hard-bug-round-solo` with
   `--var phase=fix --var round=1` (only the `lane_a_*` vars, no relay vars).
 
-- **Aligned + phase `fix` → choose the implementer and finalize.** At N>=2 the stronger
-  lane implements and the other cross-reviews; **at N=1 the sole lane does both** —
-  `implementer_target` and `reviewer_target` are the same lane, and because `implement`
-  and `cross-review` are separate formula steps the review runs as a **fresh session**
-  with the cross-review task prompt (same worktree → it sees the diff), not appended to
-  the implement session. Set `chosen_implementer` in the arc state, then sling
+- **Aligned + phase `fix` → choose the implementer and start finalization.** The stronger
+  diagnosis lane implements. Review is always a fresh shared-lifecycle session with
+  default N=2 reviewer profiles, independent of the diagnosis fan-out. Set
+  `chosen_implementer` in the arc state, then sling
   `hard-bug-finalize`:
   ```bash
   gc sling {{.Rig}}/bug-coordinator hard-bug-finalize --formula \
@@ -297,6 +299,10 @@ cheap-unverified N=1 arc **escalates** instead.
     --var implementer_target=<stronger lane target (the sole lane at N=1)> \
     --var reviewer_target=<other lane target (the SAME sole lane at N=1)> \
     --var coordinator_target={{.Rig}}/bug-coordinator --var max_rounds=<max_rounds> \
+    --var review_n=<review_n from your step> \
+    --var max_review_iterations=<max_review_iterations from your step> \
+    --var review_lane_a_target=<review_lane_a_target from your step> \
+    --var review_lane_b_target=<review_lane_b_target from your step> \
     --var branch_prefix=<branch_prefix> \
     --var enable_loop=true --title "bug finalize: <bug_bead>"
   ```
@@ -312,48 +318,14 @@ cheap-unverified N=1 arc **escalates** instead.
   `status=escalated` and stop. The human — not the `lead` — is the adjudicator here.
 
 After you sling the next step, your reconcile step is done (step 3 already closed it).
-You do not wait — the next reconcile/finalize step re-nudges you when it is ready.
-
----
-
-## Finalize playbook
-
-You are working the `finalize` step of `hard-bug-finalize`; it `needs` the
-`cross-review` step. Read that cross-reviewer's `hard-bug-crossreview.v1` (walk your
-`needs` edge) and the implementer's `hard-bug-implement.v2`.
-
-- **Concur** (`verdict=concur` and both `concurs_with_fix` and `concurs_with_evidence`
-  true) → the arc is **done**. Notify the human via the
-  `--notify` on your emit-json.sh close (below), with the branch in the subject. Do
-  **not** merge — a human/PR checkpoint does that.
-- **Reject** (`request_changes`/`blocked`, or evidence not credible) → if
-  `rounds.fix` < `max_rounds`, re-enter the **fix phase**: re-sling the same-arity
-  round formula with `phase=fix` (`hard-bug-round` at N≥2, relaying the cross-review
-  findings so the lanes reconsider the fix; `hard-bug-round-solo` at N=1, with the
-  cross-review findings in the lane's context). Otherwise **escalate** (as above).
-
-Emit `hard-bug-final.v1` = `{ subject:<bug_bead>, concurred (bool), branch,
-status:(done|reopened|escalated), next_action, summary, failure_class, failure_reason }`
-and close your step with `emit-json.sh --schema hard-bug-final.v1` (write it to a
-unique `mktemp` file, as in Reconcile). On a terminal
-outcome (`done` or `escalated`), fold `--notify "${GC_HARDBUG_NOTIFY_TO:-human}"
---render "$GC_CITY_PATH/dev-pack/assets/scripts/render-hardbug.sh"
---subject "bug <bug_bead>: <done|escalated> — <branch/summary>"` into that same
-close so the human is notified atomically with a prose body (never a separate `gc mail
-send`, never the `lead`). On `reopened` (re-entering the fix phase), do not notify.
-After that step close, record the parent checkpoint through
-`update-work-lifecycle.sh`: use `approved` plus the exact final artifact id, head
-SHA, and branch only for concurrence; use `request_changes`, `blocked`, or
-`escalated` with the producing feedback bead and reason otherwise. Only
-`approved` closes the parent, idempotently. Every other disposition leaves it
-in progress with durable `work-lifecycle.v1` state.
+You do not wait — the implementation handoff and shared lifecycle wake their own agents.
 
 ---
 
 ## Guardrails
 
 - **Never edit code or close the arc bead directly.** The lifecycle helper closes
-  only on `approved` (cross-review concurred) or an equivalent explicit human-safe
+  only on the shared quorum's `approved` human-safe
   checkpoint — never on your say-so mid-flight.
 - **Relay is a second opinion, not an order.** Every relay note must let a lane
   refute. If you find yourself telling a lane the answer, rewrite it.

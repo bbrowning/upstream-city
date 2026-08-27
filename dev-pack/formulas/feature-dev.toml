@@ -45,6 +45,22 @@ default = ""
 description = "Structured verdict that produced this revision."
 default = ""
 
+[vars.review_n]
+description = "Review fan-out for the shared lifecycle (1 or 2)."
+default = "2"
+
+[vars.max_review_iterations]
+description = "Maximum implementation/artifact revisions before human escalation."
+default = "3"
+
+[vars.review_lane_a_target]
+description = "Reviewer profile target for lifecycle lane A."
+default = "pr-reviewer-sonnet-xhigh"
+
+[vars.review_lane_b_target]
+description = "Reviewer profile target for lifecycle lane B (unused at N=1)."
+default = "pr-reviewer-gpt56luna-xhigh"
+
 [[steps]]
 id = "implement"
 title = "Implement the assignment on a local paude/{{work_bead}} branch"
@@ -121,6 +137,33 @@ failures (under-specified assignment, absent local base ref, or `pwd` resolved
 to the rig root). Retries must remain local-only.
 """
 metadata = { "gc.output_json_schema" = "feature-dev.v2", "gc.output_json_required" = "true" }
+
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"
+
+[[steps]]
+id = "review-handoff"
+title = "Hand immutable feature artifact to the shared lifecycle"
+needs = ["implement"]
+description = """
+Read the implement step's feature-dev.v2 output and pass its implementation bead to
+sling-change-lifecycle.sh. The helper independently resolves local-change.v1, pins its
+exact base/head SHAs and provenance, and starts N={{review_n}} review (default N=2):
+
+  bash "$GC_CITY_PATH/dev-pack/assets/scripts/sling-change-lifecycle.sh" \
+    --rig {{.Rig}} --work-bead {{work_bead}} --intent feature \
+    --artifact <implement-step-bead> --n {{review_n}} \
+    --max-iterations {{max_review_iterations}} --revision-formula feature-dev \
+    --revision-target {{.Rig}}/feature-dev --base {{base}} \
+    --lane-a-target {{review_lane_a_target}} --lane-b-target {{review_lane_b_target}}
+
+This handoff and every later revision are local-only. Emit
+change-lifecycle-handoff.v1 with work_bead, intent_kind, artifact_ref, revision,
+review_n, lifecycle_formula, and failure fields, then close this step with emit-json.sh.
+Do not close the parent work bead.
+"""
+metadata = { "gc.run_target" = "pr-review-synthesizer", "gc.output_json_schema" = "change-lifecycle-handoff.v1", "gc.output_json_required" = "true" }
 
 [steps.retry]
 max_attempts = 2

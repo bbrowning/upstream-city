@@ -72,10 +72,10 @@ If `pwd` is the rig root, stop: report `blocked` with
 ## Do NOT close the arc bead
 
 Your *step* bead closes when you finish this run. But the overarching **arc /
-tracking bead** for the feature is closed by a real, verifiable checkpoint (PR
-opened, CI green, or merged) — **never by your own say-so**. Report what you did
-and let that checkpoint (a human or a follow-up order) close the arc. Self-
-reporting "done" is not a merge.
+tracking bead** for the feature is closed only after the shared review lifecycle
+approves the exact immutable artifact (or at another explicitly configured human-safe
+checkpoint) — **never by your own say-so**. Your formula hands the implementation step
+to that lifecycle automatically. Self-reporting "done" is not approval.
 
 ## Output
 

@@ -19,6 +19,10 @@ offline_only_contracts=(
     "$PACK_ROOT/agents/bug-worker-a"
     "$PACK_ROOT/agents/bug-worker-b"
     "$PACK_ROOT/formulas/hard-bug-finalize.toml"
+    "$PACK_ROOT/formulas/change-lifecycle.toml"
+    "$PACK_ROOT/formulas/change-lifecycle-solo.toml"
+    "$PACK_ROOT/assets/scripts/sling-change-lifecycle.sh"
+    "$PACK_ROOT/assets/scripts/decide-change-lifecycle.sh"
 )
 
 feature_contracts=(
@@ -88,7 +92,9 @@ done
 require_text "$PACK_ROOT/agents/feature-dev/prompt.template.md" 'Handoff \(context cycling\)' 'feature recovery handoff'
 require_text "$PACK_ROOT/agents/bug-worker-a/prompt.template.md" 'Handoff \(context cycling\)' 'bug recovery handoff'
 require_text "$PACK_ROOT/agents/bug-worker-a/prompt.template.md" 'rev-parse <branch>.*<head_sha>' 'local SHA cross-review guard'
-require_text "$PACK_ROOT/formulas/hard-bug-finalize.toml" 'rev-parse <branch>.*head_sha' 'formula SHA cross-review guard'
+require_text "$PACK_ROOT/formulas/hard-bug-finalize.toml" 'sling-change-lifecycle.sh' 'hard-bug shared lifecycle handoff'
+require_text "$PACK_ROOT/formulas/change-lifecycle.toml" 'exact.*base/head|exact.*head.*SHA' 'formula immutable SHA review guard'
+require_text "$PACK_ROOT/formulas/change-lifecycle.toml" 'resolve-local-change.sh' 'formula artifact resolver guard'
 require_text "$PACK_ROOT/pack.toml" 'operator actions' 'pack-level operator boundary'
 require_text "$PACK_ROOT/README.md" 'operator extracts commits' 'operator export documentation'
 
