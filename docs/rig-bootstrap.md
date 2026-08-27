@@ -82,6 +82,63 @@ down the actual causes:
   `gc rig add`, so the periodic doctor patrol strips that remote within
   minutes instead of it sitting there live and unguarded.
 
+## Enable dev-pack on the rig
+
+After adopting the rig, attach the city-local pack through that rig's `includes`
+entry. Preserve its existing prefix and default branch:
+
+```toml
+[[rigs]]
+name = "example"
+prefix = "example"
+default_branch = "main"
+includes = ["dev-pack"]
+```
+
+The bare include is relative to the city root and is read in place on reload.
+Rig-scoped attachment is required: it gives managed agents the owning rig and
+worktree context. Do not copy the hand-maintained list of agents or formulas into
+operator docs; inspect the installed composition instead:
+
+```bash
+gc reload
+gc lint dev-pack
+gc doctor
+gc --rig example agent list
+gc --rig example formula list
+gc dev-pack --help
+```
+
+Configure project-specific personas and review execution as rig patches, not as
+generic pack content. Apply the relevant environment to every agent participating
+in the corresponding lane; the live `city.toml` is the canonical complete map.
+Typical values are:
+
+```toml
+[[rigs.patches]]
+agent = "pr-reviewer-sonnet-xhigh"
+env = { GC_PERSONAS = "/city/tools/example/personas", GC_PR_TRUSTED_AUTHORS = "/city/tools/example/trusted-authors.txt", GC_PREPARE_TEST_ENV = "/city/tools/example/testenv.sh", UV_CACHE_DIR = "/city/.uv-cache" }
+```
+
+- `GC_PERSONAS` points to the rig-owned persona corpus. Set
+  `GC_PERSONAS_REQUIRED=true` when missing project knowledge should fail closed.
+- `GC_PR_TRUSTED_AUTHORS` is an optional tracked, one-login-per-line allowlist.
+  It affects identity posture only; content-based restrictions still win.
+- `GC_PREPARE_TEST_ENV` is an optional executable that lazily prepares a test
+  environment and prints its Python interpreter. Without a runnable environment,
+  dynamic checks return `could_not_verify` and the review still completes.
+- `UV_CACHE_DIR` should be on the same filesystem as worktrees when the builder
+  can benefit from reflinks. Test-environment builders remain project-owned; for
+  example, vLLM uses `tools/vllm/vllm-testenv.sh` rather than pack code.
+- `GC_PR_NOTIFY_TO` may override the default verdict-mail recipient or be empty
+  when city orders provide notification. Stored verdict evidence is unaffected.
+
+Because trusted posture permits narrowly bounded unattended test execution, keep
+the author allowlist tracked and review its history. `dev-pack` still rechecks the
+fresh posture, command shape, path, expected head SHA, timeout, and worktree state
+at execution time. See [`docs/dev-pack-design.md`](dev-pack-design.md) for the
+durable architecture and safety boundaries.
+
 ## Hard rule
 
 Never run `bd dolt push`/`pull`/`remote add` in this container — see
