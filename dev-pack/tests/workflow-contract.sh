@@ -19,7 +19,8 @@ assert p['defaults']['local_only'] is True
 assert p['defaults']['completion_checkpoint'] == 'approved'
 assert p['presets']['quality']['feature'] == {'review_n': 2, 'formula': 'feature-dev'}
 assert p['presets']['quality']['bug']['formula'] == 'hard-bug-round'
-assert p['presets']['quality']['review'] == {'n': 2, 'formula': 'pr-review-quorum'}
+assert p['presets']['quality']['review'] == {'n': 2, 'formula': 'pr-review-quorum', 'enable_settle': True}
+assert p['presets']['report_only']['bug']['completion_checkpoint'] == 'report_only'
 
 formulas = root / 'dev-pack/formulas'
 name = 'feature-dev.toml'
@@ -60,7 +61,7 @@ fi
 GC
 chmod +x "$TMP/gc"
 review=$(GC_BIN="$TMP/gc" GC_CITY_PATH="$ROOT" "$ROOT/dev-pack/commands/review/run.sh" 123 --rig paude --dry-run)
-for expected in 'preset=quality' 'n=2' 'pr-review-quorum --formula' 'completion=human_checkpoint'; do
+for expected in 'preset=quality' 'n=2' 'settle=true' 'enable_settle=true' 'pr-review-quorum --formula' 'completion=human_checkpoint'; do
   printf '%s' "$review" | grep -q "$expected" || fail "review dry-run drift: $expected"
 done
 
@@ -68,7 +69,7 @@ done
 for spec in \
   'feature:--quality --fast --solo --execution --review-n --review-lanes --max-review-iterations --dry-run' \
   'bug:--quality --fast --solo --report-only --execution --n --loop --max-rounds --review-n --review-lanes --dry-run' \
-  'review:--quality --fast --solo --execution --n --lanes --artifact --dry-run'; do
+  'review:--quality --fast --solo --no-settle --report-only --execution --n --lanes --artifact --dry-run'; do
   command=${spec%%:*}; flags=${spec#*:}
   help=$(gc dev-pack "$command" --help)
   for flag in $flags; do

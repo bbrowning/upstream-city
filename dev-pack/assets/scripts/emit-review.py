@@ -39,12 +39,14 @@ SCHEMAS = {
             "posture", "effective_posture", "ceiling_posture", "summary",
             "merge_recommendation", "findings_count", "findings", "lanes", "evidence",
             "read_only_enforcement", "failure_class", "failure_reason",
+            "has_disputed_major", "crux_question",
         },
         "enums": {"verdict": {"approve", "approve_with_nits", "request_changes", "blocked"}},
     },
     "pr-review-settle.v1": {
         "required": {
             "schema", "head_ref", "base_ref", "settle_of", "lane_beads",
+            "implementation_provenance", "posture", "effective_posture", "ceiling_posture",
             "disputes_examined", "resolutions", "settled_verdict", "summary",
             "read_only_enforcement", "failure_class", "failure_reason",
         },
@@ -81,6 +83,26 @@ def validate(value: object, schema: str) -> dict:
             die(f"{schema} findings must be an array and findings_count an integer")
         if len(value["findings"]) != value["findings_count"]:
             die(f"{schema} findings_count does not match findings length")
+    if schema == "pr-review-quorum.v1":
+        if type(value["has_disputed_major"]) is not bool or not isinstance(value["crux_question"], str):
+            die("pr-review-quorum.v1 dispute markers must be boolean/string")
+        disputed_major = any(
+            item.get("disputed") is True and item.get("severity") in {"blocker", "major", "critical"}
+            for item in value["findings"]
+        )
+        if value["has_disputed_major"] != disputed_major:
+            die("pr-review-quorum.v1 has_disputed_major does not match disputed major/critical findings")
+        if disputed_major and not value["crux_question"].strip():
+            die("pr-review-quorum.v1 disputed major/critical finding requires crux_question")
+    if schema == "pr-review-settle.v1":
+        if not isinstance(value["resolutions"], list) or type(value["disputes_examined"]) is not int:
+            die("pr-review-settle.v1 resolutions must be an array and disputes_examined an integer")
+        if len(value["resolutions"]) != value["disputes_examined"]:
+            die("pr-review-settle.v1 disputes_examined does not match resolutions length")
+        allowed = {"resolved", "refuted", "needs_dynamic", "genuinely_ambiguous"}
+        invalid = [item.get("resolution") for item in value["resolutions"] if item.get("resolution") not in allowed]
+        if invalid:
+            die(f"pr-review-settle.v1 has invalid resolution values: {invalid}")
     if not isinstance(value["failure_class"], str) or not isinstance(value["failure_reason"], str):
         die(f"{schema} failure fields must be strings")
     if value["failure_class"] not in {"none", "transient", "hard"}:
@@ -160,7 +182,12 @@ def main() -> None:
     parser.add_argument("--implementation-revision", default="")
     parser.add_argument("--implementation-base-sha", default="")
     parser.add_argument("--implementation-head-sha", default="")
+    parser.add_argument("--auto-settle", action="store_true")
+    parser.add_argument("--settle-target", default="")
+    parser.add_argument("--resynth-target", default="")
     args = parser.parse_args()
+    if args.auto_settle and args.schema != "pr-review-quorum.v1":
+        die("--auto-settle is only valid for pr-review-quorum.v1")
 
     try:
         raw = sys.stdin.read() if args.input == "-" else Path(args.input).read_text()
@@ -209,8 +236,51 @@ def main() -> None:
         handle.write("\n")
         handle.flush()
         command[command.index("PLACEHOLDER")] = handle.name
-        completed = subprocess.run(command)
-    raise SystemExit(completed.returncode)
+        emitter_env = os.environ.copy()
+        if args.auto_settle and payload["has_disputed_major"]:
+            # The initial disputed synthesis is durable but intermediate. Quality
+            # auto-settle sends one human-facing verdict after final re-synthesis.
+            emitter_env["GC_PR_NOTIFY_TO"] = ""
+        completed = subprocess.run(command, env=emitter_env)
+    result = completed.returncode
+    terminal_attempt = completed.returncode == 0
+    if result == 0 and args.auto_settle:
+        settle = script_dir / "auto-settle-review.sh"
+        settle_command = [str(settle), "--synthesis", target_bead]
+        if args.settle_target:
+            settle_command.extend(["--arbiter-target", args.settle_target])
+        if args.resynth_target:
+            settle_command.extend(["--resynth-target", args.resynth_target])
+        result = subprocess.run(settle_command).returncode
+        if result != 0:
+            gc = os.environ.get("GC_BIN", "gc")
+            subprocess.run(
+                [gc, "bd", "update", target_bead, "--set-metadata", "gc.auto_settle_error=launch-failed"],
+                check=False,
+            )
+            notify_to = os.environ.get("GC_PR_NOTIFY_TO", "human")
+            if notify_to and payload["has_disputed_major"]:
+                rendered = subprocess.run(
+                    [str(script_dir / "render-verdict.sh"), "-", "--bead", target_bead, "--brief"],
+                    input=json.dumps(payload), text=True, capture_output=True,
+                )
+                body = rendered.stdout if rendered.returncode == 0 else (
+                    f"Automatic settlement failed to launch for {target_bead}. "
+                    f"Run: gc dev-pack summary {target_bead} --full"
+                )
+                subprocess.run(
+                    [gc, "mail", "send", notify_to,
+                     "-s", f"PR review {payload['head_ref']}: settlement launch failed",
+                     "-m", body],
+                    check=False,
+                )
+
+    # A terminal attempt must not receive the stale trigger nudge while the
+    # controller mirrors it onto the logical retry bead. A genuine retry gets a
+    # fresh attempt/session from the controller.
+    if terminal_attempt:
+        subprocess.run([str(script_dir / "quiesce-current-session.sh")], check=False)
+    raise SystemExit(result)
 
 
 if __name__ == "__main__":

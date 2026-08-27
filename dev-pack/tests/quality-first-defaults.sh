@@ -30,10 +30,12 @@ expect "$bug_fast" 'preset=fast' 'bug fast preset not exposed'
 expect "$bug_fast" 'hard-bug-round-solo --formula' 'bug fast preset did not select solo formula'
 expect "$bug_fast" 'loop=true' 'bug fast preset silently became report-only'
 expect "$bug_fast" 'review_n=1' 'bug fast preset did not opt implementation review down to N=1'
+expect "$bug_fast" 'completion=approved' 'bug fast preset lost approved completion semantics'
 bug_report=$(GC_BIN=gc "$BUG" paude-bug-1 --rig paude --report-only --dry-run)
 expect "$bug_report" 'preset=report_only' 'bug report-only preset not explicit'
 expect "$bug_report" 'diagnosis_n=2' 'bug report-only lost quality diagnosis fan-out'
 expect "$bug_report" 'loop=false' 'bug report-only unexpectedly enabled implementation'
+expect "$bug_report" 'completion=report_only' 'bug report-only advertises implementation approval'
 
 cat >"$TMP/gc" <<GC
 #!/usr/bin/env bash
@@ -50,12 +52,15 @@ chmod +x "$TMP/gc"
 review_quality=$(GC_BIN="$TMP/gc" GC_CITY_PATH="$ROOT" "$REVIEW" 123 --rig paude --dry-run)
 for expected in 'preset=quality' 'n=2' 'pr-review-quorum --formula' \
   'lane_a_target=paude/pr-reviewer-a-frontier-xhigh' \
-  'lane_b_target=paude/pr-reviewer-b-frontier-xhigh' 'completion=human_checkpoint'; do
+  'lane_b_target=paude/pr-reviewer-b-frontier-xhigh' 'settle=true' 'enable_settle=true' 'completion=human_checkpoint'; do
   expect "$review_quality" "$expected" "review quality default lost $expected"
 done
 review_fast=$(GC_BIN="$TMP/gc" GC_CITY_PATH="$ROOT" "$REVIEW" 123 --rig paude --solo --dry-run)
 expect "$review_fast" 'preset=fast' 'review fast/solo preset not exposed'
 expect "$review_fast" 'pr-review --formula' 'review fast/solo did not select N=1 formula'
+expect "$review_fast" 'settle=false' 'review N=1 unexpectedly enabled settlement'
+review_report=$(GC_BIN="$TMP/gc" GC_CITY_PATH="$ROOT" "$REVIEW" 123 --rig paude --report-only --dry-run)
+expect "$review_report" 'settle=false' 'review report-only opt-out did not disable settlement'
 
 lead="$ROOT/agents/lead/prompt.template.md"
 for request in 'Implement this feature' 'Fix this bug' 'Review PR N'; do

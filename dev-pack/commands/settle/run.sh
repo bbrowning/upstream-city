@@ -123,9 +123,18 @@ HEAD_REF=$(printf '%s' "$VJSON" | jq -r '.head_ref // empty')
 [ -n "$HEAD_REF" ] || die "verdict on '$SYNTH' has no head_ref — cannot settle"
 HEAD_NORM=$("$NORMALIZE" "$HEAD_REF" --rig "$RIG" --rig-explicit) || exit $?
 HEAD_REF=$(printf '%s' "$HEAD_NORM" | jq -r '.spec')
-# base_ref precedence: explicit --base > the verdict's own base_ref > origin/main.
-if [ -z "$BASE" ]; then BASE=$(printf '%s' "$VJSON" | jq -r '.base_ref // "origin/main"'); fi
+# Settlement must preserve the exact reviewed base. Keep --base only as a
+# compatibility assertion; it may not rewrite the quorum's evidence boundary.
+VERDICT_BASE=$(printf '%s' "$VJSON" | jq -r '.base_ref // "origin/main"')
+if [ -n "$BASE" ] && [ "$BASE" != "$VERDICT_BASE" ]; then
+    die "--base '$BASE' does not match quorum base_ref '$VERDICT_BASE'"
+fi
+BASE="$VERDICT_BASE"
 CRUX=$(printf '%s' "$VJSON" | jq -r '.crux_question // empty')
+PROVENANCE=$(printf '%s' "$VJSON" | jq -c '.implementation_provenance')
+POSTURE=$(printf '%s' "$VJSON" | jq -er '.posture') || die "verdict has no posture"
+EFFECTIVE_POSTURE=$(printf '%s' "$VJSON" | jq -er '.effective_posture') || die "verdict has no effective_posture"
+CEILING_POSTURE=$(printf '%s' "$VJSON" | jq -er '.ceiling_posture') || die "verdict has no ceiling_posture"
 
 # --- 2. Find the reviewer LANE beads off the synthesis bead's deps ------------
 # Lane beads are the deps stamped gc.review_quorum_lane (in lane-id order: reviewer-a…).
@@ -142,6 +151,18 @@ fi
 [ "$LN" -eq 2 ] || printf 'settle: %s lanes found; Phase 1 settles the first two (%s, %s)\n' \
     "$LN" "${LANE_BEADS[0]}" "${LANE_BEADS[1]}" >&2
 LANE_A="${LANE_BEADS[0]}" ; LANE_B="${LANE_BEADS[1]}"
+
+# A synthesis receives at most one settle workflow, whether auto- or manually
+# launched. Use the full durable list (not the metadata index, which may lag).
+ALL=$("$GC" --city "$CITY" --rig "$RIG" bd list --all --json -n 0) \
+    || die "cannot prove whether a settlement already exists for '$SYNTH'"
+EXISTING=$(printf '%s' "$ALL" | jq -r --arg synth "$SYNTH" \
+    '[.[] | select(.metadata["gc.var.synth_bead"] == $synth)] | sort_by(.created_at) | last | .id // empty')
+if [ -n "$EXISTING" ]; then
+    printf 'settle: synthesis %s already has bounded settlement %s; no second round launched\n' \
+        "$SYNTH" "$EXISTING" >&2
+    exit 0
+fi
 
 # --- 3. Divergence advisory (do not hard-gate a manual run) -------------------
 DIVERGED=$(printf '%s' "$VJSON" | jq -r '
@@ -161,12 +182,16 @@ fi
 
 # --- 5. Build + run the sling -------------------------------------------------
 set -- "$ATARGET" pr-review-settle --formula \
+    --scope-kind rig --scope-ref "$SYNTH" \
     --var "head_ref=$HEAD_REF" --var "base_ref=$BASE" \
     --var "synth_bead=$SYNTH" \
     --var "lane_a_bead=$LANE_A" --var "lane_b_bead=$LANE_B" \
     --var "crux_question=$CRUX" \
     --var "arbiter_target=$ATARGET" \
     --var "resynth_target=$RIG/pr-review-synthesizer" \
+    --var "implementation_provenance_json=$PROVENANCE" \
+    --var "posture=$POSTURE" --var "effective_posture=$EFFECTIVE_POSTURE" \
+    --var "ceiling_posture=$CEILING_POSTURE" \
     --title "pr-review-settle: $HEAD_REF" --json
 
 if [ "$DRYRUN" = "yes" ]; then

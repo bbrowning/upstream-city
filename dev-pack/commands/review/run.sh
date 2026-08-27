@@ -29,6 +29,7 @@ RIG="vllm" ; BASE="$(jq -er '.defaults.base_ref' "$POLICY")" ; SPEC="" ; ARTIFAC
 RIG_EXPLICIT=0
 N="" ; LANES="" ; PRESET="quality"
 EXECUTION="$(jq -er '.defaults.execution_profile' "$POLICY")"
+ENABLE_SETTLE="" ; SETTLE_EXPLICIT=false
 
 usage() {
     cat <<'EOF'
@@ -43,6 +44,8 @@ Sling the review formula (N=1 -> pr-review, N=2 -> pr-review-quorum) to <rig>/pr
                    the recorded local branch still points at the recorded HEAD.
   --quality        N=2 independent review + strict synthesis quorum (default)
   --fast, --solo   lower-cost N=1 posture-gated review
+  --no-settle,
+  --report-only    keep an N=2 quorum report-only; do not auto-settle disputes
   --n N            custom opinion count / fan-out: 1 or 2.
                    Cross-checked against --lanes when both are given.
   --execution PROFILE  leaf-agent capacity: frontier-xhigh (default),
@@ -89,6 +92,7 @@ while [ $# -gt 0 ]; do
         --artifact=*) ARTIFACT="${1#*=}"; shift ;;
         --quality)   PRESET="quality"; shift ;;
         --fast|--solo) PRESET="fast"; shift ;;
+        --no-settle|--report-only) ENABLE_SETTLE=false; SETTLE_EXPLICIT=true; shift ;;
         --n)         N="${2:?}"; shift 2 ;;
         --n=*)       N="${1#*=}"; shift ;;
         --execution) EXECUTION="${2:?}"; shift 2 ;;
@@ -171,6 +175,13 @@ case "$N" in
     1|2) ;;
     *) die "N must be 1 or 2 (got '$N'); N>2 is not supported yet (formula generalization is tracked as bead wo-au65.1)" ;;
 esac
+if [ -z "$ENABLE_SETTLE" ]; then
+    ENABLE_SETTLE=$(jq -r ".presets.${PRESET}.review.enable_settle" "$POLICY")
+fi
+if [ "$N" = "1" ]; then
+    [ "$SETTLE_EXPLICIT" = false ] || printf '%s\n' "review: WARN --no-settle is redundant for N=1" >&2
+    ENABLE_SETTLE=false
+fi
 
 # --- build the sling argv -----------------------------------------------------
 if [ "$N" = "1" ]; then
@@ -204,13 +215,15 @@ else
         --var "lane_a_target=$AT" \
         --var "lane_b_target=$BT" \
         --var "synthesis_target=$RIG/pr-review-synthesizer" \
+        --var "enable_settle=$ENABLE_SETTLE" \
+        --var "settle_target=$RIG/pr-arbiter" \
         --title "pr-review-quorum: $DISPLAY_SPEC" --json
 fi
 
 if [ "$DRYRUN" = "yes" ]; then
     if [ "$N" = "1" ]; then RESOLVED_ROLES="review_target=$RTARGET"; else RESOLVED_ROLES="lane_a_target=$AT, lane_b_target=$BT"; fi
-    printf 'DRY RUN — would run (rig=%s, preset=%s, execution=%s, %s, n=%s, local_only=true, completion=human_checkpoint):\n  %s --rig %s sling' \
-        "$RIG" "$PRESET" "$EXECUTION" "$RESOLVED_ROLES" "$N" "$GC" "$RIG"
+    printf 'DRY RUN — would run (rig=%s, preset=%s, execution=%s, %s, n=%s, settle=%s, local_only=true, completion=human_checkpoint):\n  %s --rig %s sling' \
+        "$RIG" "$PRESET" "$EXECUTION" "$RESOLVED_ROLES" "$N" "$ENABLE_SETTLE" "$GC" "$RIG"
     for a in "$@"; do printf ' %q' "$a"; done
     printf '\n'
     exit 0

@@ -12,15 +12,16 @@
     "quality": {
       "feature": { "review_n": 2, "formula": "feature-dev" },
       "bug": { "diagnosis_n": 2, "enable_loop": true, "review_n": 2, "formula": "hard-bug-round" },
-      "review": { "n": 2, "formula": "pr-review-quorum" }
+      "review": { "n": 2, "formula": "pr-review-quorum", "enable_settle": true }
     },
     "fast": {
       "feature": { "review_n": 1 },
       "bug": { "diagnosis_n": 1, "enable_loop": true, "review_n": 1, "formula": "hard-bug-round-solo" },
-      "review": { "n": 1, "formula": "pr-review" }
+      "review": { "n": 1, "formula": "pr-review", "enable_settle": false }
     },
     "report_only": {
-      "bug": { "diagnosis_n": 2, "enable_loop": false, "review_n": 2 }
+      "bug": { "diagnosis_n": 2, "enable_loop": false, "review_n": 2, "completion_checkpoint": "report_only" },
+      "review": { "n": 2, "formula": "pr-review-quorum", "enable_settle": false }
     }
   },
   "execution_profiles": {

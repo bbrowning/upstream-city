@@ -163,9 +163,14 @@ position), `head_ref`/`base_ref`, and an optional `crux_question` hint.
    a finding one lane rates `>=major` that the other **dismisses, downgrades, or omits**
    is a dispute; the crux is the factual question the two positions turn on. Focus on
    `>=major` disputes — a nit split is not worth a settle round.
-3. **Get the code and VERIFY the keystone.** Fetch the PR head into your worktree
-   (`git fetch origin pull/<N>/head`; `git checkout --detach FETCH_HEAD` to browse), then
-   read the diff **plus the surrounding code the crux turns on** — trace the exact call
+3. **Get the code and VERIFY the keystone within posture.** Apply the exact carried
+   `effective_posture` with `posture-latitude.sh` before code access. Reuse locally
+   materialized objects first. `FETCH=none` forbids fetching; `FETCH=metadata` may resolve
+   an exact head SHA but may not fetch its artifact body, so use it only if that object is
+   already local. If posture blocks access to the exact code, return
+   `genuinely_ambiguous` with the missing evidence instead of widening latitude. Never
+   execute changed code. When the exact code is locally readable, read the diff **plus
+   the surrounding code the crux turns on** — trace the exact call
    path, config default, flag, or token the two lanes disagree about, and cite each hop as
    `file:line`. Ground-truth the load-bearing facts (a config default, an
    `__init_subclass__` flag, whether a helper is fed delta-only vs accumulated, a token
@@ -176,6 +181,8 @@ position), `head_ref`/`base_ref`, and an optional `crux_question` hint.
      code supports (or `neither`/`both_partial`), the settled `severity`, and
      `confidence` (`high` only when the chain is complete; cap at `medium` if a keystone
      is `could_not_verify`). Record the full `evidence[]` chain.
+   - `refuted` — evidence disproves the disputed finding itself; identify the false
+     premise and cite the evidence that permits final re-synthesis to drop/downgrade it.
    - `needs_dynamic` — static reading gets you most of the way but a runtime check would
      **fully** close it. Give the single decisive scoped check in `needs_dynamic`
      (`command` in prepared-env `python -m pytest <node-id> -q` form, `why`,
@@ -196,9 +203,11 @@ position), `head_ref`/`base_ref`, and an optional `crux_question` hint.
 
    `pr-review-settle.v1` = `{ schema:"pr-review-settle.v1", head_ref, base_ref,
    settle_of:<synth_bead>, lane_beads:[…], arbiter_model:(best-effort, e.g. $GC alias or
-   ""), posture:(carried from the quorum verdict), disputes_examined:<int>,
+   ""), implementation_provenance:(carried verbatim from the quorum verdict),
+   posture, effective_posture, ceiling_posture:(all carried verbatim from the quorum),
+   disputes_examined:<int>,
    resolutions:[{ finding_ref, title, crux_question, positions:{<lane_id>:<stance>…},
-   resolution:(resolved|needs_dynamic|genuinely_ambiguous), which_holds, severity,
+   resolution:(resolved|refuted|needs_dynamic|genuinely_ambiguous), which_holds, severity,
    confidence, evidence:[{ref:"file:line", note}], keystones_verified:[…],
    keystones_unverified:[…], needs_dynamic:({command,why,what_it_checks} | null),
    rationale }], settled_verdict:(the strictest call after settling), summary,

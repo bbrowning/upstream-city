@@ -13,6 +13,7 @@ Usage:
 Workflow presets:
   --quality                 N=2 independent quorum (default)
   --fast, --solo            explicit lower-cost N=1 review
+  --no-settle, --report-only  disable quality's one automatic dispute settlement
 
 Options:
   --rig NAME                owning rig (default: vllm; rig#PR also selects it)

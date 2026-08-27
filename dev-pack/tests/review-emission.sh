@@ -12,6 +12,9 @@ cat >"$TMP/bin/gc" <<'GC'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"${MOCK_GC_LOG:?}"
+if [ "${MOCK_AUTO_FAIL:-0}" = 1 ] && [[ " $* " == *" --city "*" --rig vllm bd show synthesis-auto --json "* ]]; then
+  exit 72
+fi
 if [ "${1-} ${2-}" = "--city ${GC_CITY_PATH:-}" ] && [ "${3-} ${4-} ${5-}" = "rig list --json" ]; then
   printf '%s\n' '{"rigs":[{"name":"vllm"}]}'
 elif [ "${1-} ${2-}" = "bd update" ]; then
@@ -51,6 +54,10 @@ elif [ "${1-} ${2-}" = "bd show" ]; then
   jq -cn --argjson metadata "$metadata" '[{metadata:$metadata}]'
 elif [ "${1-} ${2-}" = "bd close" ]; then
   :
+elif [ "${1-} ${2-}" = "runtime drain" ]; then
+  :
+elif [ "${1-} ${2-}" = "mail send" ]; then
+  printf '%s\n' '{"id":"fallback-mail"}'
 else
   printf 'unexpected gc call: %s\n' "$*" >&2
   exit 99
@@ -62,6 +69,7 @@ export GC_BIN="$TMP/bin/gc"
 export GC_CITY_PATH="$ROOT"
 export GC_RIG=vllm
 export GC_PR_NOTIFY_TO=''
+export GC_AGENT=vllm/test-reviewer
 export MOCK_GC_LOG="$TMP/gc.log"
 export MOCK_GC_STATE="$TMP/state"
 
@@ -95,10 +103,37 @@ quorum=$(jq -cn --arg summary "Both lanes agree it's ready" \
   '{schema:"pr-review-quorum.v1",head_ref:"feature/safe",base_ref:"main",
   implementation_provenance:null,verdict:"approve",posture:"trusted",effective_posture:"trusted",
   ceiling_posture:"trusted",summary:$summary,merge_recommendation:"merge",
-  findings_count:0,findings:[],lanes:[],evidence:[],
+  findings_count:0,findings:[],lanes:[],evidence:[],has_disputed_major:false,crux_question:"",
   read_only_enforcement:{clean:true,mutations_delta:[]},failure_class:"none",failure_reason:""}')
 printf '%s\n' "$quorum" | emit synthesis pr-review-quorum.v1
 grep -q 'bd close synthesis' "$MOCK_GC_LOG" || fail "synthesis did not close"
+grep -q 'runtime drain vllm/test-reviewer' "$MOCK_GC_LOG" \
+  || fail "successful schema emitter did not quiesce its completed session"
+
+settle=$(jq -cn '{schema:"pr-review-settle.v1",head_ref:"feature/safe",base_ref:"main",
+  settle_of:"synthesis",lane_beads:["lane-a","lane-b"],implementation_provenance:null,
+  posture:"limited",effective_posture:"limited",ceiling_posture:"limited",
+  disputes_examined:1,resolutions:[{resolution:"needs_dynamic"}],
+  settled_verdict:"request_changes",summary:"human evidence required",
+  read_only_enforcement:{clean:true,mutations_delta:[]},failure_class:"none",failure_reason:""}')
+printf '%s\n' "$settle" | emit settle pr-review-settle.v1
+grep -q 'bd close settle' "$MOCK_GC_LOG" || fail "unresolved settlement did not close for final re-synthesis"
+
+auto_quorum=$(printf '%s' "$quorum" | jq -c '
+  .verdict="request_changes" | .findings_count=1 |
+  .findings=[{severity:"blocker",disputed:true}] |
+  .has_disputed_major=true | .crux_question="is the blocker real?"')
+: >"$MOCK_GC_LOG"
+if printf '%s\n' "$auto_quorum" | MOCK_AUTO_FAIL=1 GC_PR_NOTIFY_TO=human \
+    python3 "$EMIT" --bead synthesis-auto --schema pr-review-quorum.v1 --outcome pass \
+      --auto-settle --settle-target vllm/pr-arbiter --resynth-target vllm/pr-review-synthesizer \
+      >/dev/null 2>&1; then
+  fail "auto-settle launch failure did not surface"
+fi
+grep -q 'bd close synthesis-auto' "$MOCK_GC_LOG" || fail 'auto-settle fallback lost durable synthesis'
+grep -q 'gc.auto_settle_error=launch-failed' "$MOCK_GC_LOG" || fail 'auto-settle launch failure was not stamped'
+[ "$(grep -c 'mail send human' "$MOCK_GC_LOG")" -eq 1 ] \
+  || fail 'auto-settle launch failure did not send exactly one fallback verdict mail'
 
 # Successful implementation steps satisfy the work-record gate atomically with
 # their durable output instead of closing with an incomplete shipped record.
@@ -128,6 +163,8 @@ assert_logical_attempt_close() {
     || fail "$schema wrote result metadata to the logical retry bead"
   ! grep -q "bd close $logical" "$MOCK_GC_LOG" \
     || fail "$schema closed the logical retry bead directly"
+  grep -q 'runtime drain vllm/test-reviewer' "$MOCK_GC_LOG" \
+    || fail "$schema left the closed attempt session eligible for a duplicate nudge"
   unset MOCK_LOGICAL_BEAD MOCK_ATTEMPT_BEAD
 }
 assert_logical_attempt_close logical-triage attempt-triage pr-triage.v1 "$triage"
@@ -143,13 +180,20 @@ if printf '%s\n' "$review" | python3 "$EMIT" --bead mismatch --schema pr-review.
     --outcome fail --failure-class transient --failure-reason provider-down >/dev/null 2>&1; then
   fail "mismatched JSON/CLI failure metadata passed"
 fi
+if printf '%s\n' "$settle" | jq 'del(.implementation_provenance)' | \
+    emit invalid-settle pr-review-settle.v1 >/dev/null 2>&1; then
+  fail "settlement without exact implementation provenance passed"
+fi
 [ "$(wc -l <"$MOCK_GC_LOG")" -eq "$before" ] || fail "invalid input called gc"
 
+: >"$MOCK_GC_LOG"
 if printf '%s\n' "$review" | MOCK_TRUNCATE=1 emit truncated pr-review.v1 >/dev/null 2>&1; then
   fail "truncated readback passed"
 fi
 grep -q 'bd update truncated' "$MOCK_GC_LOG" || fail "truncation case did not write"
 ! grep -q 'bd close truncated' "$MOCK_GC_LOG" || fail "truncated storage closed"
+! grep -q 'runtime drain vllm/test-reviewer' "$MOCK_GC_LOG" \
+  || fail "pre-close emitter failure drained the open attempt needed for recovery"
 
 if rg -n 'rm -f' "$ROOT/dev-pack/agents" "$ROOT/dev-pack/formulas" \
     --glob '*.md' --glob '*.toml' >/dev/null; then

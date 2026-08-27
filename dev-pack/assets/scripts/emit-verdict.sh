@@ -158,7 +158,7 @@ stored_outcome=$(printf '%s' "$stored_bead" | jq -er '
 # --- CLOSE the step ----------------------------------------------------------
 if [ -z "$REASON" ]; then
     if jq -e '.resolutions' "$VF" >/dev/null 2>&1; then
-        REASON="settle: $(jq -r '.disputes_examined // (.resolutions | length) // 0' "$VF") dispute(s) — $(jq -r '[.resolutions[]?.resolution] | map(select(. == "resolved")) | length' "$VF") resolved"
+        REASON="settle: $(jq -r '.disputes_examined // (.resolutions | length) // 0' "$VF") dispute(s) — $(jq -r '[.resolutions[]?.resolution] | map(select(. == "resolved")) | length' "$VF") resolved, $(jq -r '[.resolutions[]?.resolution] | map(select(. == "refuted")) | length' "$VF") refuted"
     elif jq -e '.verdict' "$VF" >/dev/null 2>&1; then
         REASON="review: $(jq -r '.verdict // "?"' "$VF") ($(jq -r '.findings_count // 0' "$VF") findings)"
     else
@@ -193,7 +193,8 @@ if printf '%s' "$OUT" | jq -e '.resolutions' >/dev/null 2>&1; then
     head=$(printf '%s' "$OUT" | jq -r '.head_ref // "?"')
     dn=$(jq -r '.disputes_examined // (.resolutions | length) // 0' "$VF")
     rn=$(jq -r '[.resolutions[]?.resolution] | map(select(. == "resolved")) | length' "$VF")
-    subj="PR settle $head: $dn dispute(s) — $rn resolved"
+    fn=$(jq -r '[.resolutions[]?.resolution] | map(select(. == "refuted")) | length' "$VF")
+    subj="PR settle $head: $dn dispute(s) — $rn resolved, $fn refuted"
 elif printf '%s' "$OUT" | jq -e '.verdict' >/dev/null 2>&1; then
     head=$(printf '%s' "$OUT" | jq -r '.head_ref // "?"')
     v=$(jq -r '.verdict // "?"' "$VF")

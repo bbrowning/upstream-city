@@ -20,7 +20,7 @@
 set -euo pipefail
 
 GC="${GC_BIN:-gc}"
-BEAD="" ; JF="" ; SCHEMA="" ; OUTCOME="pass" ; FCLASS="none" ; FREASON="" ; REASON="" ; NOTIFY="" ; SUBJECT="" ; RENDER="" ; CONSUME=0
+BEAD="" ; JF="" ; SCHEMA="" ; OUTCOME="pass" ; FCLASS="none" ; FREASON="" ; REASON="" ; NOTIFY="" ; SUBJECT="" ; RENDER="" ; CONSUME=0 ; QUIESCE=0
 WORK_OUTCOME="" ; WORK_COMMIT="" ; WORK_BRANCH=""
 
 die() { printf '%s\n' "emit-json: $*" >&2; exit 2; }
@@ -48,6 +48,7 @@ while [ $# -gt 0 ]; do
         --render)           RENDER="${2:?}"; shift 2 ;;
         --render=*)         RENDER="${1#*=}"; shift ;;
         --consume)          CONSUME=1; shift ;;
+        --quiesce)          QUIESCE=1; shift ;;
         --work-outcome)     WORK_OUTCOME="${2:?}"; shift 2 ;;
         --work-outcome=*)   WORK_OUTCOME="${1#*=}"; shift ;;
         --work-commit)      WORK_COMMIT="${2:?}"; shift 2 ;;
@@ -62,7 +63,7 @@ done
 [ -n "$BEAD" ] || die "usage: --bead is required"
 [ -n "$JF" ] && [ -f "$JF" ] || die "usage: --json-file must be an existing file"
 OUT=$(jq -c . "$JF") || die "json file is not valid JSON: $JF"
-[ "$CONSUME" -eq 0 ] || trap 'rm -f -- "$JF"' EXIT
+[ "$CONSUME" -eq 0 ] || trap 'unlink -- "$JF" 2>/dev/null || true' EXIT
 if [ -n "$WORK_OUTCOME$WORK_COMMIT$WORK_BRANCH" ]; then
     [ -n "$WORK_OUTCOME" ] && [ -n "$WORK_COMMIT" ] && [ -n "$WORK_BRANCH" ] \
         || die "work record requires --work-outcome, --work-commit, and --work-branch together"
@@ -103,7 +104,7 @@ stored_outcome=$(printf '%s' "$stored_bead" | jq -er '
 "$GC" bd close "$BEAD" --reason "$REASON"
 
 # --- NOTIFY (opt-in) ---------------------------------------------------------
-[ -n "$NOTIFY" ] || exit 0
+if [ -n "$NOTIFY" ]; then
 [ -n "$SUBJECT" ] || SUBJECT="bug: ${SCHEMA:-step} $OUTCOME ($BEAD)"
 # Body: `--render <script>` turns the JSON into prose (the script owns the schema),
 # else a raw-JSON pointer. A render failure falls back to the pointer body so the
@@ -117,3 +118,5 @@ fi
 # Best-effort: the step already closed; a mail hiccup must not fail the step.
 "$GC" mail send "$NOTIFY" -s "$SUBJECT" -m "$BODY" \
     || printf '%s\n' "emit-json: WARN notify to '$NOTIFY' failed (bead already closed)" >&2
+fi
+[ "$QUIESCE" -eq 0 ] || bash "$(dirname "$0")/quiesce-current-session.sh"

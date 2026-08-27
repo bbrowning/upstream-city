@@ -77,6 +77,22 @@ default = "pr-review-synthesizer"
 description = "Mirror of the pr-review-quorum dial (false = report-only, the quorum does NOT auto-sling this). Informational here — the manual `gc dev-pack settle` always runs the arbiter. Kept so the auto-sling path (Phase 2) forwards a consistent record."
 default = "false"
 
+[vars.implementation_provenance_json]
+description = "Exact JSON implementation provenance carried from the original quorum (null for PRs)."
+default = "null"
+
+[vars.posture]
+description = "Exact original quorum posture."
+required = true
+
+[vars.effective_posture]
+description = "Exact original quorum effective posture."
+required = true
+
+[vars.ceiling_posture]
+description = "Exact original quorum ceiling posture."
+required = true
+
 [[steps]]
 id = "arbitrate"
 title = "Arbiter: settle the review divergence by evidence"
@@ -95,25 +111,41 @@ method exactly (it is schema-dispatched there). Your inputs (read each via
   If EITHER is empty, walk `{{synth_bead}}`'s dependency edge and take the deps stamped
   `gc.review_quorum_lane` as the lanes.
 - Crux hint (may be empty — derive it yourself then): `{{crux_question}}`.
+- Preserve these original quorum fields verbatim in your result:
+  `implementation_provenance={{implementation_provenance_json}}`,
+  `posture={{posture}}`, `effective_posture={{effective_posture}}`, and
+  `ceiling_posture={{ceiling_posture}}`.
 
 Then, per your method:
 1. Identify the disputed `>=major` finding(s) — prefer the synthesis's `disputed`/
    `crux_question` marks; else derive them (a finding one lane rates `>=major` that the
    other dismisses/downgrades/omits).
-2. Fetch the PR head into your worktree and VERIFY the keystone by reading the exact call
-   path / config default / flag / token the two positions turn on — cite every hop as
-   `file:line`. Ground-truth load-bearing facts by READING, never inferring.
+2. Apply the carried posture before any code access:
+   `eval "$(bash "$GC_CITY_PATH/dev-pack/assets/scripts/posture-latitude.sh" "{{effective_posture}}")"`.
+   Never widen it. Reuse already-materialized local objects/read-only evidence first.
+   `FETCH=none` forbids fetching; if the exact head is not locally readable, resolve the
+   dispute as `genuinely_ambiguous` and tell the human what evidence is missing.
+   `FETCH=metadata` permits metadata lookup only, not a PR-body/artifact fetch; use a
+   metadata-resolved SHA only when its object is already local. `GATE=blocked` escalates
+   without review. When posture permits and the exact code is locally readable, VERIFY
+   the keystone by reading the call path/config/flag/token and cite every hop as
+   `file:line`. Never execute changed code in settlement.
 3. Resolve each dispute to `resolved` (which_holds + severity + confidence + evidence[]) /
    `needs_dynamic` (the single decisive scoped check) / `genuinely_ambiguous`. Cap
    confidence at `medium` for any keystone you could not verify.
 
 Emit the full `pr-review-settle.v1` object (the exact shape your method specifies) and
-finish atomically — `emit-review.py` validates the settle schema, notifies the human, and
-makes it re-renderable via `gc dev-pack summary <your-bead>`:
-  python3 "$GC_CITY_PATH/dev-pack/assets/scripts/emit-review.py" \\
+finish atomically. For an automatic round (`enable_settle=true`), suppress this
+intermediate mail; final re-synthesis is the single human-facing verdict. A manual round
+keeps the ordinary notification. Both remain re-renderable via `gc dev-pack summary`:
+  ```bash
+  notify_prefix=()
+  if [ "{{enable_settle}}" = true ]; then notify_prefix=(env GC_PR_NOTIFY_TO=); fi
+  "${notify_prefix[@]}" python3 "$GC_CITY_PATH/dev-pack/assets/scripts/emit-review.py" \\
     --bead <your-settle-bead> --schema pr-review-settle.v1 --outcome pass <<'JSON'
   { <your complete pr-review-settle.v1 JSON object, including schema> }
   JSON
+  ```
 On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
 """
 metadata = { "gc.run_target" = "{{arbiter_target}}", "gc.review_settle_role" = "arbiter", "gc.settle_of" = "{{synth_bead}}", "gc.output_json_schema" = "pr-review-settle.v1", "gc.output_json_required" = "true" }
@@ -139,12 +171,17 @@ Read (via `gc bd show <bead> --json | jq -r '.[0].metadata["gc.output_json"]'`):
 - The ORIGINAL quorum verdict `{{synth_bead}}` (your starting point) and the lane beads
   `{{lane_a_bead}}` / `{{lane_b_bead}}` (empty = read them off `{{synth_bead}}`'s deps).
 
-Start from the original verdict and adjust per each `resolutions[]` entry (resolved
+Start from the original verdict and preserve its exact head/base, implementation
+provenance, posture/effective_posture/ceiling_posture, lane identities, and targets.
+Adjust per each `resolutions[]` entry (resolved
 `>=major` -> stays/raised to a blocker with the arbiter's evidence folded into `detail`;
 needs_dynamic -> keep as unconfirmed, surface the exact check in `dynamic_request`, hold
 `verdict` at `request_changes`; refuted -> downgrade/drop the finding and relax `verdict`;
 genuinely_ambiguous -> keep + note for the human). Note in `summary` that this is a
-post-settle re-synthesis and cite the settle bead.
+post-settle re-synthesis and cite the settle bead. Set `has_disputed_major=false` only
+when every disputed major/critical is resolved or refuted. If any resolution is
+`needs_dynamic` or `genuinely_ambiguous`, keep it true, emit the exact decisive evidence
+request, and explicitly escalate to the human. Never sling another settle round.
 
 Emit `pr-review-quorum.v1` (a SUPERSET of `pr-review.v1`, so the existing
 render/notify/`gc dev-pack summary` path works unchanged) and finish atomically:

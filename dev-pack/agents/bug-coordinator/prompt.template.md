@@ -65,7 +65,7 @@ printf '%s' "$raw" | jq -r '.[0].metadata["gc.output_json"]'
 
 `hard-bug-state.v1` = `{ bug_bead, phase, rounds:{root_cause:int, fix:int},
 max_rounds, agreed_root_cause, chosen_implementer,
-last_reconcile:{n,aligned,round,verify_bounce}, status:(running|escalated|done),
+last_reconcile:{n,aligned,round,verify_bounce}, status:(running|report_only|escalated|done),
 convoy_id }`. (`last_reconcile.verify_bounce=true` means the last round was a directed
 keystone-verification bounce — `rounds.<phase>` was deliberately not bumped.) If your session died mid-arc, the step
 on your hook plus this state tell you exactly where you are — **do not trust memory,
@@ -184,19 +184,20 @@ finalize). When the run will continue automatically, close your step with:
 out="$(mktemp -t hb-reconcile.XXXXXX)"
 # ... write your hard-bug-reconcile.v1 object (valid JSON) to "$out" ...
 bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-reconcile-bead> \
-  --json-file "$out" --schema hard-bug-reconcile.v1 --outcome pass
+  --json-file "$out" --schema hard-bug-reconcile.v1 --outcome pass --consume
 ```
 
 **When a report-only run pauses, replace the close command above with this notifying
 form** — do not run both. `report_only` is the requested human deliverable, so notify the
-human atomically in the same close command. `--render` turns the verdict JSON into prose:
+human atomically in the same close command. First persist the arc state described below
+with `status=report_only`; then make this emitter the final action in the turn.
+`--render` turns the verdict JSON into prose, and `--quiesce` retires the completed
+session so the closed attempt cannot receive a stale trigger nudge:
 
 ```bash
-bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-reconcile-bead> \
-  --json-file "$out" --schema hard-bug-reconcile.v1 --outcome pass \
-  --notify "${GC_HARDBUG_NOTIFY_TO:-human}" \
-  --render "$GC_CITY_PATH/dev-pack/assets/scripts/render-hardbug.sh" \
-  --subject "<subject>" --consume
+bash "$GC_CITY_PATH/dev-pack/assets/scripts/complete-hardbug-report-only.sh" \
+  --arc <bug_bead> --step <your-reconcile-bead> \
+  --verdict-file "$out" --state-file "$state_file" --subject "<subject>"
 ```
 where `<subject>` speaks the run's N: at **N>=2** use
 `"bug <bug_bead> <phase> r<round>: aligned=<true|false> stronger=<lane> next=<next_action>"`;
@@ -212,10 +213,12 @@ worktree you `git diff` in finalize:
 
 ```bash
 state_file="$(mktemp -t hb-state.XXXXXX)"
+trap '[ ! -e "$state_file" ] || unlink "$state_file"' EXIT
 # ... write the MERGE-updated arc state (valid JSON) to "$state_file" ...
 state=$(jq -c . "$state_file")
 gc bd update <bug_bead> --set-metadata "gc.output_json=$state"
 unlink "$state_file"
+trap - EXIT
 ```
 Set `last_reconcile` (include `n`, the opinion count — `last_reconcile.n`, so
 `gc dev-pack status` renders a solo run in N=1 language) and — when root cause aligns —
@@ -223,6 +226,12 @@ record `agreed_root_cause` so the fix phase's lanes read it from the arc bead. *
 for a verify-bounce** (a bounce that fired only because a cheap keystone was unverified is a
 correctness gate, not a disagreement round — bumping it would let one unverified fact burn
 the whole round budget).
+For `next_action=report_only`, build the state file with `status=report_only` (never
+`running`) and pass it to the deterministic terminal helper above instead of running the
+generic merge-update block. The helper forces and verifies that state, verifies the
+investigation bead remains open for human follow-up, consumes both temp files, closes and
+notifies the reconcile step, and contains no re-sling path. Terminal means the workflow
+will launch no fix/finalize work, not that the human's issue was discarded.
 
 ### 4. Drive the outer loop
 

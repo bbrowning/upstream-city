@@ -23,14 +23,21 @@ persona_status=$(bash "$GC_CITY_PATH/dev-pack/assets/scripts/persona-preflight.s
   exit 2
 }
 printf 'persona preflight: %s\n' "$persona_status"
-mapfile -t persona_files < <(python3 "$GC_CITY_PATH/dev-pack/assets/scripts/persona-lifecycle.py" select \
+persona_selection=$(bash "$GC_CITY_PATH/dev-pack/assets/scripts/select-personas.sh" \
   --corpus "$GC_PERSONAS" --lens {{.}} \
-  --path <relevant-path> [--path <another-path> ...])
+  --path <relevant-path> [--path <another-path> ...]) || {
+  printf '%s\n' "persona selection failed without a clean read-only result" >&2
+  exit 2
+}
+mapfile -t persona_files <<<"$persona_selection"
 printf 'loading persona: %s\n' "${persona_files[@]}"
 cat "${persona_files[@]}"
 ```
 
 The selector always returns `base.md`, then only domain personas whose `**Activates on:**` prefixes match. Multiple domain personas may match; zero is valid. If the corpus is optional, preflight records the intentional first-principles fallback. If `GC_PERSONAS_REQUIRED=true`, absence is a hard, actionable configuration failure.
+The wrapper runs `uv --no-project` with a city-owned cache under
+`.gc/runtime`; it never consults or creates a target-worktree `.venv`, lockfile, or cache,
+and fails if persona selection changes the worktree status baseline.
 
 Apply domain facts through this lane's method:
 {{- if eq . "diagnosis"}}

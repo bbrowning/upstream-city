@@ -201,8 +201,9 @@ if [ -n "$BRANCH_PREFIX" ]; then set -- "$@" --var "branch_prefix=$BRANCH_PREFIX
 set -- "$@" --title "bug root-cause round 1: $BEAD" --json
 
 if [ "$DRYRUN" = "yes" ]; then
-    printf 'DRY RUN — would run (rig=%s, preset=%s, execution=%s, diagnosis_lane_a_target=%s, diagnosis_lane_b_target=%s, review_lane_a_target=%s, review_lane_b_target=%s, diagnosis_n=%s, loop=%s, review_n=%s, local_only=true, completion=approved):\n  %s --rig %s sling' \
-        "$RIG" "$PRESET" "$EXECUTION" "$LANE_A_TARGET" "$LANE_B_TARGET" "$REVIEW_LANE_A" "$REVIEW_LANE_B" "$N" "$LOOP" "$REVIEW_N" "$GC" "$RIG"
+    COMPLETION=$(jq -r --arg preset "$PRESET" '.presets[$preset].bug.completion_checkpoint // .defaults.completion_checkpoint' "$POLICY")
+    printf 'DRY RUN — would run (rig=%s, preset=%s, execution=%s, diagnosis_lane_a_target=%s, diagnosis_lane_b_target=%s, review_lane_a_target=%s, review_lane_b_target=%s, diagnosis_n=%s, loop=%s, review_n=%s, local_only=true, completion=%s):\n  %s --rig %s sling' \
+        "$RIG" "$PRESET" "$EXECUTION" "$LANE_A_TARGET" "$LANE_B_TARGET" "$REVIEW_LANE_A" "$REVIEW_LANE_B" "$N" "$LOOP" "$REVIEW_N" "$COMPLETION" "$GC" "$RIG"
     for a in "$@"; do printf ' %q' "$a"; done
     printf '\n'
     exit 0

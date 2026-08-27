@@ -94,11 +94,12 @@ if (.resolutions != null) then
   | ( .resolutions
       | map(.resolution)
       | { resolved: (map(select(. == "resolved")) | length),
+          refuted: (map(select(. == "refuted")) | length),
           needs_dynamic: (map(select(. == "needs_dynamic")) | length),
           ambiguous: (map(select(. == "genuinely_ambiguous")) | length) } ) as $tally
   | (
       [ ( ["settle", "\($dn) dispute(s)",
-           "\($tally.resolved) resolved · \($tally.needs_dynamic) needs-check · \($tally.ambiguous) ambiguous"]
+           "\($tally.resolved) resolved · \($tally.refuted) refuted · \($tally.needs_dynamic) needs-check · \($tally.ambiguous) ambiguous"]
           | join(" · ") )
         + (if ($sv|length) > 0 then " · settled: \($sv)" else "" end),
         "",

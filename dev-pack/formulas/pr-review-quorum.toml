@@ -65,7 +65,7 @@ description = "Agent that synthesizes the lane verdicts into the combined quorum
 default = "pr-review-synthesizer"
 
 [vars.enable_settle]
-description = "false = report-only (synthesis MARKS a load-bearing divergence + names the crux but does NOT auto-sling the settle round — a human runs `gc dev-pack settle <PR>`, Phase 1); true = synthesis plays coordinator and auto-slings `pr-review-settle` when a disputed >=major finding exists (Phase 2, promote once trusted). Mirrors the hard-bug `enable_loop` dial."
+description = "true = a successful synthesis launches one idempotency-guarded settle round for a disputed major/critical finding; false = explicit report-only opt-out."
 default = "false"
 
 [vars.settle_target]
@@ -270,34 +270,35 @@ existing renderer/notify/summary work unchanged) PLUS:
 - `evidence`: which lane beads you read and how you merged (internal provenance).
 - `read_only_enforcement`: `{clean:true, mutations_delta:[]}` (you only read beads).
 
-Finish atomically with the schema-aware stdin emitter:
+Finish atomically with the schema-aware stdin emitter. When `enable_settle=true`, pass
+the guarded auto-settle flags in the SAME command; the helper launches at most one settle
+workflow after the synthesis is durably closed, and is a no-op for nondisputed findings:
+  ```bash
+  settle_args=()
+  if [ "{{enable_settle}}" = true ]; then
+    settle_args=(--auto-settle --settle-target "{{settle_target}}" \\
+      --resynth-target "{{synthesis_target}}")
+  fi
   python3 "$GC_CITY_PATH/dev-pack/assets/scripts/emit-review.py" \\
-    --bead <your-step-bead> --schema pr-review-quorum.v1 --outcome pass <<'JSON'
+    --bead <your-step-bead> --schema pr-review-quorum.v1 --outcome pass \\
+    "${settle_args[@]}" <<'JSON'
   { <your complete pr-review-quorum.v1 JSON object, including schema> }
   JSON
+  ```
 On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
 
-SETTLE ROUND (the divergence dial), AFTER you close above:
-- `enable_settle={{enable_settle}}` is **false** (Phase 1, report-only): STOP. Do not
-  sling anything. If `has_disputed_major` is true, note in your `summary`/
+SETTLE ROUND (the divergence dial):
+- `enable_settle={{enable_settle}}` is **false** (explicit report-only): the emitter does
+  not launch anything. If `has_disputed_major` is true, note in your `summary`/
   `merge_recommendation` that a human can settle it with
   `gc dev-pack settle {{head_ref}}` — the verdict already carries the crux.
-- `enable_settle` is **true** (Phase 2): if `has_disputed_major`, play coordinator and
-  sling ONE settle round (bounded — one round, then it escalates to a human), relaying the
-  lane beads (they are on YOUR `needs` edge) and the crux:
-  ```bash
-  gc sling {{.Rig}}/pr-arbiter pr-review-settle --formula \\
-    --var head_ref={{head_ref}} --var base_ref={{base_ref}} \\
-    --var synth_bead=<your-synthesis-bead> \\
-    --var lane_a_bead=<lane-a-bead> --var lane_b_bead=<lane-b-bead> \\
-    --var crux_question="<the load-bearing crux>" \\
-    --var resynth_target={{synthesis_target}} \\
-    $( [ -n "{{settle_target}}" ] && printf -- '--var arbiter_target=%s' "{{settle_target}}" ) \\
-    --title "pr-review-settle: {{head_ref}}"
-  ```
-  (No disputed `>=major`? Do not sling — nothing to settle.)
+- `enable_settle` is **true**: the emitter's deterministic helper verifies the closed
+  schema, disputed major/critical marker, both lane records, exact provenance/posture,
+  and absence of an existing `gc.var.synth_bead` workflow before slinging. Do not run a
+  second manual sling. One settle formula has one arbiter and one final re-synthesis;
+  unresolved evidence escalates in that final verdict and never starts another round.
 """
-metadata = { "gc.run_target" = "{{synthesis_target}}", "gc.review_quorum_role" = "synthesis", "gc.output_json_schema" = "pr-review-quorum.v1", "gc.output_json_required" = "true" }
+metadata = { "gc.run_target" = "{{synthesis_target}}", "gc.review_quorum_role" = "synthesis", "gc.auto_settle_enabled" = "{{enable_settle}}", "gc.output_json_schema" = "pr-review-quorum.v1", "gc.output_json_required" = "true" }
 
 [steps.retry]
 max_attempts = 2
