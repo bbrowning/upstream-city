@@ -69,6 +69,11 @@ and the feedback verdict that caused the revision.
 
 Before emission, commit-series validation enforces repository-local policy,
 nonempty commit bodies, subject/body separation, wrapping, and line budgets.
+It also separates attribution from DCO certification: project-appropriate AI
+attribution is allowed, detectable agent/model/bot `Signed-off-by` trailers are
+rejected with human extraction guidance, and valid human sign-offs are preserved.
+The gate reports immutable evidence and never rewrites commit history or manufactures
+a human identity.
 Artifact review verifies same-repository identity and that the branch still
 resolves to the recorded SHA. Rewriting history requires a new artifact revision.
 

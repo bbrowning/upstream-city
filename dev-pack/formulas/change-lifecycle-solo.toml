@@ -88,10 +88,16 @@ description = """
 Apply decide-change-lifecycle.sh for `{{work_bead}}` / `{{intent_kind}}` using the
 solo pr-review.v1 verdict. Approval alone records disposition=approved and closes the
 parent at artifact `{{implementation_artifact_id}}`, head `{{head_ref}}`, branch
-`{{implementation_branch}}`. Request_changes below max_iterations={{max_iterations}}
+`{{implementation_branch}}`. Approval is code review approval, not DCO readiness. If
+the target requires DCO, state that the human publisher must review and extract the
+approved change without committing, then create the publication commit with their own
+configured identity and sign-off; never call an agent-authored commit DCO-ready.
+Request_changes below max_iterations={{max_iterations}}
 records feedback and re-slings `{{revision_formula}}` to `{{revision_target}}` for a new
 commit and revision+1 with explicit lineage; that implementation must hand its new
-immutable artifact back to this lifecycle. Blocked leaves the parent open; exhausted
+immutable artifact back to this lifecycle. Every revision prohibits an agent/model/bot
+`Signed-off-by`; AI attribution is not human DCO certification. Blocked leaves the
+parent open; exhausted
 durably routes its exact artifact/review evidence to `{{.Rig}}/lead`, without a mayor
 hold, and leaves the parent open. Emit change-lifecycle-final.v1. Never mutate a remote.
 

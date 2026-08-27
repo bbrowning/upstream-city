@@ -93,6 +93,13 @@ complete what/why body (message file or one subject plus one body argument; neve
 `git rev-parse HEAD` and the result of `git status --short`. A clean committed
 local branch is successful durable output.
 
+For the initial implementation and every review-driven revision, never add an agent,
+model, or bot `Signed-off-by` or otherwise claim human legal certification, even when
+repository instructions show sign-off examples. AI assistance may use only a
+project-appropriate attribution trailer such as `Assisted-by`, `Generated-by`, or
+`Co-authored-by`; attribution is distinct from DCO certification. Preserve valid human
+sign-offs, but never invent, copy, or auto-apply a human identity.
+
 Before editing, use the `implementation` lifecycle lens to load `base.md` plus only
 personas matching the agreed subsystem and planned paths; reload if the actual path set
 expands. Record the load and material reflex influences in `persona_traces`.
@@ -100,6 +107,9 @@ expands. Record the load and material reflex influences in `persona_traces`.
 This step and every retry are strictly local-only: never push, open or modify a
 PR, fetch as a missing-ref fallback, or otherwise mutate a remote. The operator
 alone exports or publishes commits. Do NOT close the arc bead.
+If the target requires DCO, the handoff must say the approved local artifact is not
+DCO-ready: a human publisher must review and extract it without committing, then create
+the publication commit with their own configured identity and sign-off.
 
 After committing, run `emit-local-change.sh` with intent `hard_bug`, workflow
 `hard-bug-finalize`, this rig and bug bead, the exact base/branch, claimed checks,

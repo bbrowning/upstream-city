@@ -170,6 +170,10 @@ Emit its stdout verbatim as change-lifecycle-final.v1.
 Approve/approve_with_nits: call update-work-lifecycle.sh with checkpoint=review,
 disposition=approved and the exact artifact/head/branch. This is the only automatic
 parent-close checkpoint. Notify the human with final branch, SHA, and verification.
+Approval means code review approval, not DCO readiness. If the target requires DCO,
+state that the human publisher must review and extract the approved change without
+committing, then create the publication commit using their own configured identity and
+sign-off. Never describe an agent-authored commit as DCO-ready.
 
 Request_changes: first record disposition=request_changes and the synthesis/settle
 feedback bead. If revision {{implementation_revision}} is below the bound, sling
@@ -177,7 +181,9 @@ feedback bead. If revision {{implementation_revision}} is below the bound, sling
 artifact id, feedback bead, and producing verdict. Feature uses work_bead/base/offline;
 hard_bug uses bug_bead/base/branch_prefix/implementer/coordinator plus the same
 revision lineage. The implementer must add a new commit, emit a new artifact, and its
-handoff starts this lifecycle again. Never re-review or bless the old SHA.
+handoff starts this lifecycle again. Every revision retains the prohibition on an
+agent/model/bot `Signed-off-by`; AI attribution is not human DCO certification. Never
+re-review or bless the old SHA.
 
 Blocked: record blocked and leave the parent open for recovery. Exhausted bound: record
 escalated, then let the decision helper durably attach the exact branch/SHA/artifact and

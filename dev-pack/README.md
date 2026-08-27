@@ -28,6 +28,28 @@ Feature and bug parents close only after review approves the exact immutable
 artifact. Their final handoff includes the local **branch + exact HEAD SHA**;
 verify that the branch still resolves to that SHA before using it.
 
+AI attribution is not DCO certification. An agent may use a repository-appropriate
+trailer such as `Assisted-by`, `Generated-by`, or `Co-authored-by`, but it must never
+claim `Signed-off-by` or another human legal certification. Artifact validation rejects
+a detectable agent sign-off and preserves valid human sign-offs without rewriting
+history. Review approval therefore means the code artifact was approved, not that an
+agent-authored commit is DCO-ready.
+
+When the target requires DCO, the human publisher must inspect the exact approved SHA
+and create the publication commit using their own configured identity and sign-off. A
+safe extraction recipe is:
+
+```bash
+git switch -c publish/<bead> <human-selected-base>
+git cherry-pick --no-commit <approved-head-sha>
+git diff --cached                         # human review of the extracted change
+git commit --signoff                      # human-authored message and DCO certification
+```
+
+Do not amend the immutable workflow artifact in place, copy another person's trailer,
+or invent a human identity. The newly created human commit is a separate publication
+artifact and remains local until the human explicitly chooses to publish it.
+
 ## Presets and defaults
 
 Quality is the default. `--fast` and `--solo` are explicit N=1 opt-downs.

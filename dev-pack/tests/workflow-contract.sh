@@ -99,8 +99,31 @@ for phrase in 'Implement this feature' 'Fix this bug' 'Review PR N'; do
 done
 for phrase in 'N=2 independent review' 'strict synthesis' 'evidence settlement' \
   'maximum 3 revisions' 'branch + exact HEAD SHA' 'gc.lead_escalation_json' \
-  'Copy-paste verification' 'local-only'; do
+  'Copy-paste verification' 'local-only' 'AI attribution is not DCO certification' \
+  'git cherry-pick --no-commit'; do
   grep -q "$phrase" "$ROOT/dev-pack/README.md" || fail "canonical guide missing lifecycle contract: $phrase"
+done
+
+# Every write and revision contract forbids agent DCO certification and gives the
+# human publisher an explicit safe handoff. Static contract coverage complements
+# the executable artifact-boundary tests.
+for relative in \
+  'assets/prompts/feature-dev.prompt.template.md' \
+  'assets/prompts/bug-worker.prompt.template.md' \
+  'formulas/feature-dev.toml' \
+  'formulas/hard-bug-finalize.toml'; do
+  file="$ROOT/dev-pack/$relative"
+  grep -Fq 'Signed-off-by' "$file" || fail "$relative lacks the agent DCO prohibition"
+  grep -Fq 'never add' "$file" \
+    || fail "$relative does not explicitly prohibit adding an agent sign-off"
+  grep -Fq 'DCO' "$file" || fail "$relative does not distinguish DCO certification"
+  grep -Fq 'human publisher' "$file" || fail "$relative lacks human publication guidance"
+done
+for relative in 'formulas/change-lifecycle.toml' 'formulas/change-lifecycle-solo.toml'; do
+  file="$ROOT/dev-pack/$relative"
+  grep -Fq 'Every revision' "$file" || fail "$relative loses the DCO guard on revision"
+  grep -Fq 'DCO-ready' "$file" || fail "$relative can mislabel approval as DCO-ready"
+  grep -Fq 'human publisher' "$file" || fail "$relative lacks final human handoff guidance"
 done
 for phrase in '## Presets and defaults' '## Feature work' '## Hard-bug work' \
   '## Review a PR or local change' '### Materialize a reviewed PR' \

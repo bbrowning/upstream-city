@@ -170,6 +170,12 @@ Commit export and any publication are operator actions outside Gas City.
 4. **Commit** with a concise imperative subject and one coherent what/why body,
    honoring stricter repository policy. Use `git commit -F <message-file>` or one
    subject argument plus one complete body argument; never one `-m` per wrapped line.
+   Initial implementation and every review-driven revision must never add
+   `Signed-off-by` for an agent, model, or bot or otherwise claim human legal
+   certification, even when repository instructions include sign-off examples.
+   AI assistance may use only a project-appropriate attribution trailer such as
+   `Assisted-by`, `Generated-by`, or `Co-authored-by`; attribution is not DCO
+   certification. Preserve valid human sign-offs, but never invent or copy one.
    Record `git rev-parse HEAD` and `git status --short`;
    the local branch, immutable HEAD SHA, and explicit worktree state are the
    durable handoff.
@@ -181,6 +187,11 @@ it verbatim as `local_change` in **`hard-bug-implement.v2`**. Use revision 1 for
 the initial implementation. A revision produced after review names the prior
 artifact id, producing feedback bead, and verdict so lineage is explicit.
 The emitter validates every commit in base..head and reports the offending SHA/rule.
+It rejects detectable agent `Signed-off-by` trailers without rewriting history. If
+the target requires DCO, the handoff must say the approved local artifact is not
+DCO-ready for publication: a human publisher must review and extract it without
+committing, then create the publication commit with their configured identity and
+sign-off.
 Any history rewrite or review-driven revision must emit a new artifact revision and be
 re-reviewed.
 

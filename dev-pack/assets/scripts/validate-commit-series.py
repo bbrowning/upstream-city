@@ -12,6 +12,14 @@ import sys
 from pathlib import Path
 
 
+MAILBOX_RE = re.compile(r"^\s*(.*?)\s*<([^<>]+)>\s*$")
+AGENT_IDENTITY_RE = re.compile(
+    r"(?i)(?:\b(?:codex|chatgpt|gpt(?:-?\d+)?|claude|gemini|"
+    r"copilot|language[ -]model|ai[ -](?:assistant|agent)|coding[ -]agent)\b|"
+    r"\b(?:agent|bot)\b|\[[^]]*bot\]|(?:^|[+._-])bot(?:@|[+._-]|$))"
+)
+
+
 def git(repo: Path, *args: str, text: bool = True):
     return subprocess.run(
         ["git", "-C", str(repo), *args], check=True, capture_output=True, text=text
@@ -96,7 +104,56 @@ def paragraphs(body_lines: list[str]) -> list[list[str]]:
     return result
 
 
-def validate_message(raw: str, policy: dict) -> tuple[dict, list[str]]:
+def configured_agent_identity(repo: Path) -> tuple[str, str] | None:
+    """Return Git's configured identity only when it is recognizably non-human."""
+    def config(key: str) -> str:
+        result = subprocess.run(
+            ["git", "-C", str(repo), "config", "--get", key],
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip() if result.returncode == 0 else ""
+
+    name, email = config("user.name"), config("user.email")
+    combined = f"{name} <{email}>"
+    return (name, email) if AGENT_IDENTITY_RE.search(combined) else None
+
+
+def signed_off_values(raw: str) -> list[str]:
+    """Parse only Git's terminal trailer block, not prose mentioning a trailer."""
+    result = subprocess.run(
+        ["git", "interpret-trailers", "--parse"],
+        input=raw,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    values = []
+    for line in result.stdout.splitlines():
+        key, separator, value = line.partition(":")
+        if separator and key.casefold() == "signed-off-by":
+            values.append(value.strip())
+    return values
+
+
+def signoff_kind(value: str, agent_identity: tuple[str, str] | None) -> str:
+    mailbox = MAILBOX_RE.match(value)
+    name, email = mailbox.groups() if mailbox else (value, "")
+    if AGENT_IDENTITY_RE.search(f"{name} <{email}>"):
+        return "agent"
+    if agent_identity:
+        agent_name, agent_email = agent_identity
+        if (
+            name.casefold() == agent_name.casefold()
+            and email.casefold() == agent_email.casefold()
+        ):
+            return "agent"
+    return "human"
+
+
+def validate_message(
+    raw: str, policy: dict, agent_identity: tuple[str, str] | None = None
+) -> tuple[dict, list[str]]:
     raw = raw.rstrip("\n")
     lines = raw.split("\n")
     subject = lines[0] if lines else ""
@@ -104,6 +161,12 @@ def validate_message(raw: str, policy: dict) -> tuple[dict, list[str]]:
     body_lines = lines[2:] if separated else lines[1:]
     body = "\n".join(body_lines).strip("\n")
     errors = []
+    signoffs = signed_off_values(raw)
+    classified_signoffs = [
+        (value, signoff_kind(value, agent_identity)) for value in signoffs
+    ]
+    agent_signoffs = [value for value, kind in classified_signoffs if kind == "agent"]
+    human_signoffs = [value for value, kind in classified_signoffs if kind == "human"]
     if not subject.strip():
         errors.append("empty-subject")
     if len(subject) > policy["subject_max"]:
@@ -115,6 +178,9 @@ def validate_message(raw: str, policy: dict) -> tuple[dict, list[str]]:
     for number, line in enumerate(body_lines, start=3):
         if len(line) > policy["body_max"]:
             errors.append(f"body-line-{number}-over-{policy['body_max']}-characters")
+
+    if agent_signoffs:
+        errors.append("agent-signed-off-by")
 
     body_paragraphs = paragraphs(body_lines)
     non_prose = re.compile(r"^(?:[-*+] |\d+[.)] |```|    )")
@@ -133,6 +199,11 @@ def validate_message(raw: str, policy: dict) -> tuple[dict, list[str]]:
         "subject_length": len(subject),
         "max_body_line_length": max((len(line) for line in body_lines), default=0),
         "message_sha256": hashlib.sha256(raw.encode()).hexdigest(),
+        "dco": {
+            "agent_signoffs": agent_signoffs,
+            "human_signoffs": human_signoffs,
+            "valid": not agent_signoffs,
+        },
         "valid": not errors,
     }
     return evidence, errors
@@ -155,11 +226,12 @@ def main() -> None:
     if not shas:
         fail("commit range is empty")
     policy = policy_for(args.repo, head, changed)
+    agent_identity = configured_agent_identity(args.repo)
     commits = []
     violations = []
     for sha in shas:
         raw = git(args.repo, "show", "-s", "--format=%B", sha)
-        evidence, errors = validate_message(raw, policy)
+        evidence, errors = validate_message(raw, policy, agent_identity)
         commits.append({"sha": sha, **evidence})
         violations.extend({"sha": sha, "rule": error} for error in errors)
     report = {
@@ -179,6 +251,15 @@ def main() -> None:
     if violations:
         for violation in violations:
             print(f"validate-commit-series: {violation['sha']} {violation['rule']}", file=sys.stderr)
+        if any(violation["rule"] == "agent-signed-off-by" for violation in violations):
+            print(
+                "validate-commit-series: AI attribution is not human DCO certification; "
+                "the human publisher must extract the approved change with "
+                "`git cherry-pick --no-commit <sha>`, review it, then create a new commit "
+                "with their own configured identity and `git commit --signoff`. The "
+                "workflow will not rewrite artifact history or invent a human identity.",
+                file=sys.stderr,
+            )
         raise SystemExit(2)
 
 

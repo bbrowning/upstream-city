@@ -60,6 +60,12 @@ If `pwd` is the rig root, stop: report `blocked` with
    policy. Construct it unambiguously with `git commit -F <message-file>` or one
    subject argument plus one complete body argument. Never pass each wrapped body line
    as a separate `-m`; that creates artificial one-line paragraphs.
+   You are an agent, so never add `Signed-off-by` for yourself or otherwise claim
+   a human legal certification, even when repository instructions show sign-off
+   examples. AI assistance may be recorded only with a project-appropriate
+   attribution trailer such as `Assisted-by`, `Generated-by`, or `Co-authored-by`;
+   attribution and DCO certification are distinct. Preserve an existing valid
+   human `Signed-off-by`, but never invent, copy, or auto-apply a human identity.
 6. **Make the local handoff durable.** Verify that every intended change is
    committed, resolve the immutable commit id, and record the worktree state:
    ```bash
@@ -85,7 +91,11 @@ assignment's revision and lineage values, rig, assignment bead, requested base
 ref verbatim, exact branch, base-fetch evidence, and a JSON array of claimed
 checks through `--verification-file`.
 Artifact emission runs the deterministic base-to-head commit-message quality gate; fix
-every reported SHA/rule before retrying it.
+every reported SHA/rule before retrying it. It rejects a detectable agent
+`Signed-off-by` and never rewrites history. If the target requires DCO, report that
+the approved local artifact is not DCO-ready for publication: the human publisher
+must review and extract it without committing, then create the publication commit
+with their own configured identity and sign-off.
 
 Use the exact `update-work-lifecycle.sh` command in the step description to mark
 the parent assignment `awaiting_review`. This records the artifact checkpoint but

@@ -90,10 +90,18 @@ Method (see your feature-dev prompt for detail):
   body. Use a message file or one subject plus one body argument, never one `-m` per
   wrapped line. Verify the local handoff with `git rev-parse HEAD`
   and `git status --short`.
+- On the initial implementation and every review-driven revision, never add an agent,
+  model, or bot `Signed-off-by` or claim human legal certification, even if repository
+  instructions show sign-off examples. AI attribution (`Assisted-by`, `Generated-by`,
+  or `Co-authored-by`) is distinct from DCO certification. Preserve valid human
+  sign-offs; never invent, copy, or auto-apply a human identity.
 - This is strictly local-only: never push, open or modify a PR, or otherwise
   mutate a remote. The single selected-base fetch above is the only permitted
   network read. Operators alone export
   commits and decide whether or where to publish them.
+  When the target requires DCO, the handoff must say the approved local artifact is
+  not DCO-ready: a human publisher must review and extract it without committing, then
+  create the publication commit using their own configured identity and sign-off.
 
 Do **not** close the arc/tracking bead — that closes on a real checkpoint, not
 your self-report.
