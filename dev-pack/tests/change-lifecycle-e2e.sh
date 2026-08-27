@@ -97,6 +97,7 @@ case "${1-} ${2-}" in
     done
     mv "$next" "$MOCK_GC_STATE" ;;
   "bd close") jq '.status="closed"' "$MOCK_GC_STATE" >"$MOCK_GC_STATE.next"; mv "$MOCK_GC_STATE.next" "$MOCK_GC_STATE" ;;
+  "mail send") : ;;
   sling*) : ;;
   *) printf 'unexpected gc call: %s\n' "$*" >&2; exit 99 ;;
 esac
@@ -131,6 +132,22 @@ jq -e '.action == "revision_slung" and .effective_verdict == "request_changes"' 
 grep -q 'revision=2' "$TMP/gc.log" || fail 'feature revision was not incremented'
 grep -q "previous_artifact_id=$FEATURE_ID" "$TMP/gc.log" || fail 'feature revision lost lineage'
 jq -e '.status == "in_progress"' "$TMP/state.json" >/dev/null || fail 'revision closed parent'
+
+# Exhaustion routes the exact immutable evidence to the rig lead, without a mayor hold.
+: >"$TMP/gc.log"
+"$DECIDE" --rig fixture --work-bead fixture-feature --intent feature \
+  --artifact-id "$FEATURE_ID" --head-sha "$FEATURE_HEAD" --branch feature/lifecycle \
+  --revision 3 --max-iterations 3 --synthesis-file "$TMP/feature-synth.json" \
+  --feedback-bead synth-feature --synthesis-bead synth-feature \
+  --revision-formula feature-dev --revision-target fixture/feature-dev --base "$BASE_SHA" \
+  >"$TMP/feature-exhausted.json"
+jq -e '.action == "lead_escalated" and .effective_verdict == "request_changes"' "$TMP/feature-exhausted.json" >/dev/null
+grep -q 'mail send fixture/lead .*--notify' "$TMP/gc.log" || fail 'exhaustion did not wake fixture lead'
+! grep -q 'hold=mayor\|hold=lead' "$TMP/gc.log" || fail 'routine lifecycle exhaustion applied a hold'
+jq -e '(.metadata["gc.lead_escalation_json"] | fromjson |
+  .artifact_id == $id and .head_sha == $head and .iteration == 3 and .notified)' \
+  --arg id "$FEATURE_ID" --arg head "$FEATURE_HEAD" "$TMP/state.json" >/dev/null \
+  || fail 'lead escalation evidence was not durable'
 
 # A load-bearing hard-bug disagreement is settled by evidence before approval/closure.
 printf '%s\n' '{"schema":"pr-review-quorum.v1","verdict":"request_changes","has_disputed_major":true}' >"$TMP/bug-synth.json"

@@ -93,13 +93,15 @@ parent at artifact `{{implementation_artifact_id}}`, head `{{head_ref}}`, branch
 `{{implementation_branch}}`. Request_changes below max_iterations={{max_iterations}}
 records feedback and re-slings `{{revision_formula}}` to `{{revision_target}}` for a new
 commit and revision+1 with explicit lineage; that implementation must hand its new
-immutable artifact back to this lifecycle. Blocked/exhausted escalates and leaves the
-parent open. Emit change-lifecycle-final.v1. Never mutate a remote.
+immutable artifact back to this lifecycle. Blocked leaves the parent open; exhausted
+durably routes its exact artifact/review evidence to `{{.Rig}}/lead`, without a mayor
+hold, and leaves the parent open. Emit change-lifecycle-final.v1. Never mutate a remote.
 
 Write the review JSON to a unique temporary synthesis file, adding
 has_disputed_major=false, then invoke decide-change-lifecycle.sh with every exact value
 named by this step (artifact/head/branch/revision/bound, revision formula/target/base,
-and hard-bug targets when present), `--feedback-bead <review-step-bead>`, and
+and hard-bug targets when present), `--feedback-bead <review-step-bead>`,
+`--synthesis-bead <review-step-bead>`, and
 `--review-n 1 --lane-a-target {{lane_a_target}}`. Emit the helper's stdout verbatim.
 """
 metadata = { "gc.run_target" = "{{synthesis_target}}", "gc.output_json_schema" = "change-lifecycle-final.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }

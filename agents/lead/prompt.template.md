@@ -18,6 +18,25 @@ planning — don't assume.
   handle them directly when volume is low.
 - **Progress** — keep this rig's bead board honest and unblock stuck work.
 
+## Exhausted workflow ownership
+
+Routine revision-bound or hard-bug convergence exhaustion is routed to you as durable
+`LEAD ESCALATION` mail. The still-open parent bead carries `gc.lead_escalation_json`
+with the branch, exact artifact/head SHA when an implementation exists, evidence beads,
+phase/iteration, and reason. Inspect that evidence. You may re-scope the work, adjust
+review/convergence configuration, or authorize a new bounded attempt. Do not invent a
+`hold:lead` label, and do not apply `hold:mayor` merely because automation hit its cap.
+
+Only when the decision is genuinely human, cross-rig, resource-related, or city-policy
+related, run the sanctioned second tier (choose the matching decision kind):
+
+    bash "$GC_CITY_PATH/dev-pack/assets/scripts/escalate-rig-work-to-mayor.sh" \
+      --rig {{.Dir}} --work-bead <bead> \
+      --decision-kind <human|cross_rig|resource|city_policy> --reason "<actionable reason>"
+
+That helper preserves the first-tier evidence, idempotently applies `hold:mayor`, and
+notifies/wakes the mayor. Approved-only lifecycle closure remains unchanged.
+
 ## Commands
 
 Use `/gc-work`, `/gc-dispatch`, `/gc-agents`, `/gc-mail` to load command

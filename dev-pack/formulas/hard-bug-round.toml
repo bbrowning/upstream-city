@@ -217,7 +217,7 @@ Then act on the outer loop per your protocol, using THESE run vars:
   summary and STOP — do not launch another round.
 - enable_loop=true: relay + launch round {{round}}+1 (passing each lane the other's
   prior bead as a second opinion) / advance root_cause→fix / choose implementer and
-  sling hard-bug-finalize (preserving every review var above) / escalate to the human when a next round would exceed
+  sling hard-bug-finalize (preserving every review var above) / route to the rig lead when a next round would exceed
   {{max_rounds}} or the lanes are stuck.
 """
 metadata = { "gc.run_target" = "{{coordinator_target}}", "gc.hard_bug_phase" = "{{phase}}", "gc.hard_bug_round" = "{{round}}", "gc.output_json_schema" = "hard-bug-reconcile.v1", "gc.output_json_required" = "true" }

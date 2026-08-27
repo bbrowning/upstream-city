@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPDATE="$SCRIPT_DIR/update-work-lifecycle.sh"
 RIG="" WORK_BEAD="" INTENT="" ARTIFACT_ID="" HEAD_SHA="" BRANCH=""
 REVISION="" MAX_ITERATIONS="" SYNTHESIS_FILE="" SETTLE_FILE="" FEEDBACK_BEAD=""
+SYNTHESIS_BEAD="" SETTLEMENT_BEAD=""
 REVISION_FORMULA="" REVISION_TARGET="" BASE="" BRANCH_PREFIX=""
 IMPLEMENTER_TARGET="" REVIEWER_TARGET="" COORDINATOR_TARGET="" REVIEW_N="2"
 LANE_A_TARGET="" LANE_B_TARGET=""
@@ -26,6 +27,8 @@ while [ $# -gt 0 ]; do
     --synthesis-file) SYNTHESIS_FILE="${2:?}"; shift 2 ;; --synthesis-file=*) SYNTHESIS_FILE="${1#*=}"; shift ;;
     --settle-file) SETTLE_FILE="${2:?}"; shift 2 ;; --settle-file=*) SETTLE_FILE="${1#*=}"; shift ;;
     --feedback-bead) FEEDBACK_BEAD="${2:?}"; shift 2 ;; --feedback-bead=*) FEEDBACK_BEAD="${1#*=}"; shift ;;
+    --synthesis-bead) SYNTHESIS_BEAD="${2:?}"; shift 2 ;; --synthesis-bead=*) SYNTHESIS_BEAD="${1#*=}"; shift ;;
+    --settlement-bead) SETTLEMENT_BEAD="${2:?}"; shift 2 ;; --settlement-bead=*) SETTLEMENT_BEAD="${1#*=}"; shift ;;
     --revision-formula) REVISION_FORMULA="${2:?}"; shift 2 ;; --revision-formula=*) REVISION_FORMULA="${1#*=}"; shift ;;
     --revision-target) REVISION_TARGET="${2:?}"; shift 2 ;; --revision-target=*) REVISION_TARGET="${1#*=}"; shift ;;
     --base) BASE="${2:?}"; shift 2 ;; --base=*) BASE="${1#*=}"; shift ;;
@@ -69,9 +72,14 @@ case "$verdict" in
   request_changes)
     if [ "$REVISION" -ge "$MAX_ITERATIONS" ]; then
       "$UPDATE" "${common[@]}" --disposition escalated --reason revision-bound-exhausted
-      "$GC" --city "$CITY" --rig "$RIG" bd set-state "$WORK_BEAD" hold=mayor \
-        --reason "review revision bound exhausted at $REVISION"
-      action=escalated
+      evidence="$FEEDBACK_BEAD"
+      [ -z "$SYNTHESIS_BEAD" ] || evidence="$evidence,$SYNTHESIS_BEAD"
+      [ -z "$SETTLEMENT_BEAD" ] || evidence="$evidence,$SETTLEMENT_BEAD"
+      bash "$SCRIPT_DIR/escalate-rig-work.sh" --rig "$RIG" --work-bead "$WORK_BEAD" \
+        --workflow change-lifecycle --reason revision-bound-exhausted --phase review \
+        --iteration "$REVISION" --branch "$BRANCH" --head-sha "$HEAD_SHA" \
+        --artifact-id "$ARTIFACT_ID" --evidence-beads "$evidence" >/dev/null
+      action=lead_escalated
     else
       for pair in "revision-formula:$REVISION_FORMULA" "revision-target:$REVISION_TARGET" "base:$BASE"; do
         [ -n "${pair#*:}" ] || die "request_changes requires --${pair%%:*}"

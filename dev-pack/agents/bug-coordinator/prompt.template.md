@@ -186,15 +186,9 @@ bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-reconcile
   --json-file "$out" --schema hard-bug-reconcile.v1 --outcome pass
 ```
 
-**When the run is pausing, replace the close command above with this notifying form** —
-do not run both. Notify the human atomically in this SAME close command whenever
-for a human: when `next_action` is `report_only` or `escalate` (NOT on
-`relay_next_round`/`advance_phase`/`choose_implementer`, which continue on their own).
-Folding `--notify` + `--render` + `--subject` into the close means the mail can never be a
-forgotten separate step, and `--render` turns the verdict JSON into a prose body (the human
-reads the divergence + what to do next, not raw JSON). It goes to the HUMAN
-(`${GC_HARDBUG_NOTIFY_TO:-human}`) — never an LLM agent like the `lead`, who has no idea
-what to do with it:**
+**When a report-only run pauses, replace the close command above with this notifying
+form** — do not run both. `report_only` is the requested human deliverable, so notify the
+human atomically in the same close command. `--render` turns the verdict JSON into prose:
 
 ```bash
 bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-reconcile-bead> \
@@ -206,6 +200,10 @@ bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-reconcile
 where `<subject>` speaks the run's N: at **N>=2** use
 `"bug <bug_bead> <phase> r<round>: aligned=<true|false> stronger=<lane> next=<next_action>"`;
 at **N=1** drop the comparison words — `"bug <bug_bead> <phase> r<round>: solo self-verify=<passed|caveat> next=<next_action>"`.
+
+For `next_action=escalate`, use the ordinary non-notifying `emit-json.sh` close first.
+Then follow the lead-routing action in step 4 below; its durable evidence write plus
+`gc mail send {{.Rig}}/lead --notify` is the supported wake/notification mechanism.
 
 Then MERGE-update the arc state (never `--metadata`, which wipes routing keys). Buffer
 it in a unique `mktemp` file — not `state.json` in your cwd, which would dirty the
@@ -307,15 +305,23 @@ cheap-unverified N=1 arc **escalates** instead.
     --var enable_loop=true --title "bug finalize: <bug_bead>"
   ```
 
-- **At cap, or `stuck` → escalate to the human.** Do not force a resolution. Set
-  `next_action=escalate` (so step 3's close already `--notify`'d the human with the
-  divergence), then mark the arc held for a human and stop:
+- **At cap, or `stuck` → route to the rig lead.** Do not force a resolution. Set
+  `next_action=escalate`, close the reconcile step without human notification as described
+  above, MERGE-update the arc `status=escalated`, then durably route the still-open arc and
+  complete lane/reconcile evidence to the owning lead:
   ```bash
-  gc bd set-state <bug_bead> hold=mayor --reason "bug: <phase> did not converge in <n> rounds; needs human"
+  bash "$GC_CITY_PATH/dev-pack/assets/scripts/escalate-rig-work.sh" \
+    --rig {{.Rig}} --work-bead <bug_bead> --workflow hard-bug-convergence \
+    --reason "<cap-exhausted|stuck|verify-bounce-exhausted>" --phase <phase> \
+    --iteration <round> --branch "<branch-if-any>" --head-sha "<exact-head-if-any>" \
+    --artifact-id "<artifact-if-any>" \
+    --evidence-beads "<lane-a-bead>,<lane-b-bead-if-any>,<reconcile-bead>"
   ```
-  (`hold=mayor` is the canonical automation→human escalation state; do not invent a
-  label. If `gc bd set-state` isn't the exact form, check `gc bd --help`.) Set arc
-  `status=escalated` and stop. The human — not the `lead` — is the adjudicator here.
+  Use empty artifact fields when convergence stopped before implementation; the exact
+  diagnosis evidence beads and phase/round remain mandatory. Routine exhaustion does
+  not apply `hold:mayor`, and there is no `hold:lead`. The lead may re-scope, adjust the
+  bounded configuration, authorize another bounded attempt, or use the documented
+  second-tier helper for a genuinely human/cross-rig/resource/city-policy decision.
 
 After you sling the next step, your reconcile step is done (step 3 already closed it).
 You do not wait — the implementation handoff and shared lifecycle wake their own agents.

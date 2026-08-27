@@ -161,6 +161,7 @@ run:
     --branch {{implementation_branch}} --revision {{implementation_revision}} \
     --max-iterations {{max_iterations}} --synthesis-file <synthesis.json> \
     --settle-file <settle.json> --feedback-bead <authoritative-verdict-bead> \
+    --synthesis-bead <synthesis-step-bead> --settlement-bead <settle-step-bead> \
     --revision-formula {{revision_formula}} --revision-target {{revision_target}} \
     --base {{implementation_base}} --branch-prefix "{{branch_prefix}}" \
     --implementer-target "{{implementer_target}}" --reviewer-target "{{reviewer_target}}" \
@@ -180,9 +181,11 @@ hard_bug uses bug_bead/base/branch_prefix/implementer/reviewer/coordinator plus 
 revision lineage. The implementer must add a new commit, emit a new artifact, and its
 handoff starts this lifecycle again. Never re-review or bless the old SHA.
 
-Blocked or an exhausted bound: record blocked/escalated, hold=mayor, notify the human,
-and leave the parent open. Emit change-lifecycle-final.v1 describing the exact terminal
-or next action. Never push, publish, open a PR, or mutate a remote.
+Blocked: record blocked and leave the parent open for recovery. Exhausted bound: record
+escalated, then let the decision helper durably attach the exact branch/SHA/artifact and
+review/settlement beads to the parent and notify/wake `{{.Rig}}/lead`. Routine exhaustion
+never applies hold:mayor (and there is no hold:lead). Emit change-lifecycle-final.v1
+describing the exact terminal or next action. Never push, publish, open a PR, or mutate a remote.
 """
 metadata = { "gc.run_target" = "{{synthesis_target}}", "gc.output_json_schema" = "change-lifecycle-final.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
 [steps.retry]

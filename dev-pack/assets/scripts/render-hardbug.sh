@@ -124,7 +124,7 @@ if (.aligned != null) then
       + ["", "What happens next"]
       + [ "  " + (
             if   $next == "report_only"        then "Stage-1 report only — nothing was changed. Review the root cause above, then re-run with --loop to " + (if $solo then "act on it" else "drive convergence" end) + ", or take it from here."
-            elif $next == "escalate"           then "The lanes did not converge (or are stuck) — this arc is held for you (hold=mayor). Review the divergence above and adjust the direction, or fix it directly."
+            elif $next == "escalate"           then "The lanes did not converge (or are stuck) — the still-open arc and its evidence are being routed to the owning rig lead. No mayor hold is applied for routine exhaustion."
             elif $next == "relay_next_round"   then "Converging automatically — the coordinator is relaying each lane's position into another round. No action needed."
             elif $next == "advance_phase"      then "Root cause agreed — advancing to the fix phase automatically. No action needed."
             elif $next == "choose_implementer" then "Fix agreed — the stronger lane will implement and the other cross-review. No action needed."
@@ -154,7 +154,7 @@ elif (.concurred != null) or (.branch != null) or (.status != null) then
       + ["", "What happens next"]
       + [ "  " + (
             if   $status == "done"      then "Fix implemented and cross-review concurred" + (if ($branch|nn) then " on branch \($branch)" else "" end) + ". Not merged — open/merge a PR to land it."
-            elif $status == "escalated" then "Could not finalize automatically — held for you (hold=mayor)." + (if ($branch|nn) then " Review branch \($branch) and the summary above." else " Review the summary above." end)
+            elif $status == "escalated" then "Could not finalize automatically — routed to the owning rig lead without a routine mayor hold." + (if ($branch|nn) then " Review branch \($branch) and the summary above." else " Review the summary above." end)
             elif $status == "reopened"  then "Re-entering the fix phase — the coordinator is running another round. No action needed."
             else (if ($next|nn) then "next action: \($next)." else "See the summary above." end) end ) ]
       + footer
