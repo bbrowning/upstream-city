@@ -32,13 +32,17 @@ for name in ('hard-bug-round.toml','hard-bug-round-solo.toml'):
 PY
 
 feature_dry=$(GC_BIN=gc "$ROOT/dev-pack/commands/feature/run.sh" paude-feature \
-  --rig paude --offline --review-n 2 --review-lanes profile-a,profile-b --dry-run)
-printf '%s' "$feature_dry" | grep -q 'review_lane_a_target=profile-a' || fail 'feature profile A selection was lost'
-printf '%s' "$feature_dry" | grep -q 'review_lane_b_target=profile-b' || fail 'feature profile B selection was lost'
+  --rig paude --offline --review-n 2 \
+  --review-lanes pr-reviewer-a-efficient-medium,pr-reviewer-b-efficient-medium --dry-run)
+printf '%s' "$feature_dry" | grep -q 'review_lane_a_target=paude/pr-reviewer-a-efficient-medium' \
+  || fail 'feature profile A selection was lost'
+printf '%s' "$feature_dry" | grep -q 'review_lane_b_target=paude/pr-reviewer-b-efficient-medium' \
+  || fail 'feature profile B selection was lost'
 bug_dry=$(GC_BIN=gc "$ROOT/dev-pack/commands/bug/run.sh" paude-bug \
-  --rig paude --review-n 1 --review-lanes profile-solo --dry-run)
+  --rig paude --review-n 1 --review-lanes pr-reviewer-a-efficient-medium --dry-run)
 printf '%s' "$bug_dry" | grep -q 'review_n=1' || fail 'hard-bug review N selection was lost'
-printf '%s' "$bug_dry" | grep -q 'review_lane_a_target=profile-solo' || fail 'hard-bug profile selection was lost'
+printf '%s' "$bug_dry" | grep -q 'review_lane_a_target=paude/pr-reviewer-a-efficient-medium' \
+  || fail 'hard-bug profile selection was lost'
 
 git init -q -b main "$TMP/repo"
 git -C "$TMP/repo" config user.name Fixture
@@ -109,16 +113,27 @@ export MOCK_GC_STATE="$TMP/state.json" MOCK_REPO="$TMP/repo"
 # Both intent types enter the real N=2 formula with artifact-derived immutable SHAs.
 "$SLING" --rig fixture --work-bead fixture-feature --intent feature \
   --artifact "$TMP/feature-r1.json" --n 2 --max-iterations 3 \
-  --revision-formula feature-dev --revision-target fixture/feature-dev --base "$BASE_SHA"
+  --revision-formula feature-dev --revision-target fixture/feature-dev-frontier-xhigh --base "$BASE_SHA"
 grep -q 'change-lifecycle --formula' "$TMP/gc.log" || fail 'feature did not enter N=2 lifecycle'
 grep -q "head_ref=$FEATURE_HEAD" "$TMP/gc.log" || fail 'feature lifecycle did not pin exact head SHA'
+grep -q 'lane_a_target=fixture/pr-reviewer-a-frontier-xhigh' "$TMP/gc.log" \
+  || fail 'feature helper default lost semantic review A'
+grep -q 'lane_b_target=fixture/pr-reviewer-b-frontier-xhigh' "$TMP/gc.log" \
+  || fail 'feature helper default lost semantic review B'
+grep -q 'triage_target=fixture/pr-triage' "$TMP/gc.log" || fail 'feature helper lost fixed triage'
+grep -q 'synthesis_target=fixture/pr-review-synthesizer' "$TMP/gc.log" || fail 'feature helper lost fixed synthesis'
+! grep -q 'reviewer_target=' "$TMP/gc.log" || fail 'feature helper retained legacy reviewer target'
 : >"$TMP/gc.log"
 "$SLING" --rig fixture --work-bead fixture-hard_bug --intent hard_bug \
   --artifact "$TMP/bug-r1.json" --n 2 --max-iterations 3 \
-  --revision-formula hard-bug-finalize --revision-target fixture/bug-worker-a --base "$BASE_SHA" \
-  --implementer-target fixture/bug-worker-a --reviewer-target fixture/bug-worker-b \
+  --revision-formula hard-bug-finalize --revision-target fixture/bug-worker-a-frontier-xhigh --base "$BASE_SHA" \
+  --implementer-target fixture/bug-worker-a-frontier-xhigh \
   --coordinator-target fixture/bug-coordinator
 grep -q "head_ref=$BUG_HEAD" "$TMP/gc.log" || fail 'hard-bug lifecycle did not pin exact head SHA'
+grep -q 'lane_a_target=fixture/pr-reviewer-a-frontier-xhigh' "$TMP/gc.log" \
+  || fail 'hard-bug helper default lost semantic review A'
+grep -q 'lane_b_target=fixture/pr-reviewer-b-frontier-xhigh' "$TMP/gc.log" \
+  || fail 'hard-bug helper default lost semantic review B'
 
 # Feature request_changes creates revision 2 with explicit lineage and leaves parent open.
 printf '%s\n' '{"schema":"pr-review-quorum.v1","verdict":"request_changes","has_disputed_major":false}' >"$TMP/feature-synth.json"
@@ -141,7 +156,7 @@ jq -e '.status == "in_progress"' "$TMP/state.json" >/dev/null || fail 'revision 
   --artifact-id "$FEATURE_ID" --head-sha "$FEATURE_HEAD" --branch feature/lifecycle \
   --revision 3 --max-iterations 3 --synthesis-file "$TMP/feature-synth.json" \
   --feedback-bead synth-feature --synthesis-bead synth-feature \
-  --revision-formula feature-dev --revision-target fixture/feature-dev --base "$BASE_SHA" \
+  --revision-formula feature-dev --revision-target fixture/feature-dev-frontier-xhigh --base "$BASE_SHA" \
   >"$TMP/feature-exhausted.json"
 jq -e '.action == "lead_escalated" and .effective_verdict == "request_changes"' "$TMP/feature-exhausted.json" >/dev/null
 grep -q 'mail send fixture/lead .*--notify' "$TMP/gc.log" || fail 'exhaustion did not wake fixture lead'
@@ -150,6 +165,27 @@ jq -e '(.metadata["gc.lead_escalation_json"] | fromjson |
   .artifact_id == $id and .head_sha == $head and .iteration == 3 and .notified)' \
   --arg id "$FEATURE_ID" --arg head "$FEATURE_HEAD" "$TMP/state.json" >/dev/null \
   || fail 'lead escalation evidence was not durable'
+
+# Hard-bug request_changes preserves implementation, coordinator, review targets, and N.
+printf '%s\n' '{"schema":"pr-review-quorum.v1","verdict":"request_changes","has_disputed_major":false}' >"$TMP/bug-request.json"
+: >"$TMP/gc.log"
+"$DECIDE" --rig fixture --work-bead fixture-hard_bug --intent hard_bug \
+  --artifact-id "$BUG_ID" --head-sha "$BUG_HEAD" --branch bug/lifecycle \
+  --revision 1 --max-iterations 3 --synthesis-file "$TMP/bug-request.json" \
+  --feedback-bead synth-bug --revision-formula hard-bug-finalize \
+  --revision-target fixture/bug-worker-a-frontier-xhigh --base "$BASE_SHA" \
+  --implementer-target fixture/bug-worker-a-frontier-xhigh \
+  --coordinator-target fixture/bug-coordinator --review-n 1 \
+  --lane-a-target fixture/pr-reviewer-a-efficient-medium \
+  --lane-b-target fixture/pr-reviewer-b-efficient-medium >"$TMP/bug-request-decision.json"
+for expected in 'fixture/bug-worker-a-frontier-xhigh hard-bug-finalize --formula' \
+  'implementer_target=fixture/bug-worker-a-frontier-xhigh' \
+  'coordinator_target=fixture/bug-coordinator' 'review_n=1' \
+  'review_lane_a_target=fixture/pr-reviewer-a-efficient-medium' \
+  'review_lane_b_target=fixture/pr-reviewer-b-efficient-medium' 'revision=2'; do
+  grep -q "$expected" "$TMP/gc.log" || fail "hard-bug revision lost $expected"
+done
+! grep -q 'reviewer_target=' "$TMP/gc.log" || fail 'hard-bug revision retained legacy reviewer target'
 
 # A load-bearing hard-bug disagreement is settled by evidence before approval/closure.
 printf '%s\n' '{"schema":"pr-review-quorum.v1","verdict":"request_changes","has_disputed_major":true}' >"$TMP/bug-synth.json"

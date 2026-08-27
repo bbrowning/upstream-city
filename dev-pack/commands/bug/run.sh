@@ -51,8 +51,8 @@ with the <rig>/bug-worker-* lane targets filled in.
   --loop              explicitly drive the full convergence loop (already on for quality/fast)
   --max-rounds N      per-phase iteration cap (default 3)
   --base-ref REF      baseline ref the lanes read against (default origin/main)
-  --lane-a-target T   expert override for resolved lane A target
-  --lane-b-target T   expert override for resolved lane B target (N=2 only)
+  --lane-a-target T   explicit installed-target override for lane A
+  --lane-b-target T   explicit installed-target override for lane B (N=2 only)
   --branch-prefix P   prefix the eventual fix branch (default: unset -> no prefix)
   --review-n N        shared lifecycle review fan-out: 1 or 2 (default: 2)
   --review-lanes A[,B] reviewer profile targets; count must match --review-n
@@ -62,6 +62,23 @@ with the <rig>/bug-worker-* lane targets filled in.
 EOF
 }
 die() { printf '%s\n' "bug: $*" >&2; exit 2; }
+AGENTS_CACHE=""
+load_agents() { [ -n "$AGENTS_CACHE" ] || AGENTS_CACHE="$("$GC" --city "$CITY" agent list 2>/dev/null | awk '{print $1}')"; }
+agent_exists() { load_agents; printf '%s\n' "$AGENTS_CACHE" | grep -qx "$1"; }
+RESOLVED_TARGET=""
+resolve_target() { # $1=target, $2=optional short-name prefix
+    local raw="$1" prefix="${2:-}" cand
+    if [[ "$raw" == */* ]]; then
+        [[ "$raw" == "$RIG/"* ]] || die "target '$raw' belongs to a different rig; expected '$RIG/...'"
+        agent_exists "$raw" || die "unknown installed target '$raw'"
+        RESOLVED_TARGET="$raw"
+        return
+    fi
+    for cand in "$RIG/$raw" "$RIG/$prefix$raw"; do
+        if agent_exists "$cand"; then RESOLVED_TARGET="$cand"; return; fi
+    done
+    die "unknown installed target '$raw' in rig '$RIG'"
+}
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -146,6 +163,11 @@ if [ -n "$REVIEW_LANES" ]; then
         REVIEW_LANE_B="$RIG/$(jq -er --arg p "$EXECUTION" '.execution_profiles[$p].roles.review.lane_b' "$POLICY")"
     fi
 fi
+resolve_target "$COORD"; COORD="$RESOLVED_TARGET"
+resolve_target "$LANE_A_TARGET"; LANE_A_TARGET="$RESOLVED_TARGET"
+resolve_target "$LANE_B_TARGET"; LANE_B_TARGET="$RESOLVED_TARGET"
+resolve_target "$REVIEW_LANE_A" "pr-reviewer-"; REVIEW_LANE_A="$RESOLVED_TARGET"
+resolve_target "$REVIEW_LANE_B" "pr-reviewer-"; REVIEW_LANE_B="$RESOLVED_TARGET"
 
 # Pick the formula by opinion count.
 if [ "$N" = "1" ]; then
@@ -157,13 +179,11 @@ else
     FORMULA="hard-bug-round"
 fi
 
-# Live sanity checks (skipped under --dry-run so it stays a pure preview).
+# Live bead sanity check. Target discovery above is read-only and also runs for
+# dry-runs so previews fail before they advertise deleted or misspelled agents.
 if [ "$DRYRUN" != "yes" ]; then
     "$GC" --city "$CITY" --rig "$RIG" bd show "$BEAD" --json >/dev/null 2>&1 \
         || die "bead '$BEAD' not found in rig '$RIG' (wrong --rig, or create it there first)"
-    if ! "$GC" --city "$CITY" agent list 2>/dev/null | grep -q "$COORD"; then
-        printf '%s\n' "bug: WARN '$COORD' not found — is dev-pack in rig '$RIG' includes, and has 'gc reload' run?" >&2
-    fi
 fi
 
 set -- "$COORD" "$FORMULA" --formula \

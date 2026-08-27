@@ -10,7 +10,7 @@ RIG="" WORK_BEAD="" INTENT="" ARTIFACT_ID="" HEAD_SHA="" BRANCH=""
 REVISION="" MAX_ITERATIONS="" SYNTHESIS_FILE="" SETTLE_FILE="" FEEDBACK_BEAD=""
 SYNTHESIS_BEAD="" SETTLEMENT_BEAD=""
 REVISION_FORMULA="" REVISION_TARGET="" BASE="" BRANCH_PREFIX=""
-IMPLEMENTER_TARGET="" REVIEWER_TARGET="" COORDINATOR_TARGET="" REVIEW_N="2"
+IMPLEMENTER_TARGET="" COORDINATOR_TARGET="" REVIEW_N="2"
 LANE_A_TARGET="" LANE_B_TARGET=""
 
 die() { printf '%s\n' "decide-change-lifecycle: $*" >&2; exit 2; }
@@ -34,7 +34,6 @@ while [ $# -gt 0 ]; do
     --base) BASE="${2:?}"; shift 2 ;; --base=*) BASE="${1#*=}"; shift ;;
     --branch-prefix) BRANCH_PREFIX="${2:?}"; shift 2 ;; --branch-prefix=*) BRANCH_PREFIX="${1#*=}"; shift ;;
     --implementer-target) IMPLEMENTER_TARGET="${2:?}"; shift 2 ;; --implementer-target=*) IMPLEMENTER_TARGET="${1#*=}"; shift ;;
-    --reviewer-target) REVIEWER_TARGET="${2:?}"; shift 2 ;; --reviewer-target=*) REVIEWER_TARGET="${1#*=}"; shift ;;
     --coordinator-target) COORDINATOR_TARGET="${2:?}"; shift 2 ;; --coordinator-target=*) COORDINATOR_TARGET="${1#*=}"; shift ;;
     --review-n) REVIEW_N="${2:?}"; shift 2 ;; --review-n=*) REVIEW_N="${1#*=}"; shift ;;
     --lane-a-target) LANE_A_TARGET="${2:?}"; shift 2 ;; --lane-a-target=*) LANE_A_TARGET="${1#*=}"; shift ;;
@@ -93,7 +92,7 @@ case "$verdict" in
       else
         set -- "$@" --var "bug_bead=$WORK_BEAD" --var "base=$BASE" \
           --var "branch_prefix=$BRANCH_PREFIX" --var "implementer_target=$IMPLEMENTER_TARGET" \
-          --var "reviewer_target=$REVIEWER_TARGET" --var "coordinator_target=$COORDINATOR_TARGET"
+          --var "coordinator_target=$COORDINATOR_TARGET"
       fi
       set -- "$@" --var "revision=$next" --var "previous_artifact_id=$ARTIFACT_ID" \
         --var "feedback_bead=$FEEDBACK_BEAD" --var "producing_verdict=$verdict" \

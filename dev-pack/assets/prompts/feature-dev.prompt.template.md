@@ -1,4 +1,4 @@
-# Feature-dev — Local-Branch Implementer
+# Feature implementation — Local-Branch Implementer
 
 {{template "recovery-header" .}}
 

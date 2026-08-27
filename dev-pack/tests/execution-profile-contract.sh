@@ -29,13 +29,6 @@ for name, profile in p['execution_profiles'].items():
     assert roles['review']['lane_a'] != roles['review']['lane_b']
 
 city = tomllib.loads((root / 'city.toml').read_text())
-experts = {
-    'pr-reviewer-opus48-xhigh': ('claude', 'claude-opus-4-8', 'xhigh'),
-    'pr-reviewer-sonnet-xhigh': ('claude', 'sonnet', 'xhigh'),
-    'pr-reviewer-gpt56sol-medium': ('codex', 'gpt-5.6-sol', 'medium'),
-    'pr-reviewer-gpt56sol-xhigh': ('codex', 'gpt-5.6-sol', 'xhigh'),
-    'pr-reviewer-gpt56luna-xhigh': ('codex', 'gpt-5.6-luna', 'xhigh'),
-}
 fixed = {
     'pr-triage': ('codex', 'gpt-5.6-sol', 'medium'),
     'pr-review-synthesizer': ('codex', 'gpt-5.6-sol', 'medium'),
@@ -43,22 +36,22 @@ fixed = {
     'pr-runner': ('codex', 'gpt-5.6-luna', 'high'),
     'pr-follow-up': ('codex', 'gpt-5.6-sol', 'high'),
     'pr-chat': ('codex', 'gpt-5.6-sol', 'high'),
-    'bug-coordinator': ('claude', 'opus', 'high'),
+    'bug-coordinator': ('codex', 'gpt-5.6-sol', 'high'),
 }
 for rig in city['rigs']:
-    patches = {x.get('agent'): x for x in rig.get('patches', [])}
-    assert len(patches) == 35, (rig['name'], len(patches))
-    for agent, expected_binding in {**fixed, **experts}.items():
-        patch = patches[agent]
-        actual = (patch['provider'], patch['option_defaults']['model'], patch['option_defaults']['effort'])
-        assert actual == expected_binding, (rig['name'], agent, actual, expected_binding)
-    compatibility = {
-        'feature-dev': ('codex', 'gpt-5.6-luna', 'high') if rig['name'] == 'paude'
-                       else ('claude', 'opus', 'high'),
-        'bug-worker-a': ('claude', 'opus', 'high'),
-        'bug-worker-b': ('claude', 'sonnet', 'high'),
+    patch_list = rig.get('patches', [])
+    patches = {x.get('agent'): x for x in patch_list}
+    assert len(patches) == len(patch_list), (rig['name'], 'duplicate patch')
+    semantic_targets = {
+        t for profile in p['execution_profiles'].values()
+        for group in profile['roles'].values() for t in group.values()
     }
-    for agent, expected_binding in compatibility.items():
+    assert len(semantic_targets) == 20
+    assert set(patches) == set(fixed) | semantic_targets, (
+        rig['name'], sorted(set(patches) - set(fixed) - semantic_targets),
+        sorted((set(fixed) | semantic_targets) - set(patches)))
+    assert len(patches) == 27, (rig['name'], len(patches))
+    for agent, expected_binding in fixed.items():
         patch = patches[agent]
         actual = (patch['provider'], patch['option_defaults']['model'], patch['option_defaults']['effort'])
         assert actual == expected_binding, (rig['name'], agent, actual, expected_binding)
@@ -80,11 +73,15 @@ for rig in city['rigs']:
             data = tomllib.loads(shell.read_text())
             assert data['prompt_template']
             assert 'provider' not in data and 'option_defaults' not in data
+            if patch['provider'] == 'claude':
+                assert profile_name.startswith('frontier-') and lane_b, (rig['name'], target)
 PY
 
-! rg -n 'opus46|opus-4-6|Opus 4\.6' "$ROOT/city.toml" "$ROOT/dev-pack" "$ROOT/docs" "$ROOT/README.md" \
+! rg -n 'opus46|opus-4-6|Opus 4\.6|pr-reviewer-(opus48|sonnet|gpt56)|reviewer_target|opt_model|opt_effort' \
+  "$ROOT/city.toml" "$ROOT/dev-pack/agents" "$ROOT/dev-pack/formulas" "$ROOT/dev-pack/assets" \
+  "$ROOT/dev-pack/commands" "$ROOT/dev-pack/README.md" "$ROOT/docs" "$ROOT/README.md" \
   --glob '!dev-pack/tests/execution-profile-contract.sh' \
-  || fail 'retired Opus 4.6 configuration or documentation remains'
+  || fail 'legacy concrete/generic execution wiring remains'
 
 for rig in paude vllm; do
   for profile in frontier-xhigh frontier-medium efficient-xhigh efficient-medium; do
@@ -98,8 +95,8 @@ if [[ " $* " == *" rig list --json "* ]]; then
   jq -cn --arg path "$MOCK_ROOT" '{rigs:[{name:"paude",path:$path},{name:"vllm",path:$path}]}'
 elif [[ " $* " == *" agent list "* ]]; then
   for rig in paude vllm; do
-    printf '%s\n' "$rig/pr-review-synthesizer"
-    printf '%s\n' "$rig/expert-a" "$rig/expert-b"
+    printf '%s\n' "$rig/pr-review-synthesizer" "$rig/bug-coordinator"
+    printf '%s\n' "$rig/custom-implementer" "$rig/custom-review-a" "$rig/custom-review-b"
     jq -r --arg rig "$rig" '.execution_profiles[].roles.review[] | "\($rig)/\(.)"' "$MOCK_POLICY"
   done | sort -u
 else
@@ -114,11 +111,12 @@ for command in feature bug; do
   grep -q 'efficient-medium' <<<"$out" || fail "$command hid resolved targets"
 done
 
-feature_override=$(GC_BIN=gc "$ROOT/dev-pack/commands/feature/run.sh" paude-1 --rig paude \
-  --execution efficient-medium --implementer-target paude/expert-implementer \
-  --review-lanes paude/expert-review-a,paude/expert-review-b --dry-run)
-for expected in 'execution=efficient-medium' 'implementer_target=paude/expert-implementer' \
-  'review_lane_a_target=paude/expert-review-a'; do
+feature_override=$(MOCK_ROOT="$ROOT" MOCK_POLICY="$POLICY" GC_BIN="$TMP/gc" GC_CITY_PATH="$ROOT" \
+  "$ROOT/dev-pack/commands/feature/run.sh" paude-1 --rig paude \
+  --execution efficient-medium --implementer-target paude/custom-implementer \
+  --review-lanes paude/custom-review-a,paude/custom-review-b --dry-run)
+for expected in 'execution=efficient-medium' 'implementer_target=paude/custom-implementer' \
+  'review_lane_a_target=paude/custom-review-a'; do
   grep -q "$expected" <<<"$feature_override" || fail "feature override precedence lost $expected"
 done
 
@@ -129,10 +127,17 @@ grep -q 'pr-reviewer-a-efficient-medium' <<<"$out" || fail 'review lost profile 
 grep -q 'pr-reviewer-b-efficient-medium' <<<"$out" || fail 'review lost profile lane B'
 review_override=$(MOCK_ROOT="$ROOT" MOCK_POLICY="$POLICY" GC_BIN="$TMP/gc" GC_CITY_PATH="$ROOT" \
   "$ROOT/dev-pack/commands/review/run.sh" 123 --rig paude --execution efficient-medium \
-  --lanes expert-a,expert-b --dry-run)
+  --lanes custom-review-a,custom-review-b --dry-run)
 grep -q 'execution=efficient-medium' <<<"$review_override" || fail 'review override hid execution profile'
-grep -q 'lane_a_target=paude/expert-a' <<<"$review_override" || fail 'review lane A override lost'
-grep -q 'lane_b_target=paude/expert-b' <<<"$review_override" || fail 'review lane B override lost'
+grep -q 'lane_a_target=paude/custom-review-a' <<<"$review_override" || fail 'review lane A override lost'
+grep -q 'lane_b_target=paude/custom-review-b' <<<"$review_override" || fail 'review lane B override lost'
+if MOCK_ROOT="$ROOT" MOCK_POLICY="$POLICY" GC_BIN="$TMP/gc" GC_CITY_PATH="$ROOT" \
+  "$ROOT/dev-pack/commands/review/run.sh" 123 --rig paude \
+  --lanes sonnet-xhigh --dry-run >"$TMP/legacy-lane" 2>&1; then
+  fail 'legacy concrete reviewer name remained launchable'
+fi
+grep -q "unknown reviewer target 'sonnet-xhigh'" "$TMP/legacy-lane" \
+  || fail 'legacy reviewer failure lacks migration context'
 
 # Shape is orthogonal: an inexpensive run retains two diagnosis and review leaves.
 demo=$(GC_BIN=gc "$ROOT/dev-pack/commands/bug/run.sh" paude-1 --rig paude --n 2 \
@@ -142,12 +147,42 @@ for expected in 'diagnosis_n=2' 'review_n=2' 'bug-worker-a-efficient-medium' 'bu
 done
 
 # Explicit targets win without changing the named capacity profile or topology.
-override=$(GC_BIN=gc "$ROOT/dev-pack/commands/bug/run.sh" paude-1 --rig paude \
-  --execution efficient-medium --lane-a-target paude/expert-a --lane-b-target paude/expert-b \
-  --review-lanes paude/expert-review-a,paude/expert-review-b --dry-run)
-for expected in 'execution=efficient-medium' 'lane_a_target=paude/expert-a' \
-  'lane_b_target=paude/expert-b' 'review_lane_a_target=paude/expert-review-a'; do
+override=$(MOCK_ROOT="$ROOT" MOCK_POLICY="$POLICY" GC_BIN="$TMP/gc" GC_CITY_PATH="$ROOT" \
+  "$ROOT/dev-pack/commands/bug/run.sh" paude-1 --rig paude \
+  --execution efficient-medium --lane-a-target paude/custom-review-a --lane-b-target paude/custom-review-b \
+  --review-lanes paude/custom-review-a,paude/custom-review-b --dry-run)
+for expected in 'execution=efficient-medium' 'lane_a_target=paude/custom-review-a' \
+  'lane_b_target=paude/custom-review-b' 'review_lane_a_target=paude/custom-review-a'; do
   grep -q "$expected" <<<"$override" || fail "override precedence lost $expected"
+done
+
+for command_and_args in \
+  'feature paude-1 --rig paude --implementer-target paude/feature-dev' \
+  'bug paude-1 --rig paude --lane-a-target paude/bug-worker-a' \
+  'bug paude-1 --rig paude --review-lanes paude/pr-reviewer-sonnet-xhigh,paude/pr-reviewer-gpt56luna-xhigh'; do
+  read -r -a argv <<<"$command_and_args"
+  command=${argv[0]}
+  if MOCK_ROOT="$ROOT" MOCK_POLICY="$POLICY" GC_BIN="$TMP/gc" GC_CITY_PATH="$ROOT" \
+    "$ROOT/dev-pack/commands/$command/run.sh" "${argv[@]:1}" --dry-run >"$TMP/$command-legacy" 2>&1; then
+    fail "$command accepted removed execution target(s): ${argv[*]:1}"
+  fi
+  grep -q 'unknown installed target' "$TMP/$command-legacy" \
+    || fail "$command legacy target failure is unclear"
+done
+
+for command_and_args in \
+  'feature paude-1 --rig paude --implementer-target vllm/feature-dev-frontier-xhigh' \
+  'feature paude-1 --rig paude --review-lanes vllm/pr-reviewer-a-frontier-xhigh,vllm/pr-reviewer-b-frontier-xhigh' \
+  'bug paude-1 --rig paude --lane-a-target vllm/bug-worker-a-frontier-xhigh' \
+  'bug paude-1 --rig paude --review-lanes vllm/pr-reviewer-a-frontier-xhigh,vllm/pr-reviewer-b-frontier-xhigh'; do
+  read -r -a argv <<<"$command_and_args"
+  command=${argv[0]}
+  if GC_BIN=gc "$ROOT/dev-pack/commands/$command/run.sh" "${argv[@]:1}" --dry-run \
+    >"$TMP/$command-cross-rig" 2>&1; then
+    fail "$command accepted cross-rig execution target(s): ${argv[*]:1}"
+  fi
+  grep -q 'belongs to a different rig' "$TMP/$command-cross-rig" \
+    || fail "$command cross-rig target failure is unclear"
 done
 
 if GC_BIN=gc "$ROOT/dev-pack/commands/feature/run.sh" paude-1 --rig paude --execution unknown --dry-run >"$TMP/unknown" 2>&1; then
@@ -171,28 +206,30 @@ grep -Eq 'no explicit|provider, model, and effort' "$TMP/bad" || fail 'misbindin
 cat >"$TMP/good-city.toml" <<'TOML'
 [providers.codex]
 base = "builtin:codex"
+[providers.claude]
+base = "builtin:claude"
 [[rigs]]
 name = "paude"
 [[rigs.patches]]
 agent = "bug-worker-a-frontier-xhigh"
 provider = "codex"
-option_defaults = { model = "frontier", effort = "xhigh" }
+option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
 [[rigs.patches]]
 agent = "bug-worker-b-frontier-xhigh"
-provider = "codex"
-option_defaults = { model = "frontier", effort = "xhigh" }
+provider = "claude"
+option_defaults = { model = "claude-opus-4-8", effort = "xhigh" }
 [[rigs.patches]]
 agent = "feature-dev-frontier-xhigh"
 provider = "codex"
-option_defaults = { model = "frontier", effort = "xhigh" }
+option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
 [[rigs.patches]]
 agent = "pr-reviewer-a-frontier-xhigh"
 provider = "codex"
-option_defaults = { model = "frontier", effort = "xhigh" }
+option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
 [[rigs.patches]]
 agent = "pr-reviewer-b-frontier-xhigh"
-provider = "codex"
-option_defaults = { model = "frontier", effort = "xhigh" }
+provider = "claude"
+option_defaults = { model = "claude-opus-4-8", effort = "xhigh" }
 TOML
 sed '0,/effort = "xhigh"/s//effort = "medium"/' "$TMP/good-city.toml" >"$TMP/wrong-effort.toml"
 if python3 "$VALIDATE" --city "$TMP/wrong-effort.toml" --policy "$POLICY" --rig paude \
@@ -214,7 +251,7 @@ for file in "$ROOT/dev-pack/commands/bug/help.md" "$ROOT/dev-pack/commands/featu
     || fail "stale per-run model claim remains in $file"
 done
 for file in "$ROOT/dev-pack/pack.toml" \
-  "$ROOT/dev-pack/agents/bug-worker-a/prompt.template.md" \
+  "$ROOT/dev-pack/assets/prompts/bug-worker.prompt.template.md" \
   "$ROOT/dev-pack/agents/bug-coordinator/prompt.template.md" \
   "$ROOT/dev-pack/agents/pr-review-synthesizer/prompt.template.md" \
   "$ROOT/dev-pack/formulas/pr-review-quorum.toml"; do

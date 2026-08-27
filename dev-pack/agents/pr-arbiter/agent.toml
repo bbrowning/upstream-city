@@ -13,8 +13,8 @@
 # --arbiter <profile>`); this dedicated profile is just the DEFAULT arbiter target, its
 # model/effort pinned via its own city.toml option_defaults (the reliable launch path,
 # wo-au65.7). For the diversity lever, point --arbiter at a model distinct from BOTH lanes
-# (e.g. a second vendor) — but correctness comes from the evidence chain, not model
-# identity, so a strong verify-mandated model is the priority.
+# (for example the semantic B lane) — but correctness comes from the evidence chain,
+# not model identity, so a strong verify-mandated model is the priority.
 #
 # Single slot so its worktree/HEAD is stable. NOT a quorum lane (never stamped
 # gc.review_quorum_lane), so emit-verdict.sh lets it notify the human directly.

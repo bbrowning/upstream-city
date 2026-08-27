@@ -1,10 +1,10 @@
 # Semantic bug leaf for the frontier-xhigh execution role set.
 # Concrete provider/model/effort are intentionally required from each rig's city patch.
 scope = "rig"
-nudge = "You have a bug lane assignment. Run `gc prime`, follow the step task and schema in your own worktree, finish with emit-json.sh, and never mutate a remote."
+nudge = "You have a bug lane assignment. Run `gc prime`, follow the step task local-only in your own worktree, report the immutable HEAD SHA when implementing, finish with emit-json.sh, and never mutate a remote."
 idle_timeout = "45m"
 min_active_sessions = 0
 max_active_sessions = 1
-prompt_template = "agents/bug-worker-a/prompt.template.md"
+prompt_template = "assets/prompts/bug-worker.prompt.template.md"
 work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
 pre_start = ["{{.CityRoot}}/tools/shared/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]

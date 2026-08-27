@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESOLVE="$SCRIPT_DIR/resolve-local-change.sh"
 RIG="" WORK_BEAD="" INTENT="" ARTIFACT="" N="2" MAX_ITERATIONS="3"
 REVISION_FORMULA="" REVISION_TARGET="" BASE="" BRANCH_PREFIX=""
-IMPLEMENTER_TARGET="" REVIEWER_TARGET="" COORDINATOR_TARGET=""
+IMPLEMENTER_TARGET="" COORDINATOR_TARGET=""
 LANE_A_TARGET="" LANE_B_TARGET="" ARBITER_TARGET=""
 
 die() { printf '%s\n' "sling-change-lifecycle: $*" >&2; exit 2; }
@@ -25,7 +25,6 @@ while [ $# -gt 0 ]; do
     --base) BASE="${2:?}"; shift 2 ;; --base=*) BASE="${1#*=}"; shift ;;
     --branch-prefix) BRANCH_PREFIX="${2:?}"; shift 2 ;; --branch-prefix=*) BRANCH_PREFIX="${1#*=}"; shift ;;
     --implementer-target) IMPLEMENTER_TARGET="${2:?}"; shift 2 ;; --implementer-target=*) IMPLEMENTER_TARGET="${1#*=}"; shift ;;
-    --reviewer-target) REVIEWER_TARGET="${2:?}"; shift 2 ;; --reviewer-target=*) REVIEWER_TARGET="${1#*=}"; shift ;;
     --coordinator-target) COORDINATOR_TARGET="${2:?}"; shift 2 ;; --coordinator-target=*) COORDINATOR_TARGET="${1#*=}"; shift ;;
     --lane-a-target) LANE_A_TARGET="${2:?}"; shift 2 ;; --lane-a-target=*) LANE_A_TARGET="${1#*=}"; shift ;;
     --lane-b-target) LANE_B_TARGET="${2:?}"; shift 2 ;; --lane-b-target=*) LANE_B_TARGET="${1#*=}"; shift ;;
@@ -42,8 +41,8 @@ case "$INTENT" in feature|hard_bug) ;; *) die "--intent must be feature or hard_
 case "$N" in 1) FORMULA=change-lifecycle-solo ;; 2) FORMULA=change-lifecycle ;; *) die "--n must be 1 or 2" ;; esac
 case "$MAX_ITERATIONS" in ''|*[!0-9]*) die "--max-iterations must be a positive integer" ;; esac
 [ "$MAX_ITERATIONS" -ge 1 ] || die "--max-iterations must be a positive integer"
-[ -n "$LANE_A_TARGET" ] || LANE_A_TARGET="$RIG/pr-reviewer-sonnet-xhigh"
-[ -n "$LANE_B_TARGET" ] || LANE_B_TARGET="$RIG/pr-reviewer-gpt56luna-xhigh"
+[ -n "$LANE_A_TARGET" ] || LANE_A_TARGET="$RIG/pr-reviewer-a-frontier-xhigh"
+[ -n "$LANE_B_TARGET" ] || LANE_B_TARGET="$RIG/pr-reviewer-b-frontier-xhigh"
 [ -n "$ARBITER_TARGET" ] || ARBITER_TARGET="$RIG/pr-arbiter"
 
 RIGS_JSON=$("$GC" --city "$CITY" rig list --json) || die "could not list rigs"
@@ -66,7 +65,7 @@ set -- "$RIG/pr-review-synthesizer" "$FORMULA" --formula \
   --var "max_iterations=$MAX_ITERATIONS" --var "revision_formula=$REVISION_FORMULA" \
   --var "revision_target=$REVISION_TARGET" --var "implementation_base=$BASE" \
   --var "branch_prefix=$BRANCH_PREFIX" --var "implementer_target=$IMPLEMENTER_TARGET" \
-  --var "reviewer_target=$REVIEWER_TARGET" --var "coordinator_target=$COORDINATOR_TARGET" \
+  --var "coordinator_target=$COORDINATOR_TARGET" \
   --var "triage_target=$RIG/pr-triage" \
   --var "lane_a_target=$LANE_A_TARGET" --var "lane_b_target=$LANE_B_TARGET" \
   --var "synthesis_target=$RIG/pr-review-synthesizer" --var "arbiter_target=$ARBITER_TARGET" \

@@ -38,6 +38,10 @@ description = "The original pr-review.v1 / pr-review-quorum.v1 verdict bead id t
 [vars.context_file]
 description = "Path (inside worktree_path) to the rendered prior-conversation transcript: the original verdict recap plus every follow-up Q&A so far, oldest first."
 
+[vars.followup_target]
+description = "Fixed follow-up agent target. Defaults to pr-follow-up; a rig-qualified override is supported for deliberate custom orchestration."
+default = "pr-follow-up"
+
 [[steps]]
 id = "answer"
 title = "Answer a human follow-up question about a reviewed PR"
@@ -80,7 +84,7 @@ determine this from the code." Use `--outcome fail --failure-class transient`
 (retryable infra: worktree unreachable, root bead unreadable) or `hard`
 (work_dir misresolved to the rig root) only for genuine infrastructure failures.
 """
-metadata = { "gc.output_json_schema" = "pr-followup.v1", "gc.output_json_required" = "true" }
+metadata = { "gc.run_target" = "{{followup_target}}", "gc.output_json_schema" = "pr-followup.v1", "gc.output_json_required" = "true" }
 
 [steps.retry]
 max_attempts = 2

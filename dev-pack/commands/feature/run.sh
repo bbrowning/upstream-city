@@ -4,7 +4,8 @@
 #   gc dev-pack feature <bead> [options]
 #
 # Resolves the RIG (explicit --rig wins, else inferred from the bead prefix, e.g.
-# vllm-123 -> vllm), then slings the feature-dev formula to <rig>/feature-dev, which
+# vllm-123 -> vllm), then slings the feature-dev formula to the resolved semantic
+# implementation target, which
 # implements and commits the assignment on a local paude/<bead> branch in its own
 # worktree. The operator exports the commit; the arc closes on a real checkpoint.
 #
@@ -31,7 +32,7 @@ usage() {
 usage: gc dev-pack feature <bead> [options]
 
 Resolve the rig (--rig, else inferred from the bead prefix) and sling the
-feature-dev formula to <rig>/feature-dev.
+feature-dev formula to the selected semantic implementation target.
 
   --rig NAME     run in this rig (default: infer from the bead prefix)
   --base REF     branch point / merge target (default: origin/main)
@@ -40,7 +41,7 @@ feature-dev formula to <rig>/feature-dev.
   --fast, --solo lower-cost N=1 lifecycle; still local-only and approval-gated
   --execution PROFILE  leaf-agent capacity: frontier-xhigh (default),
                        frontier-medium, efficient-xhigh, or efficient-medium
-  --implementer-target T  expert override for the resolved implementation target
+  --implementer-target T  explicit installed-target override for implementation
   --revision N   artifact revision number (default: 1)
   --previous-artifact ID  required with revision N>1
   --feedback-bead ID      review/synthesis bead producing revision N>1
@@ -53,6 +54,23 @@ feature-dev formula to <rig>/feature-dev.
 EOF
 }
 die() { printf '%s\n' "feature: $*" >&2; exit 2; }
+AGENTS_CACHE=""
+load_agents() { [ -n "$AGENTS_CACHE" ] || AGENTS_CACHE="$("$GC" --city "$CITY" agent list 2>/dev/null | awk '{print $1}')"; }
+agent_exists() { load_agents; printf '%s\n' "$AGENTS_CACHE" | grep -qx "$1"; }
+RESOLVED_TARGET=""
+resolve_target() { # $1=target, $2=optional short-name prefix
+    local raw="$1" prefix="${2:-}" cand
+    if [[ "$raw" == */* ]]; then
+        [[ "$raw" == "$RIG/"* ]] || die "target '$raw' belongs to a different rig; expected '$RIG/...'"
+        agent_exists "$raw" || die "unknown installed target '$raw'"
+        RESOLVED_TARGET="$raw"
+        return
+    fi
+    for cand in "$RIG/$raw" "$RIG/$prefix$raw"; do
+        if agent_exists "$cand"; then RESOLVED_TARGET="$cand"; return; fi
+    done
+    die "unknown installed target '$raw' in rig '$RIG'"
+}
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -125,6 +143,9 @@ else
     [ -z "$REVIEW_LANE_B" ] || die "--review-n 1 accepts exactly one --review-lanes profile"
     REVIEW_LANE_B="$RIG/$(jq -er --arg p "$EXECUTION" '.execution_profiles[$p].roles.review.lane_b' "$POLICY")"
 fi
+resolve_target "$IMPLEMENTER_TARGET"; IMPLEMENTER_TARGET="$RESOLVED_TARGET"
+resolve_target "$REVIEW_LANE_A" "pr-reviewer-"; REVIEW_LANE_A="$RESOLVED_TARGET"
+resolve_target "$REVIEW_LANE_B" "pr-reviewer-"; REVIEW_LANE_B="$RESOLVED_TARGET"
 
 set -- "$IMPLEMENTER_TARGET" feature-dev --formula \
     --var "work_bead=$BEAD" --var "base=$BASE" --var "fetch_base=$FETCH_BASE" \

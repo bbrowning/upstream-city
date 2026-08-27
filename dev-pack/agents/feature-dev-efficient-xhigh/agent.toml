@@ -1,10 +1,10 @@
 # Semantic feature-dev leaf for the efficient-xhigh execution role set.
 # Concrete provider/model/effort are intentionally required from each rig's city patch.
 scope = "rig"
-nudge = "You have a feature assignment. Run `gc prime`, implement and commit locally, report the immutable artifact, and never mutate a remote."
+nudge = "You have a feature assignment. Run `gc prime`, implement and commit local-only, report the immutable HEAD SHA and artifact, and never mutate a remote."
 idle_timeout = "30m"
 min_active_sessions = 0
 max_active_sessions = 1
-prompt_template = "agents/feature-dev/prompt.template.md"
+prompt_template = "assets/prompts/feature-dev.prompt.template.md"
 work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
 pre_start = ["{{.CityRoot}}/tools/shared/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]

@@ -28,8 +28,8 @@ how the hard-bug lane staged `enable_loop`. Bounded: one settle round, then esca
 human (review disputes are few + factual, unlike hard-bug's until-convergence loop).
 
 ## Reuse
-Arbiter + lane targets are formula vars — a 3rd vendor drops in via `--arbiter <profile>`
-(any reviewer profile) or a city.toml patch, no formula edit. The arbiter SHARES the
+Arbiter + lane targets are formula vars — `--arbiter <target>` can select any installed
+semantic/custom reviewer target without a formula edit. The arbiter SHARES the
 reviewer's method (the `pr-review-settle.v1` task is schema-dispatched in the reviewer
 prompt), so it reuses the reviewer's worktree/fetch/persona/emit machinery. The lane
 beads are relayed as vars (like hard-bug's `prior_peer_bead_*`) because they come from a
@@ -66,12 +66,8 @@ description = "Optional hint: the factual question the lanes split on (the synth
 default = ""
 
 [vars.arbiter_target]
-description = "Agent that arbitrates — a verify-mandated reviewer PROFILE whose model/effort come from its OWN city.toml option_defaults. Default pr-arbiter (gpt-5.6-sol @ xhigh). `gc dev-pack settle --arbiter <profile>` picks any reviewer profile for a genuine 3rd-vendor opinion (correctness is the evidence chain, not model identity)."
+description = "Verify-mandated arbiter target. Default pr-arbiter is fixed at gpt-5.6-sol/xhigh; --arbiter may select an installed semantic/custom reviewer target."
 default = "pr-arbiter"
-
-[vars.arbiter_provider]
-description = "Provider hint for the arbiter (dashboard/provenance only; runtime provider comes from the agent config)."
-default = "codex"
 
 [vars.resynth_target]
 description = "Agent that re-synthesizes the settle resolutions into the updated quorum verdict. Reuses the quorum synthesis role (pr-review-synthesizer)."
@@ -120,7 +116,7 @@ makes it re-renderable via `gc dev-pack summary <your-bead>`:
   JSON
 On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
 """
-metadata = { "gc.run_target" = "{{arbiter_target}}", "gc.provider" = "{{arbiter_provider}}", "gc.review_settle_role" = "arbiter", "gc.settle_of" = "{{synth_bead}}", "gc.output_json_schema" = "pr-review-settle.v1", "gc.output_json_required" = "true" }
+metadata = { "gc.run_target" = "{{arbiter_target}}", "gc.review_settle_role" = "arbiter", "gc.settle_of" = "{{synth_bead}}", "gc.output_json_schema" = "pr-review-settle.v1", "gc.output_json_required" = "true" }
 
 [steps.retry]
 max_attempts = 2

@@ -21,7 +21,7 @@ Options:
   --n N                     reviewer opinions: 1 or 2 (default: 2)
   --execution PROFILE       frontier-xhigh (default), frontier-medium,
                             efficient-xhigh, or efficient-medium
-  --lanes A[,B]             expert target override; count defines and must match N
+  --lanes A[,B]             semantic/custom target override; count defines and must match N
   --dry-run                 validate and print the formula, targets, and checkpoint
 
 Examples:

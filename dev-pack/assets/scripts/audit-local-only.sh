@@ -10,14 +10,14 @@ surfaces=(
     "$PACK_ROOT/agents"
     "$PACK_ROOT/formulas"
     "$PACK_ROOT/commands"
+    "$PACK_ROOT/assets/prompts"
     "$PACK_ROOT/template-fragments"
     "$PACK_ROOT/pack.toml"
     "$PACK_ROOT/README.md"
 )
 
 offline_only_contracts=(
-    "$PACK_ROOT/agents/bug-worker-a"
-    "$PACK_ROOT/agents/bug-worker-b"
+    "$PACK_ROOT/assets/prompts/bug-worker.prompt.template.md"
     "$PACK_ROOT/formulas/hard-bug-finalize.toml"
     "$PACK_ROOT/formulas/change-lifecycle.toml"
     "$PACK_ROOT/formulas/change-lifecycle-solo.toml"
@@ -26,7 +26,7 @@ offline_only_contracts=(
 )
 
 feature_contracts=(
-    "$PACK_ROOT/agents/feature-dev"
+    "$PACK_ROOT/assets/prompts/feature-dev.prompt.template.md"
     "$PACK_ROOT/formulas/feature-dev.toml"
     "$PACK_ROOT/commands/feature"
 )
@@ -72,8 +72,8 @@ require_text() {
 
 # Standing prompts and direct formula routing must each be safe independently.
 for file in \
-    "$PACK_ROOT/agents/feature-dev/prompt.template.md" \
-    "$PACK_ROOT/agents/bug-worker-a/prompt.template.md" \
+    "$PACK_ROOT/assets/prompts/feature-dev.prompt.template.md" \
+    "$PACK_ROOT/assets/prompts/bug-worker.prompt.template.md" \
     "$PACK_ROOT/formulas/feature-dev.toml" \
     "$PACK_ROOT/formulas/hard-bug-finalize.toml"; do
     require_text "$file" 'strictly local-only' 'local-only policy'
@@ -82,16 +82,15 @@ for file in \
 done
 
 for file in \
-    "$PACK_ROOT/agents/feature-dev/agent.toml" \
-    "$PACK_ROOT/agents/bug-worker-a/agent.toml" \
-    "$PACK_ROOT/agents/bug-worker-b/agent.toml"; do
+    "$PACK_ROOT"/agents/feature-dev-*/agent.toml \
+    "$PACK_ROOT"/agents/bug-worker-*-*/agent.toml; do
     require_text "$file" '^nudge[[:space:]]*=.*[Ll]ocal-only' 'local-only nudge'
     require_text "$file" '^nudge[[:space:]]*=.*HEAD SHA' 'SHA-bearing nudge'
 done
 
-require_text "$PACK_ROOT/agents/feature-dev/prompt.template.md" 'Handoff \(context cycling\)' 'feature recovery handoff'
-require_text "$PACK_ROOT/agents/bug-worker-a/prompt.template.md" 'Handoff \(context cycling\)' 'bug recovery handoff'
-require_text "$PACK_ROOT/agents/bug-worker-a/prompt.template.md" 'rev-parse <branch>.*<head_sha>' 'local SHA cross-review guard'
+require_text "$PACK_ROOT/assets/prompts/feature-dev.prompt.template.md" 'Handoff \(context cycling\)' 'feature recovery handoff'
+require_text "$PACK_ROOT/assets/prompts/bug-worker.prompt.template.md" 'Handoff \(context cycling\)' 'bug recovery handoff'
+require_text "$PACK_ROOT/assets/prompts/bug-worker.prompt.template.md" 'rev-parse <branch>.*<head_sha>' 'local SHA cross-review guard'
 require_text "$PACK_ROOT/formulas/hard-bug-finalize.toml" 'sling-change-lifecycle.sh' 'hard-bug shared lifecycle handoff'
 require_text "$PACK_ROOT/formulas/change-lifecycle.toml" 'exact.*base/head|exact.*head.*SHA' 'formula immutable SHA review guard'
 require_text "$PACK_ROOT/formulas/change-lifecycle.toml" 'resolve-local-change.sh' 'formula artifact resolver guard'

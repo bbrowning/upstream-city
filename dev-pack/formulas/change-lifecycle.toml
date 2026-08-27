@@ -45,16 +45,14 @@ required = true
 default = ""
 [vars.implementer_target]
 default = ""
-[vars.reviewer_target]
-default = ""
 [vars.coordinator_target]
 default = ""
 [vars.triage_target]
 default = "pr-triage"
 [vars.lane_a_target]
-default = "pr-reviewer-sonnet-xhigh"
+default = "pr-reviewer-a-frontier-xhigh"
 [vars.lane_b_target]
-default = "pr-reviewer-gpt56luna-xhigh"
+default = "pr-reviewer-b-frontier-xhigh"
 [vars.synthesis_target]
 default = "pr-review-synthesizer"
 [vars.arbiter_target]
@@ -164,7 +162,7 @@ run:
     --synthesis-bead <synthesis-step-bead> --settlement-bead <settle-step-bead> \
     --revision-formula {{revision_formula}} --revision-target {{revision_target}} \
     --base {{implementation_base}} --branch-prefix "{{branch_prefix}}" \
-    --implementer-target "{{implementer_target}}" --reviewer-target "{{reviewer_target}}" \
+    --implementer-target "{{implementer_target}}" \
     --coordinator-target "{{coordinator_target}}" --review-n 2 \
     --lane-a-target {{lane_a_target}} --lane-b-target {{lane_b_target}}
 Emit its stdout verbatim as change-lifecycle-final.v1.
@@ -177,7 +175,7 @@ Request_changes: first record disposition=request_changes and the synthesis/sett
 feedback bead. If revision {{implementation_revision}} is below the bound, sling
 `{{revision_formula}}` to `{{revision_target}}` for revision+1, passing the prior
 artifact id, feedback bead, and producing verdict. Feature uses work_bead/base/offline;
-hard_bug uses bug_bead/base/branch_prefix/implementer/reviewer/coordinator plus the same
+hard_bug uses bug_bead/base/branch_prefix/implementer/coordinator plus the same
 revision lineage. The implementer must add a new commit, emit a new artifact, and its
 handoff starts this lifecycle again. Never re-review or bless the old SHA.
 

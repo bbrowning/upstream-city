@@ -45,9 +45,11 @@ import sys, tomllib
 config = tomllib.load(open(sys.argv[1], "rb"))
 corpus = sys.argv[2]
 roles = {
-    "pr-review-synthesizer", "pr-reviewer-opus48-xhigh",
-    "pr-reviewer-sonnet-xhigh", "pr-reviewer-gpt56sol-medium",
-    "pr-reviewer-gpt56sol-xhigh", "pr-reviewer-gpt56luna-xhigh", "pr-arbiter",
+    "pr-review-synthesizer", "pr-arbiter",
+    "pr-reviewer-a-frontier-xhigh", "pr-reviewer-b-frontier-xhigh",
+    "pr-reviewer-a-frontier-medium", "pr-reviewer-b-frontier-medium",
+    "pr-reviewer-a-efficient-xhigh", "pr-reviewer-b-efficient-xhigh",
+    "pr-reviewer-a-efficient-medium", "pr-reviewer-b-efficient-medium",
 }
 agents = {a["name"]: a for a in config["agent"] if a.get("dir") == "paude" and a.get("name") in roles}
 missing = roles - agents.keys()

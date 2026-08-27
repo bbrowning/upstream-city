@@ -31,16 +31,16 @@ the builtin enum (works on v1.4.0), making each id a first-class, selectable,
 Currently added: `claude-opus-4-8` (Opus 4.8, pinned id). `"sonnet"` is the
 builtin slug (= claude-sonnet-5) and needs no entry.
 
-## `[providers.codex]` — second vendor (OpenAI Codex)
+## `[providers.codex]` — primary workflow provider
 
 The `codex` CLI is installed and ChatGPT-OAuth authenticated
 (`CODEX_HOME`/`~/.codex`), so **no** `OPENAI_API_KEY`/`OPENAI_BASE_URL` is
 needed. `builtin:codex` ships the model enum (gpt-5.6-sol, gpt-5.6-terra,
 gpt-5.6-luna, gpt-5.5, gpt-5.3-codex, o3, o4-mini) and effort choices
 (low|medium|high|xhigh — **no** `max`; its instructions file is `AGENTS.md`).
-A review lane opts in by setting `provider = "codex"` + per-agent
-`option_defaults`; the `--lanes` router is name-based / provider-agnostic, so no
-`run.sh` change is needed.
+Fixed orchestration, semantic A/solo roles, and every efficient role use Codex.
+Claude is reserved for semantic frontier B bug/review leaves as a backup-capacity
+provider. Routing remains identity-based and provider-neutral.
 
 ## Rigs
 
@@ -56,10 +56,10 @@ A review lane opts in by setting `provider = "codex"` + per-agent
 
 ## Execution binding layout
 
-Each attached rig has the same 35 intentional patches, ordered as fixed
-orchestration/support roles, concrete expert review targets, compatibility leaf
-targets for direct-formula callers, and 20 semantic execution leaves. The source
-TOML stays comment-free; this rationale is the durable map.
+Each attached rig has the same 27 intentional patches: seven fixed
+orchestration/support roles plus 20 semantic execution leaves. There are no
+generic compatibility leaves and no concrete model-expert agents. Direct formulas
+use the same semantic frontier defaults as pack commands.
 
 The supported semantic profiles are exactly:
 
@@ -72,12 +72,11 @@ The supported semantic profiles are exactly:
 
 Feature and solo review use the lane-A binding. Bug and quorum review retain
 distinct A/B identities even where the efficient profiles intentionally use the
-same concrete model. There is no `economy-low` profile: add one only after a real
-model binding and operational use case justify another public tier.
+same concrete model. No fifth or economy profile is defined; another public tier
+requires a real model binding and operational use case.
 
-Concrete expert review targets remain for Opus 4.8, Sonnet, GPT-5.6 Sol at medium
-and xhigh, and GPT-5.6 Luna at xhigh. They are explicit overrides, never workflow
-defaults; obsolete comparison targets are not retained.
+Explicit target flags can select any installed semantic/custom target. The pack
+does not maintain a second namespace of concrete model-pinned reviewers.
 
 ## vllm rig patches (per-agent model / effort / env)
 
@@ -97,18 +96,16 @@ All `[[rigs.patches]]` attach to the vllm rig. Common env sets referenced below:
 | agent | model / effort | env | notes |
 |---|---|---|---|
 | `pr-triage` | **codex** gpt-5.6-sol / medium | trusted-authors only | Deterministic pre-scan sets the hard ceiling; medium effort handles the remaining posture judgment. |
-| `pr-review-synthesizer` | **codex** gpt-5.6-sol / medium | TEST-VENV + trusted-authors | Quorum synthesis and direct-formula fallback; the opinion lanes carry the deeper review effort. |
-| `pr-reviewer-opus48-xhigh` | claude-opus-4-8 / xhigh | TEST-VENV + trusted-authors | Review lane PROFILE. |
-| `pr-reviewer-sonnet-xhigh` | sonnet / xhigh | TEST-VENV + trusted-authors | Review lane PROFILE. |
-| `pr-reviewer-gpt56sol-medium` | **codex** gpt-5.6-sol / medium | TEST-VENV + trusted-authors | Second-vendor profile; opt-in. |
-| `pr-reviewer-gpt56sol-xhigh` | **codex** gpt-5.6-sol / xhigh | TEST-VENV + trusted-authors | Apples-to-apples vs Claude xhigh (xhigh is codex's top effort). |
-| `pr-reviewer-gpt56luna-xhigh` | **codex** gpt-5.6-luna / xhigh | TEST-VENV + trusted-authors | Third-vendor opinion; opt-in. |
+| `pr-review-synthesizer` | **codex** gpt-5.6-sol / medium | TEST-VENV + trusted-authors | Quorum synthesis and lifecycle decisions; never a review leaf default. |
 | `pr-arbiter` | **codex** gpt-5.6-sol / xhigh | personas + trusted-authors (no test-venv) | Settle-round arbiter (read-only, never executes changed code). |
 | `pr-runner` | **codex** gpt-5.6-luna / high | TEST-VENV + trusted-authors | Human-approved dynamic-check lane. |
 | `pr-follow-up` | **codex** gpt-5.6-sol / high | personas only | `gc dev-pack ask` read-only follow-up (no execution latitude in v1). |
 | `pr-chat` | **codex** gpt-5.6-sol / high | TEST-VENV (no trusted-authors) | `gc dev-pack ask <PR>` with no question: live attached per-PR chat; MAY run tests on request. |
-| `bug-worker-a` | claude opus / high | TEST-VENV (no trusted-authors) | Compatibility hard-bug lane A. |
-| `bug-worker-b` | claude sonnet / high | TEST-VENV (no trusted-authors) | Compatibility hard-bug lane B. |
+| `bug-coordinator` | **codex** gpt-5.6-sol / high | none | Fixed convergence coordinator; preserves semantic targets across re-slings. |
+
+The 20 semantic leaves use the exact profile matrix above. vLLM bug/review
+leaves receive TEST-VENV/persona/trust environment as appropriate; Paude receives
+its own persona paths. Model/provider/effort are otherwise identical across rigs.
 
 ### Why `effort = xhigh` on the reviewer / reviewer profiles
 
@@ -118,15 +115,13 @@ opus/xhigh caught it as a **blocker** both times (wcq4 x2). **Effort — not
 model — was the decisive factor.** See the per-lane breakdown in
 `.gc/runtime/arena/decisions.jsonl` and follow-up bead wo-au65.6.
 
-### Review lane PROFILES
+### Semantic review lanes
 
-The `pr-reviewer-*` profiles are distinct single-slot reviewer agents that share
-the synthesizer's **method** and differ ONLY in a pinned model/effort. Model/effort
-come from each profile's `option_defaults` (baked into the launch command — the
-reliable path), **not** from a per-run `opt_model`, which gascity does not apply
-at launch (bead wo-au65.7). So to compare models per run you pick two profiles by
-name (`gc dev-pack review --lanes A,B`, default `--n 2`); to add a combo, add a
-profile agent (`dev-pack/agents/pr-reviewer-<name>/`) + a patch, then `gc reload`.
+The `pr-reviewer-{a,b}-{frontier,efficient}-{xhigh,medium}` agents are distinct
+single-slot semantic roles that share the synthesizer's review method. Their exact
+provider/model/effort comes from each rig patch, not formula metadata. Direct formulas
+default to frontier-xhigh A/B, and `--execution` selects another complete role set.
+`--lanes` is reserved for deliberate installed semantic/custom target overrides.
 
 Quorum notify contract: these lanes must **not** mail the human — a quorum
 notifies exactly ONCE from the SYNTHESIS step (`pr-review-synthesizer`). `emit-verdict.sh`
@@ -134,39 +129,28 @@ enforces this by skipping notify for any bead stamped `gc.review_quorum_lane`
 (which lane beads are), so no notify env is needed, and a profile used SOLO
 (N=1, not quorum-stamped) still notifies once.
 
-The Codex profiles (`gpt56sol-medium`, `gpt56sol-xhigh`, `gpt56luna-xhigh`) are
-available as pinned lanes. The default solo lane is `gpt56luna-xhigh`; the default
-quorum pairs `sonnet-xhigh` with `gpt56luna-xhigh`. Reach other combinations with
-`--lanes gpt56sol-medium` (solo) or `--lanes opus48-xhigh,gpt56sol-medium` (cross-vendor quorum). They
-carry the same env as the Claude reviewers so codex loads the persona corpus and
-can run the prepared CPU check.
+The default solo lane is semantic A frontier-xhigh. The default quorum is semantic
+A/B frontier-xhigh. Claude appears only in frontier B; efficient A/B both use Codex
+Luna while retaining distinct identities and worktrees.
 
 ### `pr-arbiter` (settle round)
 
 The default arbiter for `gc dev-pack settle` (the verify-mandated tie-breaker
-for a diverged review quorum). `--arbiter <profile>` can point it at any reviewer
-profile for a genuine 3rd-vendor opinion. gpt-5.6-sol/xhigh: settling the crux is a deep
+for a diverged review quorum). `--arbiter <target>` can point at an installed
+semantic/custom reviewer when a separate view is useful. gpt-5.6-sol/xhigh is used
+because settling the crux is a deep
 static trace (the manual PR 51937 arbiter run crossed ~8 files with exact line
 numbers), and the arbiter is verify-mandated (correctness = the evidence chain,
 not model identity), so the strongest reasoning model is the priority over
 independence. No `GC_PREPARE_TEST_ENV` — the arbiter is read-only; a runtime
 check is surfaced as `needs_dynamic` for the human's `pr-review-dynamic` lane.
 
-### Hard-bug lanes (`bug-worker-a` / `bug-worker-b`)
+### Semantic hard-bug lanes
 
-Same prepared CPU test-venv wiring as the reviewer, so a lane that needs to run
-vLLM reuses the warm uv cache + the blessed CPU-only recipe instead of a full
-torch install. Per-worker model is currently **unset** (lane defaults govern);
-set `option_defaults = { model = "..." }` on the patch to pin one. Valid claude
-slugs: opus|sonnet|haiku|fable-5|opus-4-7|sonnet-5|sonnet-4-6. NB: rig-patch
-`option_defaults` are **not** validated at `gc reload` — a typo is caught at
-launch (logged, falls back to default), not at reload.
-
-**Second-vendor Lane B (disabled example):** Lane B is provider-agnostic and the
-formula no longer pins its model, so a real second vendor is a one-liner — add a
-`[[rigs.patches]]` for `bug-worker-b` with `provider = "codex"` +
-`option_defaults = { model = "gpt-5.6-sol" }` (gpt-5-codex is not a valid builtin
-choice). Formulas/prompts stay unchanged.
+Bug A/B use the same four semantic profiles and exact matrix as review A/B. A is
+the primary Codex role. Frontier B uses Claude Opus 4.8 as backup capacity; efficient
+B uses Codex Luna. Every leaf has an explicit patch and its own worktree. Generic
+`bug-worker-a` / `bug-worker-b` launch identities do not exist.
 
 ## `[[named_session]] lead`
 

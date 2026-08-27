@@ -19,8 +19,6 @@ nudge = "You are the hard-bug coordinator with a step on your hook. Run `gc prim
 idle_timeout = "45m"
 min_active_sessions = 0
 max_active_sessions = 1
-provider = "claude"
-option_defaults = { model = "opus", effort = "high" }
 
 work_dir  = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
 pre_start = ["{{.CityRoot}}/tools/shared/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]

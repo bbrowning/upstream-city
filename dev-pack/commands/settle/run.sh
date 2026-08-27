@@ -4,7 +4,7 @@
 #   gc dev-pack settle <PR-number | rig#PR | bead-id> [options]
 #
 #   gc dev-pack settle 51937                       # settle the newest quorum verdict for PR 51937
-#   gc dev-pack settle 51937 --arbiter gpt56luna-xhigh   # use a 3rd-vendor arbiter
+#   gc dev-pack settle 51937 --arbiter b-frontier-xhigh   # use the semantic B reviewer
 #
 # WHY THIS EXISTS: when a review quorum's lanes DIVERGE on a load-bearing finding,
 # `pr-review-quorum` takes the strictest call, NAMES the crux, and stops — handing the
@@ -28,9 +28,9 @@
 #   --rig <name>       rig the PR belongs to                    (default: vllm)
 #   --base <ref>       baseline the diff is against; falls back to the verdict's own
 #                      base_ref, then origin/main               (default: origin/main)
-#   --arbiter <name>   reviewer PROFILE to arbitrate, by name (resolves to an agent:
-#                      '<name>', 'pr-reviewer-<name>', or the default 'pr-arbiter'). Point
-#                      it at a model distinct from BOTH lanes for the diversity lever.
+#   --arbiter <name>   installed semantic/custom reviewer target to arbitrate (resolves to:
+#                      '<name>', 'pr-reviewer-<name>', or the default 'pr-arbiter').
+#                      Use an independent semantic lane when a separate view is useful.
 #   --dry-run          validate + print the gc sling command without running it
 #   -h, --help
 #
@@ -53,14 +53,14 @@ die() { printf '%s\n' "settle: $*" >&2; exit 2; }
 AGENTS_CACHE=""
 load_agents() { [ -n "$AGENTS_CACHE" ] || AGENTS_CACHE="$("$GC" --city "$CITY" agent list 2>/dev/null | awk '{print $1}')"; }
 agent_exists() { load_agents; printf '%s\n' "$AGENTS_CACHE" | grep -qx "$1"; }
-arbiter_profiles() { load_agents; printf '%s\n' "$AGENTS_CACHE" | grep -E "^$RIG/(pr-arbiter|pr-reviewer-)" | sed "s#^$RIG/##" | paste -sd',' - | sed 's/,/, /g'; }
+available_arbiters() { load_agents; printf '%s\n' "$AGENTS_CACHE" | grep -E "^$RIG/(pr-arbiter|pr-reviewer-)" | sed "s#^$RIG/##" | paste -sd',' - | sed 's/,/, /g'; }
 RESOLVED=""
 resolve_arbiter() {  # $1=name -> sets RESOLVED to a rig-qualified agent, or dies
     local e="$1" cand
     for cand in "$RIG/$e" "$RIG/pr-reviewer-$e" "$RIG/pr-arbiter-$e"; do
         if agent_exists "$cand"; then RESOLVED="$cand"; return 0; fi
     done
-    die "unknown arbiter profile '$e'. Available: $(arbiter_profiles). (Default: pr-arbiter.)"
+    die "unknown arbiter target '$e'. Available: $(available_arbiters). (Default: pr-arbiter.)"
 }
 
 while [ $# -gt 0 ]; do
@@ -156,7 +156,7 @@ fi
 if [ -n "$ARBITER" ]; then resolve_arbiter "$ARBITER"; ATARGET="$RESOLVED"
 else
     ATARGET="$RIG/pr-arbiter"
-    agent_exists "$ATARGET" || die "default arbiter '$ATARGET' not found — run 'gc reload'? Or pass --arbiter <profile> (available: $(arbiter_profiles))."
+    agent_exists "$ATARGET" || die "default arbiter '$ATARGET' not found — run 'gc reload'? Or pass --arbiter <target> (available: $(available_arbiters))."
 fi
 
 # --- 5. Build + run the sling -------------------------------------------------

@@ -47,13 +47,13 @@ Sling the review formula (N=1 -> pr-review, N=2 -> pr-review-quorum) to <rig>/pr
                    Cross-checked against --lanes when both are given.
   --execution PROFILE  leaf-agent capacity: frontier-xhigh (default),
                        frontier-medium, efficient-xhigh, or efficient-medium
-  --lanes A[,B]    reviewer PROFILE(s) to run, by name; the count IS N (1 or 2). Each
+  --lanes A[,B]    installed semantic/custom reviewer target(s); the count IS N (1 or 2). Each
                    name resolves to an agent: '<name>' or the short 'pr-reviewer-<name>'.
                    These explicit targets override --execution. Unknown names
                    fail loudly (with the available list).
-                   examples:
-                     --lanes opus48-xhigh,gpt56sol-xhigh   # concrete cross-provider pair
-                     --lanes sonnet-xhigh                  # N=1 concrete Sonnet target
+                     examples:
+                     --lanes a-frontier-xhigh,b-frontier-xhigh
+                     --lanes a-efficient-medium
                    (no --lanes: targets come from the selected execution role set.)
   --dry-run        validate + print the gc sling command without running it
   -h, --help
@@ -69,14 +69,14 @@ die() { printf '%s\n' "review: $*" >&2; exit 2; }
 AGENTS_CACHE=""
 load_agents() { [ -n "$AGENTS_CACHE" ] || AGENTS_CACHE="$("$GC" --city "$CITY" agent list 2>/dev/null | awk '{print $1}')"; }
 agent_exists() { load_agents; printf '%s\n' "$AGENTS_CACHE" | grep -qx "$1"; }
-available_profiles() { load_agents; printf '%s\n' "$AGENTS_CACHE" | grep -E "^$RIG/pr-reviewer-" | sed "s#^$RIG/##" | paste -sd',' - | sed 's/,/, /g'; }
+available_reviewers() { load_agents; printf '%s\n' "$AGENTS_CACHE" | grep -E "^$RIG/pr-reviewer-" | sed "s#^$RIG/##" | paste -sd',' - | sed 's/,/, /g'; }
 RESOLVED=""
 resolve_lane() {  # $1=name -> sets RESOLVED to a rig-qualified agent, or dies
     local e="$1" cand
     for cand in "$RIG/$e" "$RIG/pr-reviewer-$e"; do
         if agent_exists "$cand"; then RESOLVED="$cand"; return 0; fi
     done
-    die "unknown lane profile '$e'. Available: $(available_profiles). (Add one: dev-pack/agents/pr-reviewer-<name>/ + a city.toml patch, then gc reload.)"
+    die "unknown reviewer target '$e'. Available: $(available_reviewers). (Install a semantic/custom reviewer agent and explicit city patch, then run gc reload.)"
 }
 
 while [ $# -gt 0 ]; do

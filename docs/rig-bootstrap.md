@@ -116,7 +116,7 @@ Typical values are:
 
 ```toml
 [[rigs.patches]]
-agent = "pr-reviewer-sonnet-xhigh"
+agent = "pr-reviewer-b-frontier-xhigh"
 env = { GC_PERSONAS = "/city/tools/example/personas", GC_PR_TRUSTED_AUTHORS = "/city/tools/example/trusted-authors.txt", GC_PREPARE_TEST_ENV = "/city/tools/example/testenv.sh", UV_CACHE_DIR = "/city/.uv-cache" }
 ```
 

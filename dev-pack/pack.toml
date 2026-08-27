@@ -50,11 +50,9 @@
 #             root cause, then fix, converge (coordinator-judged, with the
 #             correlated-convergence gate); the stronger lane implements + tests, the
 #             shared reviewer profiles review the immutable artifact and evidence.
-#     agents/bug-worker-a/  lane A: diagnose / reconsider / implement,
-#                           single slot, its OWN detached worktree.
-#     agents/bug-worker-b/  lane B (N>=2): identical method (shares worker-a's prompt),
-#                           distinct identity/worktree. Provider/model diversity is
-#                           selected by the execution profile's city bindings.
+#     agents/bug-worker-{a,b}-<profile>/ semantic A/B leaves: diagnose /
+#                           reconsider / implement, each single-slot with its own
+#                           detached worktree. They share assets/prompts/bug-worker.
 #     agents/bug-coordinator/ the synthesis/judge driver (1 slot): reads the N lanes,
 #                           runs the self-verify pass (N=1) or the convergence call +
 #                           second-opinion relay (N>=2), enforces the per-phase cap,
@@ -63,8 +61,9 @@
 #   feature — an intent/bead -> an implementation + tests on a paude/<bead> branch,
 #             committed locally. The local branch + immutable HEAD SHA + worktree
 #             state are the durable output; export/publication are operator actions.
-#     agents/feature-dev/   single write lane (1 slot), its own worktree, real
-#                           local branch and coherent commits.
+#     agents/feature-dev-<profile>/ semantic write leaves (1 slot each), sharing
+#                           assets/prompts/feature-dev; each uses its own worktree,
+#                           real local branch, and coherent commits.
 #
 # FORMULAS (compile-time DAGs; lanes stay separate formulas that share the spine)
 #     formulas/pr-review.toml         N=1 review: triage -> review + pr-review.v1 verdict.

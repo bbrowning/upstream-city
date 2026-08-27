@@ -15,13 +15,13 @@ bash "$AUDIT" "$ROOT/dev-pack" >/dev/null
 # rejects it. These cases cover standing prompts, formulas/direct routing,
 # nudges, pack docs/config, recovery instructions, and fallback advice.
 cases=(
-    'standing-prompt:agents/feature-dev/prompt.template.md'
+    'standing-prompt:assets/prompts/feature-dev.prompt.template.md'
     'formula-direct-route:formulas/feature-dev.toml'
     'hard-bug-formula:formulas/hard-bug-finalize.toml'
-    'agent-nudge:agents/bug-worker-a/agent.toml'
+    'agent-nudge:agents/bug-worker-a-frontier-xhigh/agent.toml'
     'pack-config:pack.toml'
-    'recovery:agents/bug-worker-a/prompt.template.md'
-    'fallback:agents/bug-worker-a/prompt.template.md'
+    'recovery:assets/prompts/bug-worker.prompt.template.md'
+    'fallback:assets/prompts/bug-worker.prompt.template.md'
 )
 
 for entry in "${cases[@]}"; do
@@ -62,7 +62,7 @@ grep -q 'remote-read fallback found' "$TMP/fetch-fallback.out" \
 fixture="$TMP/feature-fetch-fallback"
 mkdir -p "$fixture"
 cp -R "$ROOT/dev-pack/." "$fixture/"
-printf '\nFallback: git fetch origin missing-branch\n' >> "$fixture/agents/feature-dev/prompt.template.md"
+printf '\nFallback: git fetch origin missing-branch\n' >> "$fixture/assets/prompts/feature-dev.prompt.template.md"
 if bash "$AUDIT" "$fixture" >"$TMP/feature-fetch-fallback.out" 2>&1; then
     fail 'broad feature fetch escaped the audit'
 fi

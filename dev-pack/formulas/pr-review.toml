@@ -55,16 +55,8 @@ description = "Agent that runs the triage/posture step. Bare name resolves withi
 default = "pr-triage"
 
 [vars.review_target]
-description = "Agent that runs the read-only review step. Bare name resolves within the rig; override to a rig-qualified name (e.g. vllm/pr-reviewer-gpt56luna-xhigh) if bare resolution fails."
-default = "pr-review-synthesizer"
-
-[vars.review_model]
-description = "Per-run model override for the review step (emitted as opt_model). INERT AT LAUNCH — gascity does not apply opt_model at dispatch (wo-au65.7); for a solo review at a specific model, route review_target to a model-pinned profile via `gc dev-pack review --lanes <profile>`. Empty by default."
-default = ""
-
-[vars.review_effort]
-description = "Per-run effort override for the review step (emitted as opt_effort). INERT AT LAUNCH (wo-au65.7) — use a model-pinned profile via --lanes. Empty by default."
-default = ""
+description = "Semantic solo-review target. Defaults to the frontier-xhigh lane-A role; explicit target overrides remain supported."
+default = "pr-reviewer-a-frontier-xhigh"
 
 [[steps]]
 id = "triage"
@@ -236,7 +228,7 @@ transient` (or `hard`) with a stable `--failure-reason` on an infrastructure
 failure (provider down, rate-limited, repo unreachable). Do not run a separate
 `gc bd close` or `gc mail send`.
 """
-metadata = { "gc.run_target" = "{{review_target}}", "opt_model" = "{{review_model}}", "opt_effort" = "{{review_effort}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true" }
+metadata = { "gc.run_target" = "{{review_target}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true" }
 
 [steps.retry]
 max_attempts = 2

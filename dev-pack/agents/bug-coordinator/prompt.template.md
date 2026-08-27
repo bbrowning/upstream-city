@@ -50,8 +50,9 @@ the shared review synthesizer owns the final lifecycle decision.
 3. **Read your step bead.** Its `gc.output_json_schema` tells you which step you are:
    `hard-bug-reconcile.v1` → **Reconcile playbook**; `hard-bug-final.v1` →
    **Finalize playbook**. Its description carries the run vars you need to re-sling:
-   `bug_bead`, `phase`, `round`, `max_rounds`, `enable_loop`, the lane
-   targets/models, and `coordinator_target`.
+   `bug_bead`, `base_ref`, `phase`, `round`, `max_rounds`, `enable_loop`,
+   `branch_prefix`, both lane IDs/targets, `coordinator_target`, `review_n`,
+   `max_review_iterations`, and both review targets.
 
 ## Resume (why you can crash safely)
 
@@ -252,18 +253,21 @@ cheap-unverified N=1 arc **escalates** instead.
   Sling another `hard-bug-round`, giving each lane the *other's* current bead as its
   second opinion, plus your short framing:
   ```bash
-  gc sling {{.Rig}}/bug-coordinator hard-bug-round --formula \
+  gc sling <coordinator_target> hard-bug-round --formula \
     --var bug_bead=<bug_bead> --var phase=<phase> --var round=<round+1> \
-    --var max_rounds=<max_rounds> --var enable_loop=true \
-    --var lane_a_target=<lane_a_target> \
-    --var lane_b_target=<lane_b_target> \
-    --var coordinator_target={{.Rig}}/bug-coordinator \
+    --var base_ref=<base_ref> --var max_rounds=<max_rounds> --var enable_loop=true \
+    --var lane_a_id=<lane_a_id> --var lane_a_target=<lane_a_target> \
+    --var lane_b_id=<lane_b_id> --var lane_b_target=<lane_b_target> \
+    --var coordinator_target=<coordinator_target> \
     --var branch_prefix=<branch_prefix> \
+    --var review_n=<review_n> --var max_review_iterations=<max_review_iterations> \
+    --var review_lane_a_target=<review_lane_a_target> \
+    --var review_lane_b_target=<review_lane_b_target> \
     --var prior_peer_bead_a=<lane-b-bead> --var relay_note_a="<what B argues; consider or refute>" \
     --var prior_peer_bead_b=<lane-a-bead> --var relay_note_b="<what A argues; consider or refute>" \
     --title "bug <phase> round <round+1>: <bug_bead>"
   ```
-  **Execution:** preserve the resolved lane targets exactly. Their semantic identities
+  **Execution:** preserve the resolved lane IDs and targets exactly. Their semantic identities
   have explicit provider/model/effort bindings in `city.toml`; do not add per-run model
   metadata or substitute a generic worker target.
   **Branch prefix:** forward `branch_prefix` unchanged from your own run vars (see
@@ -279,22 +283,34 @@ cheap-unverified N=1 arc **escalates** instead.
 
 - **Aligned + phase `root_cause` → advance to the fix phase.** Sling round 1 of the
   `fix` phase (fresh fix proposals; the agreed root cause is in `agreed_root_cause` on
-  the arc bead, which the lanes read). Re-sling the same-arity formula: at N>=2
-  `hard-bug-round` with `--var phase=fix --var round=1 --var prior_peer_bead_a=
-  --var prior_peer_bead_b=` (empty relay vars); at N=1 `hard-bug-round-solo` with
-  `--var phase=fix --var round=1` (only the `lane_a_*` vars, no relay vars).
+  the arc bead, which the lanes read). Preserve the full run contract. For N=1 use
+  this command, which intentionally has no lane-B or peer-relay variables:
+  ```bash
+  gc sling <coordinator_target> hard-bug-round-solo --formula \
+    --var bug_bead=<bug_bead> --var phase=fix --var round=1 \
+    --var base_ref=<base_ref> --var max_rounds=<max_rounds> --var enable_loop=true \
+    --var lane_a_id=<lane_a_id> --var lane_a_target=<lane_a_target> \
+    --var coordinator_target=<coordinator_target> --var branch_prefix=<branch_prefix> \
+    --var review_n=<review_n> --var max_review_iterations=<max_review_iterations> \
+    --var review_lane_a_target=<review_lane_a_target> \
+    --var review_lane_b_target=<review_lane_b_target> \
+    --title "bug fix round 1: <bug_bead>"
+  ```
+  For N>=2 use the complete `hard-bug-round` command above with `phase=fix`,
+  `round=1`, and all peer-bead and relay-note values empty. Preserve `base_ref`,
+  bounds, branch prefix, coordinator, lane IDs/targets, review fan-out, and review
+  targets unchanged.
 
 - **Aligned + phase `fix` → choose the implementer and start finalization.** The stronger
-  diagnosis lane implements. Review is always a fresh shared-lifecycle session with
-  default N=2 reviewer profiles, independent of the diagnosis fan-out. Set
+  diagnosis lane implements. Review is a fresh shared-lifecycle session with the
+  preserved `review_n` and semantic review targets, independent of diagnosis fan-out. Set
   `chosen_implementer` in the arc state, then sling
   `hard-bug-finalize`:
   ```bash
-  gc sling {{.Rig}}/bug-coordinator hard-bug-finalize --formula \
-    --var bug_bead=<bug_bead> --var base=origin/main \
+  gc sling <coordinator_target> hard-bug-finalize --formula \
+    --var bug_bead=<bug_bead> --var base=<base_ref> \
     --var implementer_target=<stronger lane target (the sole lane at N=1)> \
-    --var reviewer_target=<other lane target (the SAME sole lane at N=1)> \
-    --var coordinator_target={{.Rig}}/bug-coordinator --var max_rounds=<max_rounds> \
+    --var coordinator_target=<coordinator_target> --var max_rounds=<max_rounds> \
     --var review_n=<review_n from your step> \
     --var max_review_iterations=<max_review_iterations from your step> \
     --var review_lane_a_target=<review_lane_a_target from your step> \

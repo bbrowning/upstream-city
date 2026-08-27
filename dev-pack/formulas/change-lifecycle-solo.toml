@@ -39,14 +39,12 @@ required = true
 default = ""
 [vars.implementer_target]
 default = ""
-[vars.reviewer_target]
-default = ""
 [vars.coordinator_target]
 default = ""
 [vars.triage_target]
 default = "pr-triage"
 [vars.lane_a_target]
-default = "pr-reviewer-gpt56luna-xhigh"
+default = "pr-reviewer-a-frontier-xhigh"
 [vars.lane_b_target]
 default = ""
 [vars.synthesis_target]

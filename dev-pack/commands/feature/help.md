@@ -18,7 +18,7 @@ Options:
   --rig NAME                rig (default: infer from bead prefix)
   --execution PROFILE       frontier-xhigh (default), frontier-medium,
                             efficient-xhigh, or efficient-medium
-  --implementer-target T    expert override for the implementation leaf
+  --implementer-target T    explicit installed-target override for implementation
   --base REF                branch point (default: origin/main)
   --offline                 do not fetch the selected base; record freshness unverified
   --review-n N              lifecycle review fan-out: 1 or 2 (default: 2)
@@ -34,5 +34,5 @@ Examples:
   gc dev-pack feature vllm-123
   gc dev-pack feature vllm-123 --execution frontier-xhigh
   gc dev-pack feature vllm-123 --fast --execution efficient-medium
-  gc dev-pack feature vllm-123 --review-n 2 --review-lanes vllm/expert-review-a,vllm/expert-review-b
+  gc dev-pack feature vllm-123 --review-n 2 --review-lanes vllm/pr-reviewer-a-frontier-xhigh,vllm/pr-reviewer-b-frontier-xhigh
   gc dev-pack feature vllm-123 --dry-run

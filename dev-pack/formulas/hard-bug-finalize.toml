@@ -4,9 +4,9 @@ real local branch (writes tests, runs them, fixes, commits), emits the canonical
 immutable artifact, then automatically hands it to the shared bounded
 review-settle-revise lifecycle used by feature work.
 
-Slung by the coordinator once the fix phase converges. Which lane implements vs
-reviews is decided at runtime (implementer_target / reviewer_target) from the
-coordinator's stronger_lane call — so both roles are provider-agnostic.
+Slung by the coordinator once the fix phase converges. The implementer is selected
+at runtime from the coordinator's stronger_lane call; shared semantic review roles
+then inspect the resulting immutable artifact.
 
 The shared lifecycle alone closes the arc at an approved exact-artifact checkpoint,
 requests a new commit/artifact revision, or escalates at the configured bound. It never
@@ -32,10 +32,6 @@ default = ""
 
 [vars.implementer_target]
 description = "Agent target that implements (the stronger lane). Required."
-required = true
-
-[vars.reviewer_target]
-description = "Legacy bug peer target preserved across revision relaunches. Required for compatible coordinator handoff."
 required = true
 
 [vars.coordinator_target]
@@ -76,11 +72,11 @@ default = "3"
 
 [vars.review_lane_a_target]
 description = "Reviewer profile target for shared lifecycle lane A."
-default = "pr-reviewer-sonnet-xhigh"
+default = "pr-reviewer-a-frontier-xhigh"
 
 [vars.review_lane_b_target]
 description = "Reviewer profile target for shared lifecycle lane B."
-default = "pr-reviewer-gpt56luna-xhigh"
+default = "pr-reviewer-b-frontier-xhigh"
 
 [[steps]]
 id = "implement"
@@ -146,7 +142,7 @@ by feature work:
     --max-iterations {{max_review_iterations}} --revision-formula hard-bug-finalize \\
     --revision-target {{implementer_target}} --base {{base}} \\
     --branch-prefix "{{branch_prefix}}" --implementer-target {{implementer_target}} \\
-    --reviewer-target {{reviewer_target}} --coordinator-target {{coordinator_target}} \\
+    --coordinator-target {{coordinator_target}} \\
     --lane-a-target {{review_lane_a_target}} --lane-b-target {{review_lane_b_target}}
 
 The helper resolves and pins the canonical artifact's exact immutable SHAs. Emit

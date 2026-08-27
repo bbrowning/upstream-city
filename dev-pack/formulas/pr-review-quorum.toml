@@ -52,34 +52,14 @@ default = "pr-triage"
 description = "Durable identity for reviewer lane A (survives slot churn)."
 default = "reviewer-a"
 [vars.lane_a_target]
-description = "Agent target for reviewer lane A — a single-slot reviewer PROFILE whose model/effort come from its OWN city.toml option_defaults (the reliable launch path). `gc dev-pack review --lanes` selects profiles by name."
-default = "pr-reviewer-sonnet-xhigh"
-[vars.lane_a_provider]
-description = "Provider hint for lane A (dashboard/provenance only; runtime provider comes from the agent config)."
-default = "claude"
-[vars.lane_a_model]
-description = "Per-run model override for lane A (emitted as opt_model). INERT AT LAUNCH — gascity does not apply opt_model at dispatch (wo-au65.7); use a model-pinned profile via --lanes instead. Kept for when that gap is fixed. Empty by default."
-default = ""
-[vars.lane_a_effort]
-description = "Per-run effort override for lane A (emitted as opt_effort). INERT AT LAUNCH (wo-au65.7) — use a profile's option_defaults. Empty by default."
-default = ""
-
+description = "Semantic reviewer lane A target. Defaults to the frontier-xhigh role; explicit installed-target overrides remain supported."
+default = "pr-reviewer-a-frontier-xhigh"
 [vars.lane_b_id]
 description = "Durable identity for reviewer lane B."
 default = "reviewer-b"
 [vars.lane_b_target]
-description = "Agent target for reviewer lane B — a single-slot Codex reviewer PROFILE (gpt-5.6-luna @ xhigh by default)."
-default = "pr-reviewer-gpt56luna-xhigh"
-[vars.lane_b_provider]
-description = "Provider hint for lane B."
-default = "codex"
-[vars.lane_b_model]
-description = "Per-run model override for lane B (emitted as opt_model). INERT AT LAUNCH (wo-au65.7) — use a model-pinned profile via --lanes. Empty by default."
-default = ""
-[vars.lane_b_effort]
-description = "Per-run effort override for lane B (emitted as opt_effort). INERT AT LAUNCH (wo-au65.7). Empty by default."
-default = ""
-
+description = "Semantic reviewer lane B target. Defaults to the frontier-xhigh backup role; explicit installed-target overrides remain supported."
+default = "pr-reviewer-b-frontier-xhigh"
 [vars.synthesis_target]
 description = "Agent that synthesizes the lane verdicts into the combined quorum verdict."
 default = "pr-review-synthesizer"
@@ -188,7 +168,7 @@ failure_reason) and finish atomically:
   JSON
 On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
 """
-metadata = { "gc.run_target" = "{{lane_a_target}}", "gc.provider" = "{{lane_a_provider}}", "opt_model" = "{{lane_a_model}}", "opt_effort" = "{{lane_a_effort}}", "gc.review_quorum_lane" = "{{lane_a_id}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true" }
+metadata = { "gc.run_target" = "{{lane_a_target}}", "gc.review_quorum_lane" = "{{lane_a_id}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true" }
 
 [steps.retry]
 max_attempts = 2
@@ -240,7 +220,7 @@ failure_reason) and finish atomically:
   JSON
 On an infra failure: --outcome fail --failure-class transient --failure-reason "…".
 """
-metadata = { "gc.run_target" = "{{lane_b_target}}", "gc.provider" = "{{lane_b_provider}}", "opt_model" = "{{lane_b_model}}", "opt_effort" = "{{lane_b_effort}}", "gc.review_quorum_lane" = "{{lane_b_id}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true" }
+metadata = { "gc.run_target" = "{{lane_b_target}}", "gc.review_quorum_lane" = "{{lane_b_id}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true" }
 
 [steps.retry]
 max_attempts = 2
