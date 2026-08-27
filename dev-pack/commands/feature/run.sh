@@ -15,6 +15,7 @@ GC="${GC_BIN:-gc}"
 CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 POLICY="$SCRIPT_DIR/../../assets/workflow-policy.json"
+VALIDATE_EXECUTION="$SCRIPT_DIR/../../assets/scripts/validate-execution-profile.py"
 [ -r "$POLICY" ] || { printf '%s\n' "feature: workflow policy not found: $POLICY" >&2; exit 2; }
 
 RIG="" ; BASE="$(jq -er '.defaults.base_ref' "$POLICY")" ; BEAD="" ; DRYRUN="no" ; FETCH_BASE="true"
@@ -23,6 +24,7 @@ REVIEW_N="$(jq -er '.presets.quality.feature.review_n' "$POLICY")"
 MAX_REVIEW_ITERATIONS="$(jq -er '.defaults.max_review_iterations' "$POLICY")"
 REVIEW_LANE_A="" ; REVIEW_LANE_B=""
 REVIEW_LANES_SET="false" ; REVIEW_N_SET="false" ; PRESET="quality"
+EXECUTION="$(jq -er '.defaults.execution_profile' "$POLICY")" ; IMPLEMENTER_TARGET=""
 
 usage() {
     cat <<'EOF'
@@ -36,6 +38,9 @@ feature-dev formula to <rig>/feature-dev.
   --offline      do not fetch the selected remote base; mark freshness unverified
   --quality      N=2 bounded review/revise lifecycle (default)
   --fast, --solo lower-cost N=1 lifecycle; still local-only and approval-gated
+  --execution PROFILE  leaf-agent capacity: frontier-xhigh (default),
+                       frontier-medium, efficient-xhigh, or efficient-medium
+  --implementer-target T  expert override for the resolved implementation target
   --revision N   artifact revision number (default: 1)
   --previous-artifact ID  required with revision N>1
   --feedback-bead ID      review/synthesis bead producing revision N>1
@@ -58,6 +63,10 @@ while [ $# -gt 0 ]; do
         --offline)  FETCH_BASE="false"; shift ;;
         --quality)  PRESET="quality"; shift ;;
         --fast|--solo) PRESET="fast"; shift ;;
+        --execution) EXECUTION="${2:?}"; shift 2 ;;
+        --execution=*) EXECUTION="${1#*=}"; shift ;;
+        --implementer-target) IMPLEMENTER_TARGET="${2:?}"; shift 2 ;;
+        --implementer-target=*) IMPLEMENTER_TARGET="${1#*=}"; shift ;;
         --revision) REVISION="${2:?}"; shift 2 ;;
         --revision=*) REVISION="${1#*=}"; shift ;;
         --previous-artifact) PREVIOUS_ARTIFACT="${2:?}"; shift 2 ;;
@@ -105,27 +114,30 @@ if [ -z "$RIG" ]; then
     RIG="${BEAD%-*}"
     [ -n "$RIG" ] && [ "$RIG" != "$BEAD" ] || die "cannot infer rig from bead '$BEAD'; pass --rig NAME"
 fi
-[ -n "$REVIEW_LANE_A" ] || REVIEW_LANE_A="$RIG/$(jq -er '.reviewers.lane_a' "$POLICY")"
+python3 "$VALIDATE_EXECUTION" --city "$CITY" --policy "$POLICY" --rig "$RIG" --profile "$EXECUTION" >/dev/null
+[ -n "$IMPLEMENTER_TARGET" ] || IMPLEMENTER_TARGET="$RIG/$(jq -er --arg p "$EXECUTION" '.execution_profiles[$p].roles.feature.implementer' "$POLICY")"
+[ -n "$REVIEW_LANE_A" ] || REVIEW_LANE_A="$RIG/$(jq -er --arg p "$EXECUTION" '.execution_profiles[$p].roles.review.lane_a' "$POLICY")"
 if [ "$REVIEW_N" = "2" ]; then
     [ "$REVIEW_LANES_SET" = "false" ] || [ -n "$REVIEW_LANE_B" ] \
         || die "--review-n 2 requires two --review-lanes profiles"
-    [ -n "$REVIEW_LANE_B" ] || REVIEW_LANE_B="$RIG/$(jq -er '.reviewers.lane_b' "$POLICY")"
+    [ -n "$REVIEW_LANE_B" ] || REVIEW_LANE_B="$RIG/$(jq -er --arg p "$EXECUTION" '.execution_profiles[$p].roles.review.lane_b' "$POLICY")"
 else
     [ -z "$REVIEW_LANE_B" ] || die "--review-n 1 accepts exactly one --review-lanes profile"
-    REVIEW_LANE_B="$RIG/$(jq -er '.reviewers.lane_b' "$POLICY")"
+    REVIEW_LANE_B="$RIG/$(jq -er --arg p "$EXECUTION" '.execution_profiles[$p].roles.review.lane_b' "$POLICY")"
 fi
 
-set -- "$RIG/feature-dev" feature-dev --formula \
+set -- "$IMPLEMENTER_TARGET" feature-dev --formula \
     --var "work_bead=$BEAD" --var "base=$BASE" --var "fetch_base=$FETCH_BASE" \
     --var "revision=$REVISION" --var "previous_artifact_id=$PREVIOUS_ARTIFACT" \
     --var "feedback_bead=$FEEDBACK_BEAD" --var "producing_verdict=$PRODUCING_VERDICT" \
     --var "review_n=$REVIEW_N" --var "max_review_iterations=$MAX_REVIEW_ITERATIONS" \
+    --var "implementer_target=$IMPLEMENTER_TARGET" \
     --var "review_lane_a_target=$REVIEW_LANE_A" --var "review_lane_b_target=$REVIEW_LANE_B" \
     --title "feature-dev: $BEAD" --json
 
 if [ "$DRYRUN" = "yes" ]; then
-    printf 'DRY RUN — would run (rig=%s, preset=%s, review_n=%s, local_only=true, completion=approved):\n  %s --rig %s sling' \
-        "$RIG" "$PRESET" "$REVIEW_N" "$GC" "$RIG"
+    printf 'DRY RUN — would run (rig=%s, preset=%s, execution=%s, implementer_target=%s, review_lane_a_target=%s, review_lane_b_target=%s, review_n=%s, local_only=true, completion=approved):\n  %s --rig %s sling' \
+        "$RIG" "$PRESET" "$EXECUTION" "$IMPLEMENTER_TARGET" "$REVIEW_LANE_A" "$REVIEW_LANE_B" "$REVIEW_N" "$GC" "$RIG"
     for a in "$@"; do printf ' %q' "$a"; done
     printf '\n'
     exit 0

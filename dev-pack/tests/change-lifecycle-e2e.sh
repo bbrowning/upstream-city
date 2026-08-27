@@ -31,12 +31,12 @@ for name in ('hard-bug-round.toml','hard-bug-round-solo.toml'):
     assert 'review_lane_a_target' in f['steps'][-1]['description']
 PY
 
-feature_dry=$(GC_BIN=gc "$ROOT/dev-pack/commands/feature/run.sh" fixture-feature \
-  --rig fixture --offline --review-n 2 --review-lanes profile-a,profile-b --dry-run)
+feature_dry=$(GC_BIN=gc "$ROOT/dev-pack/commands/feature/run.sh" paude-feature \
+  --rig paude --offline --review-n 2 --review-lanes profile-a,profile-b --dry-run)
 printf '%s' "$feature_dry" | grep -q 'review_lane_a_target=profile-a' || fail 'feature profile A selection was lost'
 printf '%s' "$feature_dry" | grep -q 'review_lane_b_target=profile-b' || fail 'feature profile B selection was lost'
-bug_dry=$(GC_BIN=gc "$ROOT/dev-pack/commands/bug/run.sh" fixture-bug \
-  --rig fixture --review-n 1 --review-lanes profile-solo --dry-run)
+bug_dry=$(GC_BIN=gc "$ROOT/dev-pack/commands/bug/run.sh" paude-bug \
+  --rig paude --review-n 1 --review-lanes profile-solo --dry-run)
 printf '%s' "$bug_dry" | grep -q 'review_n=1' || fail 'hard-bug review N selection was lost'
 printf '%s' "$bug_dry" | grep -q 'review_lane_a_target=profile-solo' || fail 'hard-bug profile selection was lost'
 
@@ -127,10 +127,12 @@ printf '%s\n' '{"schema":"pr-review-quorum.v1","verdict":"request_changes","has_
   --artifact-id "$FEATURE_ID" --head-sha "$FEATURE_HEAD" --branch feature/lifecycle \
   --revision 1 --max-iterations 3 --synthesis-file "$TMP/feature-synth.json" \
   --feedback-bead synth-feature --revision-formula feature-dev \
-  --revision-target fixture/feature-dev --base "$BASE_SHA" >"$TMP/feature-decision.json"
+  --revision-target fixture/feature-dev-efficient-medium --base "$BASE_SHA" >"$TMP/feature-decision.json"
 jq -e '.action == "revision_slung" and .effective_verdict == "request_changes"' "$TMP/feature-decision.json" >/dev/null
 grep -q 'revision=2' "$TMP/gc.log" || fail 'feature revision was not incremented'
 grep -q "previous_artifact_id=$FEATURE_ID" "$TMP/gc.log" || fail 'feature revision lost lineage'
+grep -q 'implementer_target=fixture/feature-dev-efficient-medium' "$TMP/gc.log" \
+  || fail 'feature revision lost semantic implementer target'
 jq -e '.status == "in_progress"' "$TMP/state.json" >/dev/null || fail 'revision closed parent'
 
 # Exhaustion routes the exact immutable evidence to the rig lead, without a mayor hold.

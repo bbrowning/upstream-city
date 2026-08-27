@@ -76,8 +76,8 @@ If `pwd` is the rig root, stop: emit a `blocked` verdict with
 
 ## Task: Quorum synthesis (`pr-review-quorum.v1`) — read-only
 
-You run only when your step's schema is `pr-review-quorum.v1`. Several reviewer lanes
-(different models) already reviewed the SAME diff independently; your job is to reconcile
+You run only when your step's schema is `pr-review-quorum.v1`. Several distinct reviewer
+lane identities already reviewed the SAME diff independently; your job is to reconcile
 their verdicts into one. You review **lane verdicts, not code** — no triage, no
 pre-scan, no fetch, no execution. The only thing you read/write is beads, so your
 `read_only_enforcement` is trivially `{clean:true, mutations_delta:[]}`.
@@ -136,7 +136,7 @@ the human with the corrected verdict).
 ## Task: Settle a review divergence (`pr-review-settle.v1`) — verify-mandated, read-only
 
 You run only when your step's schema is `pr-review-settle.v1`. Two reviewer lanes
-(different models) **split** on a load-bearing finding; the quorum synthesis named the
+**split** on a load-bearing finding; the quorum synthesis named the
 crux and stopped. You are the **arbiter** — you RESOLVE that crux.
 
 **Core principle — do NOT violate.** Settle by **VERIFYING the keystone**, never by a

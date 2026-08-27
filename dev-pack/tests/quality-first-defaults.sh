@@ -41,7 +41,7 @@ args=" \$* "
 if [[ "\$args" == *" rig list --json "* ]]; then
   jq -cn --arg path "$ROOT" '{rigs:[{name:"paude",path:\$path}]}'
 elif [[ "\$args" == *" agent list "* ]]; then
-  printf '%s\n' paude/pr-review-synthesizer paude/pr-reviewer-sonnet-xhigh paude/pr-reviewer-gpt56luna-xhigh
+  printf '%s\n' paude/pr-review-synthesizer paude/pr-reviewer-a-frontier-xhigh paude/pr-reviewer-b-frontier-xhigh
 else
   printf 'unexpected gc call: %s\n' "\$*" >&2; exit 99
 fi
@@ -49,8 +49,8 @@ GC
 chmod +x "$TMP/gc"
 review_quality=$(GC_BIN="$TMP/gc" GC_CITY_PATH="$ROOT" "$REVIEW" 123 --rig paude --dry-run)
 for expected in 'preset=quality' 'n=2' 'pr-review-quorum --formula' \
-  'lane_a_target=paude/pr-reviewer-sonnet-xhigh' \
-  'lane_b_target=paude/pr-reviewer-gpt56luna-xhigh' 'completion=human_checkpoint'; do
+  'lane_a_target=paude/pr-reviewer-a-frontier-xhigh' \
+  'lane_b_target=paude/pr-reviewer-b-frontier-xhigh' 'completion=human_checkpoint'; do
   expect "$review_quality" "$expected" "review quality default lost $expected"
 done
 review_fast=$(GC_BIN="$TMP/gc" GC_CITY_PATH="$ROOT" "$REVIEW" 123 --rig paude --solo --dry-run)

@@ -1,11 +1,12 @@
 {
-  "schema": "dev-pack-workflow-policy.v1",
+  "schema": "dev-pack-workflow-policy.v2",
   "defaults": {
     "base_ref": "origin/main",
     "max_rounds": 3,
     "max_review_iterations": 3,
     "local_only": true,
-    "completion_checkpoint": "approved"
+    "completion_checkpoint": "approved",
+    "execution_profile": "frontier-xhigh"
   },
   "presets": {
     "quality": {
@@ -22,9 +23,42 @@
       "bug": { "diagnosis_n": 2, "enable_loop": false, "review_n": 2 }
     }
   },
-  "reviewers": {
-    "lane_a": "pr-reviewer-sonnet-xhigh",
-    "lane_b": "pr-reviewer-gpt56luna-xhigh",
-    "solo": "pr-reviewer-gpt56luna-xhigh"
+  "execution_profiles": {
+    "frontier-xhigh": {
+      "reasoning_effort": "xhigh",
+      "semantics": "Best available model class in the city with an extra-high reasoning budget.",
+      "roles": {
+        "feature": { "implementer": "feature-dev-frontier-xhigh" },
+        "bug": { "lane_a": "bug-worker-a-frontier-xhigh", "lane_b": "bug-worker-b-frontier-xhigh" },
+        "review": { "solo": "pr-reviewer-a-frontier-xhigh", "lane_a": "pr-reviewer-a-frontier-xhigh", "lane_b": "pr-reviewer-b-frontier-xhigh" }
+      }
+    },
+    "frontier-medium": {
+      "reasoning_effort": "medium",
+      "semantics": "Best available model class in the city with a medium reasoning budget.",
+      "roles": {
+        "feature": { "implementer": "feature-dev-frontier-medium" },
+        "bug": { "lane_a": "bug-worker-a-frontier-medium", "lane_b": "bug-worker-b-frontier-medium" },
+        "review": { "solo": "pr-reviewer-a-frontier-medium", "lane_a": "pr-reviewer-a-frontier-medium", "lane_b": "pr-reviewer-b-frontier-medium" }
+      }
+    },
+    "efficient-xhigh": {
+      "reasoning_effort": "xhigh",
+      "semantics": "Cost/latency-efficient model class in the city with an extra-high reasoning budget.",
+      "roles": {
+        "feature": { "implementer": "feature-dev-efficient-xhigh" },
+        "bug": { "lane_a": "bug-worker-a-efficient-xhigh", "lane_b": "bug-worker-b-efficient-xhigh" },
+        "review": { "solo": "pr-reviewer-a-efficient-xhigh", "lane_a": "pr-reviewer-a-efficient-xhigh", "lane_b": "pr-reviewer-b-efficient-xhigh" }
+      }
+    },
+    "efficient-medium": {
+      "reasoning_effort": "medium",
+      "semantics": "Cost/latency-efficient model class in the city with a medium reasoning budget.",
+      "roles": {
+        "feature": { "implementer": "feature-dev-efficient-medium" },
+        "bug": { "lane_a": "bug-worker-a-efficient-medium", "lane_b": "bug-worker-b-efficient-medium" },
+        "review": { "solo": "pr-reviewer-a-efficient-medium", "lane_a": "pr-reviewer-a-efficient-medium", "lane_b": "pr-reviewer-b-efficient-medium" }
+      }
+    }
   }
 }

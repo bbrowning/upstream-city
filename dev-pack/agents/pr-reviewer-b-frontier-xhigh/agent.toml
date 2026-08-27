@@ -1,0 +1,10 @@
+# Semantic review leaf for the frontier-xhigh execution role set.
+# Concrete provider/model/effort are intentionally required from each rig's city patch.
+scope = "rig"
+nudge = "You have a review lane assignment. Run `gc prime`, review by posture, and submit pr-review.v1 once through emit-review.py."
+idle_timeout = "30m"
+min_active_sessions = 0
+max_active_sessions = 1
+prompt_template = "agents/pr-review-synthesizer/prompt.template.md"
+work_dir = ".gc/worktrees/{{.Rig}}/{{.AgentBase}}"
+pre_start = ["{{.CityRoot}}/tools/shared/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}}"]

@@ -72,13 +72,6 @@ default = "bug-worker-a"
 [vars.lane_a_target]
 description = "Agent target for the sole lane. Bare name resolves within the rig; override to rig-qualified (e.g. gascity/bug-worker-a) if bare resolution fails."
 default = "bug-worker-a"
-[vars.lane_a_provider]
-description = "Provider hint for the lane (dashboard/provenance only; runtime provider comes from the agent config)."
-default = "claude"
-[vars.lane_a_model]
-description = "Per-run model override for the lane (emitted as opt_model). Empty (the default) defers to the agent's city.toml option_defaults."
-default = ""
-
 [vars.coordinator_target]
 description = "Agent target for the synthesis (reconcile) step."
 default = "bug-coordinator"
@@ -113,7 +106,7 @@ Emit `hard-bug-diagnosis.v1` to gc.output_json, then finish:
     --json-file "$out" --schema hard-bug-diagnosis.v1 --outcome pass
 On a retryable infra failure: --outcome fail --failure-class transient --failure-reason "…".
 """
-metadata = { "gc.run_target" = "{{lane_a_target}}", "gc.provider" = "{{lane_a_provider}}", "opt_model" = "{{lane_a_model}}", "gc.hard_bug_lane" = "{{lane_a_id}}", "gc.hard_bug_phase" = "{{phase}}", "gc.hard_bug_round" = "{{round}}", "gc.output_json_schema" = "hard-bug-diagnosis.v1", "gc.output_json_required" = "true" }
+metadata = { "gc.run_target" = "{{lane_a_target}}", "gc.hard_bug_lane" = "{{lane_a_id}}", "gc.hard_bug_phase" = "{{phase}}", "gc.hard_bug_round" = "{{round}}", "gc.output_json_schema" = "hard-bug-diagnosis.v1", "gc.output_json_required" = "true" }
 
 [steps.retry]
 max_attempts = 2
@@ -145,7 +138,7 @@ Then act on the outer loop per your protocol, using THESE run vars:
   enable_loop={{enable_loop}} base_ref={{base_ref}} branch_prefix={{branch_prefix}}
   review_n={{review_n}} max_review_iterations={{max_review_iterations}}
   review profiles: A={{review_lane_a_target}} B={{review_lane_b_target}}
-  lane_a: id={{lane_a_id}} target={{lane_a_target}} provider={{lane_a_provider}} model={{lane_a_model}} (empty = agent's option_defaults)
+  lane_a: id={{lane_a_id}} target={{lane_a_target}}
   coordinator_target={{coordinator_target}}
 
 - enable_loop=false (Stage 1): after emitting the synthesis verdict, mail the human a

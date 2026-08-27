@@ -14,7 +14,7 @@ import json, sys, tomllib
 from pathlib import Path
 root, policy_path = Path(sys.argv[1]), Path(sys.argv[2])
 p = json.loads(policy_path.read_text())
-assert p['schema'] == 'dev-pack-workflow-policy.v1'
+assert p['schema'] == 'dev-pack-workflow-policy.v2'
 assert p['defaults']['local_only'] is True
 assert p['defaults']['completion_checkpoint'] == 'approved'
 assert p['presets']['quality']['feature'] == {'review_n': 2, 'formula': 'feature-dev'}
@@ -38,8 +38,8 @@ for name in ('change-lifecycle.toml', 'change-lifecycle-solo.toml'):
     assert int(d['vars']['max_iterations']['default']) == p['defaults']['max_review_iterations'], name
 PY
 
-feature=$(GC_BIN=gc "$ROOT/dev-pack/commands/feature/run.sh" fixture-feature --rig fixture --dry-run)
-bug=$(GC_BIN=gc "$ROOT/dev-pack/commands/bug/run.sh" fixture-bug --rig fixture --dry-run)
+feature=$(GC_BIN=gc "$ROOT/dev-pack/commands/feature/run.sh" paude-feature --rig paude --dry-run)
+bug=$(GC_BIN=gc "$ROOT/dev-pack/commands/bug/run.sh" paude-bug --rig paude --dry-run)
 for expected in 'preset=quality' 'review_n=2' 'max_review_iterations=3' 'local_only=true' 'completion=approved'; do
   printf '%s' "$feature" | grep -q "$expected" || fail "feature dry-run drift: $expected"
 done
@@ -51,24 +51,24 @@ cat >"$TMP/gc" <<GC
 #!/usr/bin/env bash
 args=" \$* "
 if [[ "\$args" == *" rig list --json "* ]]; then
-  jq -cn --arg path "$ROOT" '{rigs:[{name:"fixture",path:\$path}]}'
+  jq -cn --arg path "$ROOT" '{rigs:[{name:"paude",path:\$path}]}'
 elif [[ "\$args" == *" agent list "* ]]; then
-  printf '%s\n' fixture/pr-review-synthesizer fixture/pr-reviewer-sonnet-xhigh fixture/pr-reviewer-gpt56luna-xhigh
+  printf '%s\n' paude/pr-review-synthesizer paude/pr-reviewer-a-frontier-xhigh paude/pr-reviewer-b-frontier-xhigh
 else
   exit 99
 fi
 GC
 chmod +x "$TMP/gc"
-review=$(GC_BIN="$TMP/gc" GC_CITY_PATH="$ROOT" "$ROOT/dev-pack/commands/review/run.sh" 123 --rig fixture --dry-run)
+review=$(GC_BIN="$TMP/gc" GC_CITY_PATH="$ROOT" "$ROOT/dev-pack/commands/review/run.sh" 123 --rig paude --dry-run)
 for expected in 'preset=quality' 'n=2' 'pr-review-quorum --formula' 'completion=human_checkpoint'; do
   printf '%s' "$review" | grep -q "$expected" || fail "review dry-run drift: $expected"
 done
 
 # Every accepted workflow flag must be visible in the supported pack-command help.
 for spec in \
-  'feature:--quality --fast --solo --review-n --review-lanes --max-review-iterations --dry-run' \
-  'bug:--quality --fast --solo --report-only --n --loop --max-rounds --review-n --review-lanes --dry-run' \
-  'review:--quality --fast --solo --n --lanes --artifact --dry-run'; do
+  'feature:--quality --fast --solo --execution --review-n --review-lanes --max-review-iterations --dry-run' \
+  'bug:--quality --fast --solo --report-only --execution --n --loop --max-rounds --review-n --review-lanes --dry-run' \
+  'review:--quality --fast --solo --execution --n --lanes --artifact --dry-run'; do
   command=${spec%%:*}; flags=${spec#*:}
   help=$(gc dev-pack "$command" --help)
   for flag in $flags; do

@@ -53,6 +53,10 @@ default = "2"
 description = "Maximum implementation/artifact revisions before human escalation."
 default = "3"
 
+[vars.implementer_target]
+description = "Semantic feature leaf selected by the execution profile; preserved for every revision."
+required = true
+
 [vars.review_lane_a_target]
 description = "Reviewer profile target for lifecycle lane A."
 default = "pr-reviewer-sonnet-xhigh"
@@ -155,7 +159,7 @@ exact base/head SHAs and provenance, and starts N={{review_n}} review (default N
     --rig {{.Rig}} --work-bead {{work_bead}} --intent feature \
     --artifact <implement-step-bead> --n {{review_n}} \
     --max-iterations {{max_review_iterations}} --revision-formula feature-dev \
-    --revision-target {{.Rig}}/feature-dev --base {{base}} \
+    --revision-target {{implementer_target}} --base {{base}} \
     --lane-a-target {{review_lane_a_target}} --lane-b-target {{review_lane_b_target}}
 
 This handoff and every later revision are local-only. Emit

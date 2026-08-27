@@ -44,8 +44,8 @@
 #                           (writes no bead — the session itself is the memory).
 #
 #   bug     — a symptom/bead -> root cause + fix, over N opinions (the fan-out dial,
-#             `--n`). N=1 (default) is a solo lane that self-verifies its keystones;
-#             N>=2 fans out independent worker lanes (different models) that act as
+#             `--n`). N=1 is a solo lane that self-verifies its keystones;
+#             N>=2 fans out distinct independent worker identities that act as
 #             each other's second opinion ("consider or refute — not a mandate") until
 #             root cause, then fix, converge (coordinator-judged, with the
 #             correlated-convergence gate); the stronger lane implements + tests, the
@@ -53,8 +53,8 @@
 #     agents/bug-worker-a/  lane A: diagnose / reconsider / implement,
 #                           single slot, its OWN detached worktree.
 #     agents/bug-worker-b/  lane B (N>=2): identical method (shares worker-a's prompt),
-#                           different model. A real second vendor is a one-line
-#                           [[rigs.patches]] provider change (see city.toml).
+#                           distinct identity/worktree. Provider/model diversity is
+#                           selected by the execution profile's city bindings.
 #     agents/bug-coordinator/ the synthesis/judge driver (1 slot): reads the N lanes,
 #                           runs the self-verify pass (N=1) or the convergence call +
 #                           second-opinion relay (N>=2), enforces the per-phase cap,

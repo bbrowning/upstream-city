@@ -10,11 +10,8 @@
 # merge call). The verdict lands in the human inbox (`gc mail check`) and can be
 # re-rendered later with `gc dev-pack summary <bead|PR>`.
 #
-# --lanes selects which reviewer PROFILE(s) run the review, by name. A profile is a
-# single-slot reviewer agent with a model/effort pinned via its city.toml option_defaults
-# (the reliable launch path — gascity does NOT apply a per-run opt_model at launch,
-# wo-au65.7). The number of profiles you name is N. So one run can compare two models by
-# naming two profiles. Discover profiles with `gc agent list | grep pr-reviewer-`.
+# --execution selects a semantic capacity role set. --lanes remains the explicit
+# target override and therefore takes precedence over the semantic reviewer targets.
 #
 # Env (provided by gc): GC_CITY_PATH, GC_BIN.
 set -euo pipefail
@@ -25,15 +22,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NORMALIZE="$SCRIPT_DIR/../../assets/scripts/normalize-pr-target.sh"
 RESOLVE_LOCAL="$SCRIPT_DIR/../../assets/scripts/resolve-local-change.sh"
 POLICY="$SCRIPT_DIR/../../assets/workflow-policy.json"
+VALIDATE_EXECUTION="$SCRIPT_DIR/../../assets/scripts/validate-execution-profile.py"
 [ -r "$POLICY" ] || { printf '%s\n' "review: workflow policy not found: $POLICY" >&2; exit 2; }
 
 RIG="vllm" ; BASE="$(jq -er '.defaults.base_ref' "$POLICY")" ; SPEC="" ; ARTIFACT="" ; DRYRUN="no"
 RIG_EXPLICIT=0
 N="" ; LANES="" ; PRESET="quality"
-# Default solo profile and quorum lanes when --lanes is not given (must be existing profiles).
-DEFAULT_SOLO_LANE="$(jq -er '.reviewers.solo' "$POLICY")"
-DEFAULT_LANE_A="$(jq -er '.reviewers.lane_a' "$POLICY")"
-DEFAULT_LANE_B="$(jq -er '.reviewers.lane_b' "$POLICY")"
+EXECUTION="$(jq -er '.defaults.execution_profile' "$POLICY")"
 
 usage() {
     cat <<'EOF'
@@ -50,23 +45,22 @@ Sling the review formula (N=1 -> pr-review, N=2 -> pr-review-quorum) to <rig>/pr
   --fast, --solo   lower-cost N=1 posture-gated review
   --n N            custom opinion count / fan-out: 1 or 2.
                    Cross-checked against --lanes when both are given.
+  --execution PROFILE  leaf-agent capacity: frontier-xhigh (default),
+                       frontier-medium, efficient-xhigh, or efficient-medium
   --lanes A[,B]    reviewer PROFILE(s) to run, by name; the count IS N (1 or 2). Each
                    name resolves to an agent: '<name>' or the short 'pr-reviewer-<name>'.
-                   A profile pins a model+effort via its city.toml option_defaults, so
-                   naming two profiles compares two models in one run. Unknown names
+                   These explicit targets override --execution. Unknown names
                    fail loudly (with the available list).
                    examples:
                      --lanes opus46-xhigh,opus48-xhigh     # compare opus 4.6 vs 4.8
                      --lanes opus46-xhigh                  # N=1 solo on the 4.6 profile
-                   (no --lanes: --n 1 -> gpt56luna-xhigh; --n 2 -> the two default
-                   profiles sonnet-xhigh + gpt56luna-xhigh.)
+                   (no --lanes: targets come from the selected execution role set.)
   --dry-run        validate + print the gc sling command without running it
   -h, --help
 
-Add a profile (new model/effort combo): create dev-pack/agents/pr-reviewer-<name>/
-(copy an existing one) + a [[rigs.patches]] in city.toml pinning option_defaults, then
-`gc reload`. Custom claude ids (e.g. claude-opus-4-6) must first be registered in
-city.toml under [providers.claude] via options_schema_merge="by_key".
+Execution changes capacity only. N, posture, artifact handling, and the human checkpoint
+stay unchanged. Every semantic target must have an explicit provider/model/effort city
+binding; a missing or partial binding fails before dispatch.
 EOF
 }
 die() { printf '%s\n' "review: $*" >&2; exit 2; }
@@ -97,6 +91,8 @@ while [ $# -gt 0 ]; do
         --fast|--solo) PRESET="fast"; shift ;;
         --n)         N="${2:?}"; shift 2 ;;
         --n=*)       N="${1#*=}"; shift ;;
+        --execution) EXECUTION="${2:?}"; shift 2 ;;
+        --execution=*) EXECUTION="${1#*=}"; shift ;;
         --lanes)     LANES="${2:?}"; shift 2 ;;
         --lanes=*)   LANES="${1#*=}"; shift ;;
         --dry-run)   DRYRUN="yes"; shift ;;
@@ -116,6 +112,7 @@ NORM_ARGS=(--rig "$RIG")
 NORM=$("$NORMALIZE" "$SPEC" "${NORM_ARGS[@]}") || exit $?
 SPEC=$(printf '%s' "$NORM" | jq -r '.spec')
 RIG=$(printf '%s' "$NORM" | jq -r '.rig')
+python3 "$VALIDATE_EXECUTION" --city "$CITY" --policy "$POLICY" --rig "$RIG" --profile "$EXECUTION" >/dev/null
 
 # Resolve implementation handoffs before dispatch. Reviewers receive immutable
 # SHAs plus provenance and independently re-run the same branch/repository guard.
@@ -177,11 +174,9 @@ esac
 
 # --- build the sling argv -----------------------------------------------------
 if [ "$N" = "1" ]; then
-    # Solo review. Route to a model-pinned profile so the provider/model/effort are
-    # applied reliably at launch (gas city does not apply opt_model at dispatch).
     if [ -n "$LANES" ]; then RTARGET="${LT[0]}"; else
-        RTARGET="$RIG/$DEFAULT_SOLO_LANE"
-        agent_exists "$RTARGET" || die "default solo lane '$RTARGET' not found — run 'gc reload'? Or pass --lanes A (available: $(available_profiles))."
+        RTARGET="$RIG/$(jq -er --arg p "$EXECUTION" '.execution_profiles[$p].roles.review.solo' "$POLICY")"
+        agent_exists "$RTARGET" || die "execution target '$RTARGET' is not installed — run 'gc reload'"
     fi
     set -- "$RIG/pr-review-synthesizer" pr-review --formula \
         --var "head_ref=$SPEC" --var "base_ref=$BASE" \
@@ -192,11 +187,12 @@ if [ "$N" = "1" ]; then
         --var "review_target=$RTARGET" \
         --title "pr-review: $DISPLAY_SPEC" --json
 else
-    # Quorum. Named profiles pick the two lanes; otherwise the two default profiles.
+    # Quorum. Explicit named profiles override the execution role set.
     if [ -n "$LANES" ]; then AT="${LT[0]}"; BT="${LT[1]}"; else
-        AT="$RIG/$DEFAULT_LANE_A" ; BT="$RIG/$DEFAULT_LANE_B"
-        agent_exists "$AT" || die "default lane '$AT' not found — run 'gc reload'? Or pass --lanes A,B (available: $(available_profiles))."
-        agent_exists "$BT" || die "default lane '$BT' not found — run 'gc reload'? Or pass --lanes A,B (available: $(available_profiles))."
+        AT="$RIG/$(jq -er --arg p "$EXECUTION" '.execution_profiles[$p].roles.review.lane_a' "$POLICY")"
+        BT="$RIG/$(jq -er --arg p "$EXECUTION" '.execution_profiles[$p].roles.review.lane_b' "$POLICY")"
+        agent_exists "$AT" || die "execution target '$AT' is not installed — run 'gc reload'"
+        agent_exists "$BT" || die "execution target '$BT' is not installed — run 'gc reload'"
     fi
     set -- "$RIG/pr-review-synthesizer" pr-review-quorum --formula \
         --var "head_ref=$SPEC" --var "base_ref=$BASE" \
@@ -212,8 +208,9 @@ else
 fi
 
 if [ "$DRYRUN" = "yes" ]; then
-    printf 'DRY RUN — would run (rig=%s, preset=%s, n=%s, local_only=true, completion=human_checkpoint):\n  %s --rig %s sling' \
-        "$RIG" "$PRESET" "$N" "$GC" "$RIG"
+    if [ "$N" = "1" ]; then RESOLVED_ROLES="review_target=$RTARGET"; else RESOLVED_ROLES="lane_a_target=$AT, lane_b_target=$BT"; fi
+    printf 'DRY RUN — would run (rig=%s, preset=%s, execution=%s, %s, n=%s, local_only=true, completion=human_checkpoint):\n  %s --rig %s sling' \
+        "$RIG" "$PRESET" "$EXECUTION" "$RESOLVED_ROLES" "$N" "$GC" "$RIG"
     for a in "$@"; do printf ' %q' "$a"; done
     printf '\n'
     exit 0

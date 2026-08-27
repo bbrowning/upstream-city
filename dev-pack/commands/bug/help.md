@@ -4,6 +4,10 @@ default: diagnosis N=2, convergence enabled, review N=2, max 3 rounds per phase 
 artifact revisions. Diagnosis fan-out (--n) and implementation review fan-out
 (--review-n) are independent.
 
+`--execution` changes only the semantic diagnosis/review leaves. Diagnosis fan-out,
+report-only mode, convergence, and revision bounds stay independent. Explicit lane and
+review targets override the selected role set; `--dry-run` prints every resolved target.
+
 Usage:
   gc dev-pack bug <bead> [options]
 
@@ -15,12 +19,11 @@ Workflow presets:
 Options:
   --rig NAME                rig (default: infer from bead prefix)
   --n N                     diagnosis opinions: 1 or 2 (default: 2)
-  --models M[,M]            per-run diagnosis models, positional by lane
+  --execution PROFILE       frontier-xhigh (default), frontier-medium,
+                            efficient-xhigh, or efficient-medium
   --loop                    explicitly enable full convergence
   --max-rounds N            convergence cap per phase (default: 3)
   --base-ref REF            diagnosis/implementation baseline (default: origin/main)
-  --lane-a-model M          override diagnosis lane A model
-  --lane-b-model M          override diagnosis lane B model (N=2 only)
   --lane-a-target T         override lane A target
   --lane-b-target T         override lane B target (N=2 only)
   --branch-prefix P         prefix the eventual local fix branch
@@ -33,4 +36,4 @@ Examples:
   gc dev-pack bug vllm-123
   gc dev-pack bug vllm-123 --fast
   gc dev-pack bug vllm-123 --report-only
-  gc dev-pack bug vllm-123 --n 2 --review-n 1 --dry-run
+  gc dev-pack bug vllm-123 --n 2 --execution efficient-medium --dry-run

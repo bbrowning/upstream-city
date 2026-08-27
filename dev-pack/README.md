@@ -31,6 +31,25 @@ verify that the branch still resolves to that SHA before using it.
 ## Presets and defaults
 
 Quality is the default. `--fast` and `--solo` are explicit N=1 opt-downs.
+Workflow shape and execution capacity are separate controls. Feature, bug, and review
+all accept `--execution frontier-xhigh|frontier-medium|efficient-xhigh|efficient-medium`.
+The default is `frontier-xhigh`. The city binds those semantic leaf roles to concrete
+providers, models, and effort; the workflow does not claim that per-run model metadata
+changes a launched process. Explicit implementer/lane targets take precedence over the
+selected role set and remain the expert escape hatch.
+
+Use the inexpensive profile without flattening the workflow for a live N=2 demo:
+
+```sh
+gc dev-pack bug vllm-456 --n 2 --execution efficient-medium --dry-run
+gc dev-pack review 53174 --rig vllm --n 2 --execution efficient-medium --dry-run
+```
+
+Use the strongest role set for real work while keeping the same topology:
+
+```sh
+gc dev-pack feature vllm-123 --execution frontier-xhigh
+```
 
 | Workflow | Quality default | Explicit alternatives | Bound |
 |---|---|---|---|

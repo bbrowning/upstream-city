@@ -88,7 +88,8 @@ case "$verdict" in
       next=$((REVISION + 1))
       set -- "$REVISION_TARGET" "$REVISION_FORMULA" --formula
       if [ "$INTENT" = "feature" ]; then
-        set -- "$@" --var "work_bead=$WORK_BEAD" --var "base=$BASE" --var fetch_base=false
+        set -- "$@" --var "work_bead=$WORK_BEAD" --var "base=$BASE" --var fetch_base=false \
+          --var "implementer_target=$REVISION_TARGET"
       else
         set -- "$@" --var "bug_bead=$WORK_BEAD" --var "base=$BASE" \
           --var "branch_prefix=$BRANCH_PREFIX" --var "implementer_target=$IMPLEMENTER_TARGET" \

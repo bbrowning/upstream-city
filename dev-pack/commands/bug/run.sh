@@ -20,16 +20,18 @@ GC="${GC_BIN:-gc}"
 CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 POLICY="$SCRIPT_DIR/../../assets/workflow-policy.json"
+VALIDATE_EXECUTION="$SCRIPT_DIR/../../assets/scripts/validate-execution-profile.py"
 [ -r "$POLICY" ] || { printf '%s\n' "bug: workflow policy not found: $POLICY" >&2; exit 2; }
 
 BEAD="" ; RIG="" ; LOOP="" ; MAXR="$(jq -er '.defaults.max_rounds' "$POLICY")"
 BASEREF="$(jq -er '.defaults.base_ref' "$POLICY")"
-N="" ; MODELS="" ; PRESET="quality"
-LANE_A_MODEL="" ; LANE_B_MODEL="" ; LANE_A_TARGET="" ; LANE_B_TARGET=""
+N="" ; PRESET="quality"
+LANE_A_TARGET="" ; LANE_B_TARGET=""
 BRANCH_PREFIX=""
 REVIEW_N="$(jq -er '.presets.quality.bug.review_n' "$POLICY")" ; REVIEW_N_SET=false ; REVIEW_LANES=""
 MAX_REVIEW_ITERATIONS="$(jq -er '.defaults.max_review_iterations' "$POLICY")"
 DRYRUN="no"
+EXECUTION="$(jq -er '.defaults.execution_profile' "$POLICY")"
 
 usage() {
     cat <<'EOF'
@@ -44,15 +46,13 @@ with the <rig>/bug-worker-* lane targets filled in.
   --fast, --solo      lower-cost N=1 full bounded workflow
   --report-only       N=2 diagnosis report; do not converge or implement
   --n N               custom diagnosis opinion count / fan-out: 1 or 2
-  --models M[,M]      per-run models, positional to the lanes (e.g. opus,sonnet);
-                      empty entries defer to each agent's city.toml option_defaults
+  --execution PROFILE leaf-agent capacity: frontier-xhigh (default),
+                      frontier-medium, efficient-xhigh, or efficient-medium
   --loop              explicitly drive the full convergence loop (already on for quality/fast)
   --max-rounds N      per-phase iteration cap (default 3)
   --base-ref REF      baseline ref the lanes read against (default origin/main)
-  --lane-a-model M    pin lane A's model (overrides --models; default -> option_defaults)
-  --lane-b-model M    pin lane B's model (overrides --models; N=2 only)
-  --lane-a-target T   override lane A target (default <rig>/bug-worker-a)
-  --lane-b-target T   override lane B target (default <rig>/bug-worker-b; N=2 only)
+  --lane-a-target T   expert override for resolved lane A target
+  --lane-b-target T   expert override for resolved lane B target (N=2 only)
   --branch-prefix P   prefix the eventual fix branch (default: unset -> no prefix)
   --review-n N        shared lifecycle review fan-out: 1 or 2 (default: 2)
   --review-lanes A[,B] reviewer profile targets; count must match --review-n
@@ -72,17 +72,15 @@ while [ $# -gt 0 ]; do
         --report-only)     PRESET="report_only"; shift ;;
         --n)               N="${2:?}"; shift 2 ;;
         --n=*)             N="${1#*=}"; shift ;;
-        --models)          MODELS="${2:?}"; shift 2 ;;
-        --models=*)        MODELS="${1#*=}"; shift ;;
+        --execution)       EXECUTION="${2:?}"; shift 2 ;;
+        --execution=*)     EXECUTION="${1#*=}"; shift ;;
+        --models|--lane-a-model|--lane-b-model) die "$1 is not a reliable launch override; use --execution or an explicit --lane-*-target" ;;
+        --models=*|--lane-a-model=*|--lane-b-model=*) die "${1%%=*} is not a reliable launch override; use --execution or an explicit --lane-*-target" ;;
         --loop)            LOOP="true"; shift ;;
         --max-rounds)      MAXR="${2:?}"; shift 2 ;;
         --max-rounds=*)    MAXR="${1#*=}"; shift ;;
         --base-ref)        BASEREF="${2:?}"; shift 2 ;;
         --base-ref=*)      BASEREF="${1#*=}"; shift ;;
-        --lane-a-model)    LANE_A_MODEL="${2:?}"; shift 2 ;;
-        --lane-a-model=*)  LANE_A_MODEL="${1#*=}"; shift ;;
-        --lane-b-model)    LANE_B_MODEL="${2:?}"; shift 2 ;;
-        --lane-b-model=*)  LANE_B_MODEL="${1#*=}"; shift ;;
         --lane-a-target)   LANE_A_TARGET="${2:?}"; shift 2 ;;
         --lane-a-target=*) LANE_A_TARGET="${1#*=}"; shift ;;
         --lane-b-target)   LANE_B_TARGET="${2:?}"; shift 2 ;;
@@ -127,13 +125,6 @@ case "$REVIEW_N" in 1|2) ;; *) die "--review-n must be 1 or 2" ;; esac
 case "$MAX_REVIEW_ITERATIONS" in ''|*[!0-9]*) die "--max-review-iterations must be a positive integer" ;; esac
 [ "$MAX_REVIEW_ITERATIONS" -ge 1 ] || die "--max-review-iterations must be a positive integer"
 
-# Resolve per-lane models: explicit --lane-X-model wins; else positional from --models.
-if [ -n "$MODELS" ]; then
-    IFS=',' read -r M1 M2 _ <<<"$MODELS" || true
-    [ -n "$LANE_A_MODEL" ] || LANE_A_MODEL="${M1:-}"
-    [ -n "$LANE_B_MODEL" ] || LANE_B_MODEL="${M2:-}"
-fi
-
 # Resolve the rig: explicit --rig wins; else infer from the bead prefix (<rig>-<n>).
 if [ -z "$RIG" ]; then
     RIG="${BEAD%-*}"
@@ -141,24 +132,25 @@ if [ -z "$RIG" ]; then
 fi
 
 COORD="$RIG/bug-coordinator"
-[ -n "$LANE_A_TARGET" ] || LANE_A_TARGET="$RIG/bug-worker-a"
-[ -n "$LANE_B_TARGET" ] || LANE_B_TARGET="$RIG/bug-worker-b"
-REVIEW_LANE_A="$RIG/$(jq -er '.reviewers.lane_a' "$POLICY")"
-REVIEW_LANE_B="$RIG/$(jq -er '.reviewers.lane_b' "$POLICY")"
+python3 "$VALIDATE_EXECUTION" --city "$CITY" --policy "$POLICY" --rig "$RIG" --profile "$EXECUTION" >/dev/null
+[ -n "$LANE_A_TARGET" ] || LANE_A_TARGET="$RIG/$(jq -er --arg p "$EXECUTION" '.execution_profiles[$p].roles.bug.lane_a' "$POLICY")"
+[ -n "$LANE_B_TARGET" ] || LANE_B_TARGET="$RIG/$(jq -er --arg p "$EXECUTION" '.execution_profiles[$p].roles.bug.lane_b' "$POLICY")"
+REVIEW_LANE_A="$RIG/$(jq -er --arg p "$EXECUTION" '.execution_profiles[$p].roles.review.lane_a' "$POLICY")"
+REVIEW_LANE_B="$RIG/$(jq -er --arg p "$EXECUTION" '.execution_profiles[$p].roles.review.lane_b' "$POLICY")"
 if [ -n "$REVIEW_LANES" ]; then
     IFS=',' read -r REVIEW_LANE_A REVIEW_LANE_B _ <<<"$REVIEW_LANES" || true
     [ -n "$REVIEW_LANE_A" ] || die "--review-lanes requires a lane A profile"
     if [ "$REVIEW_N" = "2" ]; then [ -n "$REVIEW_LANE_B" ] || die "--review-n 2 requires two --review-lanes profiles"
     else
         [ -z "$REVIEW_LANE_B" ] || die "--review-n 1 accepts one --review-lanes profile"
-        REVIEW_LANE_B="$RIG/$(jq -er '.reviewers.lane_b' "$POLICY")"
+        REVIEW_LANE_B="$RIG/$(jq -er --arg p "$EXECUTION" '.execution_profiles[$p].roles.review.lane_b' "$POLICY")"
     fi
 fi
 
 # Pick the formula by opinion count.
 if [ "$N" = "1" ]; then
     FORMULA="hard-bug-round-solo"
-    if [ -n "$LANE_B_MODEL" ] || [ "$LANE_B_TARGET" != "$RIG/bug-worker-b" ]; then
+    if [ "$LANE_B_TARGET" != "$RIG/$(jq -er --arg p "$EXECUTION" '.execution_profiles[$p].roles.bug.lane_b' "$POLICY")" ]; then
         printf '%s\n' "bug: WARN N=1 ignores lane-B options (no second lane)" >&2
     fi
 else
@@ -183,19 +175,14 @@ set -- "$COORD" "$FORMULA" --formula \
     --var "coordinator_target=$COORD"
 # Lane B exists only at N=2.
 if [ "$N" = "2" ]; then set -- "$@" --var "lane_b_target=$LANE_B_TARGET"; fi
-# Pin a lane's model only when explicitly set; empty defers to the agent's
-# city.toml option_defaults (provider/agent/rig-patch). Use `if` (not `&&`) so a
-# false test doesn't trip `set -e`.
-if [ -n "$LANE_A_MODEL" ]; then set -- "$@" --var "lane_a_model=$LANE_A_MODEL"; fi
-if [ "$N" = "2" ] && [ -n "$LANE_B_MODEL" ]; then set -- "$@" --var "lane_b_model=$LANE_B_MODEL"; fi
 # branch_prefix defaults to "" in the formula too, but only pass it explicitly
 # when set so a --dry-run without it matches the formula's own default output.
 if [ -n "$BRANCH_PREFIX" ]; then set -- "$@" --var "branch_prefix=$BRANCH_PREFIX"; fi
 set -- "$@" --title "bug root-cause round 1: $BEAD" --json
 
 if [ "$DRYRUN" = "yes" ]; then
-    printf 'DRY RUN — would run (rig=%s, preset=%s, diagnosis_n=%s, loop=%s, review_n=%s, local_only=true, completion=approved):\n  %s --rig %s sling' \
-        "$RIG" "$PRESET" "$N" "$LOOP" "$REVIEW_N" "$GC" "$RIG"
+    printf 'DRY RUN — would run (rig=%s, preset=%s, execution=%s, diagnosis_lane_a_target=%s, diagnosis_lane_b_target=%s, review_lane_a_target=%s, review_lane_b_target=%s, diagnosis_n=%s, loop=%s, review_n=%s, local_only=true, completion=approved):\n  %s --rig %s sling' \
+        "$RIG" "$PRESET" "$EXECUTION" "$LANE_A_TARGET" "$LANE_B_TARGET" "$REVIEW_LANE_A" "$REVIEW_LANE_B" "$N" "$LOOP" "$REVIEW_N" "$GC" "$RIG"
     for a in "$@"; do printf ' %q' "$a"; done
     printf '\n'
     exit 0

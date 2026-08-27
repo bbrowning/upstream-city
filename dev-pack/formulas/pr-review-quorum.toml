@@ -2,7 +2,7 @@ description = """
 Posture-gated PR review at N>=2 — a review quorum (the fan-out dial on the review lane).
 
 One deterministic-first **triage** gate classifies the PR's trust posture, then N
-independent read-only **reviewer lanes** (different models/providers) each review the
+distinct independent read-only **reviewer lane identities** each review the
 same diff and emit their own `pr-review.v1` verdict, then a **synthesis** step gated on
 all lanes reads them, deduplicates findings, takes the strictest merge call, and emits a
 single combined `pr-review-quorum.v1` verdict (a superset of `pr-review.v1`, so the
@@ -11,8 +11,8 @@ existing render/notify/`gc dev-pack summary` path works unchanged). N=1 uses `pr
 opinion count.
 
 Each lane re-derives the posture ceiling itself, so the quorum is defense-in-depth on
-posture too. Lane IDs / providers / targets / models are formula vars — a second vendor
-drops in via a city.toml rig patch (provider + option_defaults), no formula edit.
+posture too. Lane IDs and targets are formula vars; concrete provider/model/effort
+bindings live on the selected agent identities in city.toml, with no formula edit.
 """
 formula = "pr-review-quorum"
 
@@ -150,7 +150,7 @@ description = """
 You are reviewer lane `{{lane_a_id}}`, one of several independent lanes reviewing the
 SAME diff `{{base_ref}}...{{head_ref}}` in a review quorum — work read-only in your own
 isolated worktree, not the shared rig root. Reach your OWN verdict on the evidence; a
-sibling lane (a different model) reviews in parallel and a synthesis step reconciles
+sibling lane (a distinct independent identity) reviews in parallel and a synthesis step reconciles
 you afterward, so do not coordinate or defer.
 
 For a local implementation, independently run `resolve-local-change.sh` immediately
@@ -202,7 +202,7 @@ description = """
 You are reviewer lane `{{lane_b_id}}`, one of several independent lanes reviewing the
 SAME diff `{{base_ref}}...{{head_ref}}` in a review quorum — work read-only in your own
 isolated worktree, not the shared rig root. Reach your OWN verdict on the evidence; a
-sibling lane (a different model) reviews in parallel and a synthesis step reconciles
+sibling lane (a distinct independent identity) reviews in parallel and a synthesis step reconciles
 you afterward, so do not coordinate or defer.
 
 For a local implementation, independently run `resolve-local-change.sh` immediately

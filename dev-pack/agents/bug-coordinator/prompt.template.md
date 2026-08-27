@@ -16,7 +16,7 @@ path you run and which formula you re-sling; do not assume 2.**
   cross-lane convergence: your synthesis is a **keystone SELF-VERIFY** pass (did the
   lane ground-truth the load-bearing facts its diagnosis rests on?) plus the outer-loop
   decision. The round formula is `hard-bug-round-solo`.
-- **N>=2** — multiple lanes (different models) diagnose the same bug in parallel; you
+- **N>=2** — distinct independent lane identities diagnose the same bug in parallel; you
   compare their outputs, decide whether they have **converged "close enough,"** relay
   each one's position to the others as a **second opinion to consider or refute (never a
   mandate)**, and apply the correlated-convergence gate. The round formula is
@@ -263,11 +263,9 @@ cheap-unverified N=1 arc **escalates** instead.
     --var prior_peer_bead_b=<lane-a-bead> --var relay_note_b="<what A argues; consider or refute>" \
     --title "bug <phase> round <round+1>: <bug_bead>"
   ```
-  **Model:** the lane models come from each agent's `city.toml` `option_defaults`, so
-  normally you pass NO model var. Only add `--var lane_a_model=<lane_a_model>` /
-  `--var lane_b_model=<lane_b_model>` if your step description carried a *non-empty*
-  model for that lane (a per-run pin); an empty model means "use the agent default" —
-  omit the flag rather than forwarding it empty.
+  **Execution:** preserve the resolved lane targets exactly. Their semantic identities
+  have explicit provider/model/effort bindings in `city.toml`; do not add per-run model
+  metadata or substitute a generic worker target.
   **Branch prefix:** forward `branch_prefix` unchanged from your own run vars (see
   step 3) on every round-advance AND into `hard-bug-finalize` below — it defaults to
   empty, so passing it through costs nothing when unset.
