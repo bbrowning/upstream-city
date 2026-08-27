@@ -29,20 +29,62 @@ for name, profile in p['execution_profiles'].items():
     assert roles['review']['lane_a'] != roles['review']['lane_b']
 
 city = tomllib.loads((root / 'city.toml').read_text())
+experts = {
+    'pr-reviewer-opus48-xhigh': ('claude', 'claude-opus-4-8', 'xhigh'),
+    'pr-reviewer-sonnet-xhigh': ('claude', 'sonnet', 'xhigh'),
+    'pr-reviewer-gpt56sol-medium': ('codex', 'gpt-5.6-sol', 'medium'),
+    'pr-reviewer-gpt56sol-xhigh': ('codex', 'gpt-5.6-sol', 'xhigh'),
+    'pr-reviewer-gpt56luna-xhigh': ('codex', 'gpt-5.6-luna', 'xhigh'),
+}
+fixed = {
+    'pr-triage': ('codex', 'gpt-5.6-sol', 'medium'),
+    'pr-review-synthesizer': ('codex', 'gpt-5.6-sol', 'medium'),
+    'pr-arbiter': ('codex', 'gpt-5.6-sol', 'xhigh'),
+    'pr-runner': ('codex', 'gpt-5.6-luna', 'high'),
+    'pr-follow-up': ('codex', 'gpt-5.6-sol', 'high'),
+    'pr-chat': ('codex', 'gpt-5.6-sol', 'high'),
+    'bug-coordinator': ('claude', 'opus', 'high'),
+}
 for rig in city['rigs']:
     patches = {x.get('agent'): x for x in rig.get('patches', [])}
-    for profile in p['execution_profiles'].values():
+    assert len(patches) == 35, (rig['name'], len(patches))
+    for agent, expected_binding in {**fixed, **experts}.items():
+        patch = patches[agent]
+        actual = (patch['provider'], patch['option_defaults']['model'], patch['option_defaults']['effort'])
+        assert actual == expected_binding, (rig['name'], agent, actual, expected_binding)
+    compatibility = {
+        'feature-dev': ('codex', 'gpt-5.6-luna', 'high') if rig['name'] == 'paude'
+                       else ('claude', 'opus', 'high'),
+        'bug-worker-a': ('claude', 'opus', 'high'),
+        'bug-worker-b': ('claude', 'sonnet', 'high'),
+    }
+    for agent, expected_binding in compatibility.items():
+        patch = patches[agent]
+        actual = (patch['provider'], patch['option_defaults']['model'], patch['option_defaults']['effort'])
+        assert actual == expected_binding, (rig['name'], agent, actual, expected_binding)
+    for profile_name, profile in p['execution_profiles'].items():
         targets = {t for group in profile['roles'].values() for t in group.values()}
         for target in targets:
             patch = patches[target]
             assert patch['provider']
             assert patch['option_defaults']['model']
             assert patch['option_defaults']['effort'] == profile['reasoning_effort']
+            lane_b = target.startswith('bug-worker-b-') or target.startswith('pr-reviewer-b-')
+            if profile_name.startswith('frontier-') and lane_b:
+                assert (patch['provider'], patch['option_defaults']['model']) == ('claude', 'claude-opus-4-8')
+            elif profile_name.startswith('frontier-'):
+                assert (patch['provider'], patch['option_defaults']['model']) == ('codex', 'gpt-5.6-sol')
+            else:
+                assert (patch['provider'], patch['option_defaults']['model']) == ('codex', 'gpt-5.6-luna')
             shell = root / 'dev-pack' / 'agents' / target / 'agent.toml'
             data = tomllib.loads(shell.read_text())
             assert data['prompt_template']
             assert 'provider' not in data and 'option_defaults' not in data
 PY
+
+! rg -n 'opus46|opus-4-6|Opus 4\.6' "$ROOT/city.toml" "$ROOT/dev-pack" "$ROOT/docs" "$ROOT/README.md" \
+  --glob '!dev-pack/tests/execution-profile-contract.sh' \
+  || fail 'retired Opus 4.6 configuration or documentation remains'
 
 for rig in paude vllm; do
   for profile in frontier-xhigh frontier-medium efficient-xhigh efficient-medium; do

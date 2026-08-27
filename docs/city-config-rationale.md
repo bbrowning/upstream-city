@@ -20,18 +20,16 @@ Verify any edit resolves to the same merged config with:
 gascity's builtin `claude` spec ships a **curated** model enum
 (`internal/worker/builtin/profiles.go`). A requested model must match a choice
 **value** exactly; on the launch path an unknown value is silently dropped (no
-`--model` emitted) and claude falls back to its own default — that is why a bare
-`claude-opus-4-6` once resolved as opus 4.8. It is a data gap, **not** a
-capability limit: claude runs whatever `--model <id>` we pass.
+`--model` emitted) and claude falls back to its own default. It is a data gap,
+**not** a capability limit: claude runs whatever `--model <id>` we pass.
 
 `options_schema_merge = "by_key"` **appends** our `options_schema.choices` to
 the builtin enum (works on v1.4.0), making each id a first-class, selectable,
 **validated** model. Add one `choices` block per id you want to use; keep
 `dev-pack/assets/valid-options.txt` in sync for the offline validator.
 
-Currently added: `claude-opus-4-6` (Opus 4.6), `claude-opus-4-8` (Opus 4.8,
-pinned id). `"sonnet"` is the builtin slug (= claude-sonnet-5) and needs no
-entry.
+Currently added: `claude-opus-4-8` (Opus 4.8, pinned id). `"sonnet"` is the
+builtin slug (= claude-sonnet-5) and needs no entry.
 
 ## `[providers.codex]` — second vendor (OpenAI Codex)
 
@@ -56,6 +54,31 @@ A review lane opts in by setting `provider = "codex"` + per-agent
   census-owner-liveness doctor noise (9 dangling `ga-*` refs belonging to
   upstream gascity's own bead store) plus three unused agents.
 
+## Execution binding layout
+
+Each attached rig has the same 35 intentional patches, ordered as fixed
+orchestration/support roles, concrete expert review targets, compatibility leaf
+targets for direct-formula callers, and 20 semantic execution leaves. The source
+TOML stays comment-free; this rationale is the durable map.
+
+The supported semantic profiles are exactly:
+
+| profile | feature / solo / lane A | lane B | effort |
+|---|---|---|---|
+| `frontier-xhigh` | codex `gpt-5.6-sol` | claude `claude-opus-4-8` | xhigh |
+| `frontier-medium` | codex `gpt-5.6-sol` | claude `claude-opus-4-8` | medium |
+| `efficient-xhigh` | codex `gpt-5.6-luna` | codex `gpt-5.6-luna` | xhigh |
+| `efficient-medium` | codex `gpt-5.6-luna` | codex `gpt-5.6-luna` | medium |
+
+Feature and solo review use the lane-A binding. Bug and quorum review retain
+distinct A/B identities even where the efficient profiles intentionally use the
+same concrete model. There is no `economy-low` profile: add one only after a real
+model binding and operational use case justify another public tier.
+
+Concrete expert review targets remain for Opus 4.8, Sonnet, GPT-5.6 Sol at medium
+and xhigh, and GPT-5.6 Luna at xhigh. They are explicit overrides, never workflow
+defaults; obsolete comparison targets are not retained.
+
 ## vllm rig patches (per-agent model / effort / env)
 
 All `[[rigs.patches]]` attach to the vllm rig. Common env sets referenced below:
@@ -75,7 +98,6 @@ All `[[rigs.patches]]` attach to the vllm rig. Common env sets referenced below:
 |---|---|---|---|
 | `pr-triage` | **codex** gpt-5.6-sol / medium | trusted-authors only | Deterministic pre-scan sets the hard ceiling; medium effort handles the remaining posture judgment. |
 | `pr-review-synthesizer` | **codex** gpt-5.6-sol / medium | TEST-VENV + trusted-authors | Quorum synthesis and direct-formula fallback; the opinion lanes carry the deeper review effort. |
-| `pr-reviewer-opus46-xhigh` | claude-opus-4-6 / xhigh | TEST-VENV + trusted-authors | Review lane PROFILE (see below). |
 | `pr-reviewer-opus48-xhigh` | claude-opus-4-8 / xhigh | TEST-VENV + trusted-authors | Review lane PROFILE. |
 | `pr-reviewer-sonnet-xhigh` | sonnet / xhigh | TEST-VENV + trusted-authors | Review lane PROFILE. |
 | `pr-reviewer-gpt56sol-medium` | **codex** gpt-5.6-sol / medium | TEST-VENV + trusted-authors | Second-vendor profile; opt-in. |
@@ -85,8 +107,8 @@ All `[[rigs.patches]]` attach to the vllm rig. Common env sets referenced below:
 | `pr-runner` | **codex** gpt-5.6-luna / high | TEST-VENV + trusted-authors | Human-approved dynamic-check lane. |
 | `pr-follow-up` | **codex** gpt-5.6-sol / high | personas only | `gc dev-pack ask` read-only follow-up (no execution latitude in v1). |
 | `pr-chat` | **codex** gpt-5.6-sol / high | TEST-VENV (no trusted-authors) | `gc dev-pack ask <PR>` with no question: live attached per-PR chat; MAY run tests on request. |
-| `bug-worker-a` | default (unset) | TEST-VENV (no trusted-authors) | Hard-bug lane A. |
-| `bug-worker-b` | default (unset) | TEST-VENV (no trusted-authors) | Hard-bug lane B. |
+| `bug-worker-a` | claude opus / high | TEST-VENV (no trusted-authors) | Compatibility hard-bug lane A. |
+| `bug-worker-b` | claude sonnet / high | TEST-VENV (no trusted-authors) | Compatibility hard-bug lane B. |
 
 ### Why `effort = xhigh` on the reviewer / reviewer profiles
 

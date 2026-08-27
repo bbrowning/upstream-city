@@ -45,7 +45,7 @@ import sys, tomllib
 config = tomllib.load(open(sys.argv[1], "rb"))
 corpus = sys.argv[2]
 roles = {
-    "pr-review-synthesizer", "pr-reviewer-opus46-xhigh", "pr-reviewer-opus48-xhigh",
+    "pr-review-synthesizer", "pr-reviewer-opus48-xhigh",
     "pr-reviewer-sonnet-xhigh", "pr-reviewer-gpt56sol-medium",
     "pr-reviewer-gpt56sol-xhigh", "pr-reviewer-gpt56luna-xhigh", "pr-arbiter",
 }

@@ -52,8 +52,8 @@ Sling the review formula (N=1 -> pr-review, N=2 -> pr-review-quorum) to <rig>/pr
                    These explicit targets override --execution. Unknown names
                    fail loudly (with the available list).
                    examples:
-                     --lanes opus46-xhigh,opus48-xhigh     # compare opus 4.6 vs 4.8
-                     --lanes opus46-xhigh                  # N=1 solo on the 4.6 profile
+                     --lanes opus48-xhigh,gpt56sol-xhigh   # concrete cross-provider pair
+                     --lanes sonnet-xhigh                  # N=1 concrete Sonnet target
                    (no --lanes: targets come from the selected execution role set.)
   --dry-run        validate + print the gc sling command without running it
   -h, --help

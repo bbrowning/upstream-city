@@ -11,10 +11,6 @@ options_schema_merge = "by_key"
 [[providers.claude.options_schema]]
 key = "model"
 [[providers.claude.options_schema.choices]]
-value = "claude-opus-4-6"
-label = "Opus 4.6"
-flag_args = ["--model", "claude-opus-4-6"]
-[[providers.claude.options_schema.choices]]
 value = "claude-opus-4-8"
 label = "Opus 4.8 (pinned id)"
 flag_args = ["--model", "claude-opus-4-8"]
@@ -29,42 +25,93 @@ prefix = "paude"
 default_branch = "main"
 includes = ["dev-pack"]
 
-# Paude reviews use a Paude-specific corpus. Keep this beside the Paude rig:
-# [[rigs.patches]] is scoped to the immediately containing [[rigs]] entry.
+[[rigs.patches]]
+agent = "pr-triage"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
+
 [[rigs.patches]]
 agent = "pr-review-synthesizer"
-env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
-
-[[rigs.patches]]
-agent = "pr-reviewer-opus46-xhigh"
-env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
-
-[[rigs.patches]]
-agent = "pr-reviewer-opus48-xhigh"
-env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
-
-[[rigs.patches]]
-agent = "pr-reviewer-sonnet-xhigh"
-env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
-
-[[rigs.patches]]
-agent = "pr-reviewer-gpt56sol-medium"
-env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
-
-[[rigs.patches]]
-agent = "pr-reviewer-gpt56sol-xhigh"
-env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
-
-[[rigs.patches]]
-agent = "pr-reviewer-gpt56luna-xhigh"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
 env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
 
 [[rigs.patches]]
 agent = "pr-arbiter"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
 env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
 
-# Semantic execution leaves: every identity is explicitly composed here so it
-# cannot inherit the workspace provider/model by accident.
+[[rigs.patches]]
+agent = "pr-runner"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-luna", effort = "high" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas" }
+
+[[rigs.patches]]
+agent = "pr-follow-up"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "high" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas" }
+
+[[rigs.patches]]
+agent = "pr-chat"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "high" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas" }
+
+[[rigs.patches]]
+agent = "bug-coordinator"
+provider = "claude"
+option_defaults = { model = "opus", effort = "high" }
+
+[[rigs.patches]]
+agent = "pr-reviewer-opus48-xhigh"
+provider = "claude"
+option_defaults = { model = "claude-opus-4-8", effort = "xhigh" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
+
+[[rigs.patches]]
+agent = "pr-reviewer-sonnet-xhigh"
+provider = "claude"
+option_defaults = { model = "sonnet", effort = "xhigh" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
+
+[[rigs.patches]]
+agent = "pr-reviewer-gpt56sol-medium"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
+
+[[rigs.patches]]
+agent = "pr-reviewer-gpt56sol-xhigh"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
+
+[[rigs.patches]]
+agent = "pr-reviewer-gpt56luna-xhigh"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-luna", effort = "xhigh" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
+
+[[rigs.patches]]
+agent = "feature-dev"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-luna", effort = "high" }
+
+[[rigs.patches]]
+agent = "bug-worker-a"
+provider = "claude"
+option_defaults = { model = "opus", effort = "high" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas" }
+
+[[rigs.patches]]
+agent = "bug-worker-b"
+provider = "claude"
+option_defaults = { model = "sonnet", effort = "high" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas" }
+
 
 [[rigs.patches]]
 agent = "feature-dev-frontier-xhigh"
@@ -201,10 +248,33 @@ option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 [[rigs.patches]]
-agent = "pr-reviewer-opus46-xhigh"
-provider = "claude"
-option_defaults = { model = "claude-opus-4-6", effort = "xhigh" }
+agent = "pr-arbiter"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
+
+[[rigs.patches]]
+agent = "pr-runner"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-luna", effort = "high" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
+
+[[rigs.patches]]
+agent = "pr-follow-up"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "high" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
+
+[[rigs.patches]]
+agent = "pr-chat"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "high" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
+
+[[rigs.patches]]
+agent = "bug-coordinator"
+provider = "claude"
+option_defaults = { model = "opus", effort = "high" }
 
 [[rigs.patches]]
 agent = "pr-reviewer-opus48-xhigh"
@@ -237,35 +307,15 @@ option_defaults = { model = "gpt-5.6-luna", effort = "xhigh" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 [[rigs.patches]]
-agent = "pr-arbiter"
-provider = "codex"
-option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
-env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
-
-[[rigs.patches]]
-agent = "pr-runner"
-provider = "codex"
-option_defaults = { model = "gpt-5.6-luna", effort = "high" }
-env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
-
-[[rigs.patches]]
-agent = "pr-follow-up"
-provider = "codex"
-option_defaults = { model = "gpt-5.6-sol", effort = "high" }
-env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
-
-[[rigs.patches]]
-agent = "pr-chat"
-provider = "codex"
-option_defaults = { model = "gpt-5.6-sol", effort = "high" }
-env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
-
-[[rigs.patches]]
 agent = "bug-worker-a"
+provider = "claude"
+option_defaults = { model = "opus", effort = "high" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
 
 [[rigs.patches]]
 agent = "bug-worker-b"
+provider = "claude"
+option_defaults = { model = "sonnet", effort = "high" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/vllm/personas" }
 
 [[rigs.patches]]
@@ -273,8 +323,6 @@ agent = "feature-dev"
 provider = "claude"
 option_defaults = { model = "opus", effort = "high" }
 
-# Semantic execution leaves: every identity is explicitly composed here so it
-# cannot inherit the workspace provider/model by accident.
 
 [[rigs.patches]]
 agent = "feature-dev-frontier-xhigh"
