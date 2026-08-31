@@ -18,6 +18,8 @@ The explicit operator equivalents are `gc dev-pack feature <bead>`, `gc dev-pack
 or `--solo` is an explicit N=1 opt-down; bug `--report-only` stops after diagnosis.
 See [dev-pack/README.md](dev-pack/README.md) for lifecycle monitoring, recovery,
 escalation, exact defaults, and copy-paste verification.
+Use `gc dev-pack work` for the bounded, read-only current attention view across HQ
+and rigs; unlike mail, it derives its groups from the live local ledger and artifacts.
 
 ## Packs
 

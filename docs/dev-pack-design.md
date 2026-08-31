@@ -194,6 +194,41 @@ per-bead lock shared across worktrees, and require `gc.output_json` to still be 
 A competing or stale writer therefore fails closed instead of overwriting a durable
 verdict, bug result, feature handoff, or follow-up answer.
 
+## Human attention projection
+
+`gc dev-pack work` is a CLI projection over existing authority, not a workflow or
+another state machine. At the city root it reads HQ and every initialized rig; from
+inside a rig it reads only that rig unless `--citywide` or `--rig` overrides scope.
+All ledger subprocesses use `bd --readonly`. The command never calls mail, writes a
+cache, updates a bead, or records its derived group.
+
+The human-facing selection contract is ownership/assignment to an explicit actor
+identity or one of the documented attention labels. Negative labels opt out.
+Workflow retries, molecule steps, messages, gates, order bookkeeping, and agent
+infrastructure are evidence only, so their titles cannot accidentally promote them.
+Generic beads remain visible even when they do not carry dev-pack output.
+
+Grouping precedence is deterministic:
+
+1. A closed human bead is RECENTLY FINISHED within the configured window.
+2. Canonical blocked/deferred status, hold/wait labels, or unresolved dependencies
+   are WAITING ON OTHERS.
+3. An explicit action marker, final review/change evidence, or local artifact drift
+   under an open human bead is NEEDS YOU. Explicit action markers outrank waits;
+   otherwise a trustworthy recorded wait outranks automation completion.
+4. `in_progress` or active workflow children are IN FLIGHT.
+5. Remaining open work is STALE OR UNCLEAR because it has neither progress nor a
+   trustworthy wait.
+
+`dev-pack-work.v1` records the local-ledger authority, observation/source timestamps,
+reason, next action, rig/id, and authoritative output pointer for every item. `work
+show` adds the raw source bead, parsed output/lifecycle, child evidence, and local
+branch comparison; PR review output uses the existing verdict renderer for text.
+The offline MVP explicitly defers `--watch` until Gas City exposes an event-driven
+read-only multi-store refresh boundary. Read-only GitHub observation and disposable
+freshness-labeled caching are a separate follow-up; this command does not infer live
+remote state from stale local prose.
+
 ## Maintainer gates
 
 - `gc lint dev-pack` validates pack structure and formulas.
@@ -202,6 +237,8 @@ verdict, bug result, feature handoff, or follow-up answer.
 - `dev-pack/tests/local-only-implementation.sh` rejects publication behavior.
 - Artifact, review, closure, persona, escalation, and interactive-terminal tests
   exercise their named contracts.
+- `dev-pack/tests/work-attention.sh` locks selection, five-way grouping, scope,
+  bounded JSON/show output, internal suppression, watch deferral, and read-only calls.
 - Installed formula rendering on each supported rig catches composition drift.
 
 The full copy-paste gate is maintained in the operator runbook. Storage and city

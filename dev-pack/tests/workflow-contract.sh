@@ -106,6 +106,19 @@ for phrase in 'gc dev-pack ask 51296 "does this handle empty batches?"' \
     || fail "canonical guide missing ask contract: $phrase"
 done
 
+# Work is the canonical read-only attention contract, including its explicit watch
+# deferral rather than an accidental polling implementation.
+work_help=$(gc dev-pack work --help)
+for phrase in 'human-facing' 'GC_ATTENTION_ACTORS' 'NEEDS YOU' 'bd' '--readonly' \
+  'never reads or acknowledges mail' 'explicitly deferred'; do
+  printf '%s' "$work_help" | grep -Fq -- "$phrase" || fail "work help missing attention contract: $phrase"
+done
+for phrase in '## Human attention desk' 'gc dev-pack work show' \
+  'STALE OR UNCLEAR' 'no parallel attention state' '--watch'; do
+  grep -Fq -- "$phrase" "$ROOT/dev-pack/README.md" \
+    || fail "operator runbook missing attention contract: $phrase"
+done
+
 docs=$(printf '%s\n' "$ROOT/README.md" "$ROOT/dev-pack/README.md")
 for phrase in 'Implement this feature' 'Fix this bug' 'Review PR N'; do
   grep -q "$phrase" $docs || fail "quickstart missing human request: $phrase"
@@ -140,6 +153,7 @@ for relative in 'formulas/change-lifecycle.toml' 'formulas/change-lifecycle-solo
 done
 for phrase in '## Presets and defaults' '## Feature work' '## Hard-bug work' \
   '## Review a PR or local change' '### Materialize a reviewed PR' \
+  '## Human attention desk' \
   '## Monitor and retrieve results' '## Recovery and escalation' \
   'gc dev-pack bug vllm-456 --report-only' 'gc dev-pack status vllm-456' \
   'gc dev-pack review --artifact' 'gc dev-pack materialize 53174'; do

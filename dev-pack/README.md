@@ -196,6 +196,35 @@ and mails nothing. Use the question-present form when the answer must be durable
 mailed, chained, or visible to a later async or newly opened interactive session.
 Any verdict or follow-up bead in the chain may be used instead of the PR number.
 
+## Human attention desk
+
+Use the local ledger-derived desk instead of treating result mail as current state:
+
+```bash
+gc dev-pack work                         # city root: HQ plus initialized rigs
+gc dev-pack work --rig vllm             # one explicit rig
+gc dev-pack work --group needs-you --all
+gc dev-pack work show vllm-e5m8.3       # deeper source/output/lifecycle evidence
+gc dev-pack work show gh-51858 --json    # external-ref lookup, stable JSON
+```
+
+From inside a rig, the default scope is that rig. From the city root, it is
+citywide. The bounded default groups are NEEDS YOU, IN FLIGHT, WAITING ON OTHERS,
+STALE OR UNCLEAR, and RECENTLY FINISHED; `--all` removes the per-group bound.
+
+Selection is an explicit contract, not a title guess. Owner/assignee identities
+come from `--actor`, `GC_ATTENTION_ACTORS`, `BEADS_ACTOR`, and the city Git identity;
+the intentional markers are `human-facing`, `attention`, `attention=true`, and
+`maintainer`. Use `attention=false` or `human-facing=false` to opt out. Internal
+steps, retries, messages, gates, orders, and agent infrastructure only supply
+evidence. `--verbose` expands evidence, while `--json` emits `dev-pack-work.v1`.
+
+The desk is hard read-only: every bead query enables `bd --readonly`, mail is never
+read or acknowledged, and no parallel attention state is persisted. A closed
+automation workflow below an open human bead means NEEDS YOU; RECENTLY FINISHED
+requires the human bead itself to be closed. `--watch` is explicitly deferred until
+an event-driven multi-store refresh contract exists; rerun the command to refresh.
+
 ## Monitor and retrieve results
 
 ```bash
@@ -204,6 +233,7 @@ gc dev-pack status vllm-456        # bug phase, round, status, implementer
 gc bd show vllm-456                 # lifecycle and escalation evidence
 gc mail inbox                      # verdict, final, and escalation notifications
 gc dev-pack summary 53174          # stored review verdict
+gc dev-pack work                   # current human-facing state, derived read-only
 ```
 
 Extract and verify a final feature/bug handoff:
@@ -275,6 +305,7 @@ gc dev-pack feature --help
 gc dev-pack bug --help
 gc dev-pack review --help
 gc dev-pack ask --help
+gc dev-pack work --help
 ```
 
 The known `gc.output_json` deprecation warnings from current v2 formulas are

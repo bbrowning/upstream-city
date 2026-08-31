@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gascity.local/schemas/dev-pack-work-result.schema.json",
+  "title": "dev-pack work result",
+  "oneOf": [
+    {"$ref": "#/$defs/list"},
+    {"$ref": "#/$defs/show"}
+  ],
+  "$defs": {
+    "item": {
+      "type": "object",
+      "required": ["group", "rig", "id", "title", "status", "reason", "next_action", "age_seconds", "freshness", "authoritative_output"],
+      "properties": {
+        "group": {"enum": ["needs-you", "in-flight", "waiting", "stale-unclear", "recently-finished"]},
+        "rig": {"type": "string"},
+        "id": {"type": "string"},
+        "external_ref": {"type": ["string", "null"]},
+        "title": {"type": "string"},
+        "status": {"type": "string"},
+        "priority": {"type": ["integer", "null"]},
+        "issue_type": {"type": ["string", "null"]},
+        "owner": {"type": ["string", "null"]},
+        "assignee": {"type": ["string", "null"]},
+        "reason": {"type": "string"},
+        "next_action": {"type": "string"},
+        "age_seconds": {"type": "integer", "minimum": 0},
+        "age": {"type": "string"},
+        "freshness": {
+          "type": "object",
+          "required": ["authority", "observed_at", "source_updated_at"],
+          "properties": {
+            "authority": {"const": "local bead ledger"},
+            "observed_at": {"type": "string", "format": "date-time"},
+            "source_updated_at": {"type": "string", "format": "date-time"}
+          },
+          "additionalProperties": false
+        },
+        "output_schema": {"type": ["string", "null"]},
+        "authoritative_output": {"type": "string"},
+        "active_workflow_children": {"type": "array", "items": {"type": ["string", "null"]}},
+        "local_artifact": {"type": ["object", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "list": {
+      "type": "object",
+      "required": ["schema_version", "generated_at", "scope", "selection", "groups"],
+      "properties": {
+        "schema_version": {"const": "dev-pack-work.v1"},
+        "generated_at": {"type": "string", "format": "date-time"},
+        "scope": {
+          "type": "object",
+          "required": ["mode", "rigs"],
+          "properties": {
+            "mode": {"enum": ["rig", "citywide", "selected-rigs"]},
+            "rigs": {"type": "array", "items": {"type": "string"}}
+          },
+          "additionalProperties": false
+        },
+        "selection": {
+          "type": "object",
+          "required": ["actors", "attention_labels"],
+          "properties": {
+            "actors": {"type": "array", "items": {"type": "string"}},
+            "attention_labels": {"type": "array", "items": {"type": "string"}}
+          },
+          "additionalProperties": false
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key", "label", "total", "shown", "items"],
+            "properties": {
+              "key": {"type": "string"},
+              "label": {"type": "string"},
+              "total": {"type": "integer", "minimum": 0},
+              "shown": {"type": "integer", "minimum": 0},
+              "items": {"type": "array", "items": {"$ref": "#/$defs/item"}}
+            },
+            "additionalProperties": false
+          }
+        },
+        "evidence": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "show": {
+      "type": "object",
+      "required": ["schema_version", "generated_at", "item", "evidence"],
+      "properties": {
+        "schema_version": {"const": "dev-pack-work-show.v1"},
+        "generated_at": {"type": "string", "format": "date-time"},
+        "item": {"$ref": "#/$defs/item"},
+        "evidence": {
+          "type": "object",
+          "required": ["bead", "output", "lifecycle", "workflow_children", "local_artifact"],
+          "properties": {
+            "bead": {"type": "object"},
+            "output": {"type": ["object", "null"]},
+            "lifecycle": {"type": ["object", "null"]},
+            "workflow_children": {"type": "array", "items": {"type": "object"}},
+            "local_artifact": {"type": ["object", "null"]}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

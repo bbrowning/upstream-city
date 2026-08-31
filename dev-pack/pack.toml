@@ -106,6 +106,9 @@
 #                       a question: drops you into a live interactive chat session on
 #                       the PR (one persistent chat per PR; `gc session attach`-able).
 #     status <bead>     render a bug arc's durable state (phase/round/status).
+#     work               read-only human attention projection across HQ/rig beads,
+#                        workflow evidence, and local artifact state; `work show`
+#                        expands one bead or external ref without acknowledging mail.
 #
 # SHARED SPINE
 #     template-fragments/trigger-claim   first-action exact GC_TRIGGER_BEAD_ID
