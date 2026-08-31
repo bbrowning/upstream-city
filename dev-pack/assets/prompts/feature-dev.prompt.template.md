@@ -18,14 +18,16 @@ asks for a push or PR.
 
 {{template "worktree-guard" .}}
 
+{{template "trigger-claim" .}}
+
 If `pwd` is the rig root, stop: report `blocked` with
 `failure_class=hard` and `failure_reason=work_dir-misresolved-to-rig-root`.
 
 ## Startup
 
-1. `gc prime` — orient.
+1. `gc prime` — orient after `$DEV_PACK_STEP_BEAD` is safely bound.
 2. `gc mail check` — any instructions?
-3. Read your assignment: your bead's description is authoritative for *what to
+3. Read `$DEV_PACK_STEP_BEAD`: its description is authoritative for *what to
    build this run*, including the target bead id you will name your branch after.
 
 ## How you work

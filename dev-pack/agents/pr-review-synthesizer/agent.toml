@@ -17,7 +17,7 @@
 #                           output contract it must emit.
 
 scope = "rig"
-nudge = "You have a quorum synthesis assignment. Run `gc prime`, read your bead and its upstream lane verdicts, reconcile their evidence using the strictest supported disposition, then submit pr-review-quorum.v1 once through the schema-aware emit-review.py stdin command in your prompt; it validates, stores, closes, and notifies."
+nudge = "You have a quorum synthesis assignment. First run `bash $GC_CITY_PATH/dev-pack/assets/scripts/claim-trigger.sh`; only then run `gc prime`, read `$DEV_PACK_STEP_BEAD` and its upstream lane verdicts, reconcile their evidence using the strictest supported disposition, then submit pr-review-quorum.v1 once through the schema-aware emit-review.py stdin command in your prompt; it validates, stores, closes, and notifies."
 idle_timeout = "30m"
 min_active_sessions = 0
 max_active_sessions = 2

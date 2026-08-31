@@ -15,7 +15,7 @@
 # during the finalize step.
 
 scope = "rig"
-nudge = "You are the hard-bug coordinator with a step on your hook. Run `gc prime`, read your step bead (reconcile or finalize) and the arc bead's gc.output_json (hard-bug-state.v1), re-derive the current phase/round, then act per your protocol."
+nudge = "You are the hard-bug coordinator with a step on your hook. First run `bash $GC_CITY_PATH/dev-pack/assets/scripts/claim-trigger.sh`; only then run `gc prime`, read `$DEV_PACK_STEP_BEAD` (reconcile or finalize) and the arc bead's gc.output_json (hard-bug-state.v1), re-derive the current phase/round, then act per your protocol."
 idle_timeout = "45m"
 min_active_sessions = 0
 max_active_sessions = 1

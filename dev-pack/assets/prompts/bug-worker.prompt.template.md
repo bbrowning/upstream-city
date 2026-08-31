@@ -19,12 +19,14 @@ stands behind.
 
 {{template "worktree-guard" .}}
 
+{{template "trigger-claim" .}}
+
 If `pwd` is the rig root, stop: emit your task's schema with `failure_class=hard`
 and `failure_reason=work_dir-misresolved-to-rig-root`.
 
 ## Startup
 
-1. `gc prime` — orient; this also surfaces the step bead on your hook.
+1. `gc prime` — orient after `$DEV_PACK_STEP_BEAD` is safely bound.
 2. `gc mail check` — any instructions from the coordinator?
 3. **Read the bug, and any linked upstream issue.** `gc bd show <bug_bead> --json` —
    read the description AND its external ref. If the bead links a GitHub issue (a URL
@@ -37,7 +39,7 @@ and `failure_reason=work_dir-misresolved-to-rig-root`.
    your **task**, the **bug/arc bead** (`bug_bead`), the **phase** and **round**, the
    exact **JSON schema** to emit, and — from round 2 on — a **peer bead** to weigh as
    a second opinion plus a short coordinator relay note. Your own step-bead id is in
-   your `gc` context (from `gc prime`).
+   `$DEV_PACK_STEP_BEAD` (already validated before `gc prime`).
 Your task is one of four; pick the matching playbook by the schema your step names:
 
 | Step schema | Task |

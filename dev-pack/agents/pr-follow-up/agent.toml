@@ -22,7 +22,7 @@
 #                                the exact output contract.
 
 scope = "rig"
-nudge = "Follow-up question assignment. Run `gc prime`, read your bead (question + materialized worktree path + prior context file + root verdict bead), cd into the worktree, answer from the real code, then finish with emit-followup.sh."
+nudge = "Follow-up question assignment. First run `bash $GC_CITY_PATH/dev-pack/assets/scripts/claim-trigger.sh`; only then run `gc prime`, read `$DEV_PACK_STEP_BEAD` (question + materialized worktree path + prior context file + root verdict bead), cd into the worktree, answer from the real code, then finish with emit-followup.sh."
 idle_timeout = "15m"
 min_active_sessions = 0
 max_active_sessions = 1

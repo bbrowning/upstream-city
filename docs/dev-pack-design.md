@@ -33,6 +33,14 @@ Template fragments single-source recovery, method discipline, persona loading,
 output requirements, and worktree guards. Shared scripts resolve targets,
 construct artifacts, validate schemas, render mail, and update lifecycle state.
 
+Every pooled role has one mandatory first action: `claim-trigger.sh` resolves
+`GC_TRIGGER_BEAD_ID` exactly, confirms the route, then claims only that bead while
+replacing `gc.session_name` and `gc.work_dir` in the same mutation and verifies the
+committed ownership/provenance afterward.
+Neither `gc prime` nor ready-list discovery is allowed to select an assignment.
+This makes stale provenance repair part of the successful exact claim instead of a
+best-effort rollback after a foreign claim.
+
 External PR dispatch has a controller-owned readiness barrier. The launcher first
 resolves the advertised GitHub head, fetches it into a staging ref, verifies the
 exact SHA, and atomically creates a SHA-named shared ready ref. Only then can the
@@ -164,6 +172,12 @@ routing is operator policy (`GC_PR_NOTIFY_TO`); disabling built-in mail does not
 remove the durable bead evidence. Interactive `ask` is intentionally outside this
 boundary: it emits, closes, and mails nothing, while asynchronous ask answers are
 durable follow-ups chained to the root verdict.
+
+Before any output/provenance mutation, emitters revalidate their target against the
+launch trigger (including the uniquely resolved retry attempt), acquire a city-wide
+per-bead lock shared across worktrees, and require `gc.output_json` to still be empty.
+A competing or stale writer therefore fails closed instead of overwriting a durable
+verdict, bug result, feature handoff, or follow-up answer.
 
 ## Maintainer gates
 

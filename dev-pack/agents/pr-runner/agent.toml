@@ -19,7 +19,7 @@
 #                                    command) + the exact output contract.
 
 scope = "rig"
-nudge = "Approved dynamic-check assignment. Run the authorized gated check, then submit pr-review-dynamic.v1 once through the schema-aware emit-review.py stdin command; it validates, stores, closes, and notifies."
+nudge = "Approved dynamic-check assignment. First run `bash $GC_CITY_PATH/dev-pack/assets/scripts/claim-trigger.sh`; only then run `gc prime` and the authorized gated check, then submit pr-review-dynamic.v1 once through the schema-aware emit-review.py stdin command; it validates, stores, closes, and notifies."
 idle_timeout = "30m"
 min_active_sessions = 0
 max_active_sessions = 1

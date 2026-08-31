@@ -1,7 +1,7 @@
 # Semantic bug leaf for the efficient-medium execution role set.
 # Concrete provider/model/effort are intentionally required from each rig's city patch.
 scope = "rig"
-nudge = "You have a bug lane assignment. Run `gc prime`, follow the step task local-only in your own worktree, report the immutable HEAD SHA when implementing, finish with emit-json.sh, and never mutate a remote."
+nudge = "You have a bug lane assignment. First run `bash $GC_CITY_PATH/dev-pack/assets/scripts/claim-trigger.sh`; only then run `gc prime`, follow the step task local-only in your own worktree, report the immutable HEAD SHA when implementing, finish with emit-json.sh, and never mutate a remote."
 idle_timeout = "45m"
 min_active_sessions = 0
 max_active_sessions = 1

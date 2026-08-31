@@ -15,7 +15,7 @@
 #                           pr-triage.v1 output contract it must emit.
 
 scope = "rig"
-nudge = "Triage assignment: run `gc prime`, run the deterministic pre-scan, classify posture at or below its ceiling, then submit pr-triage.v1 once through the schema-aware emit-review.py stdin command in your prompt."
+nudge = "Triage assignment: first run `bash $GC_CITY_PATH/dev-pack/assets/scripts/claim-trigger.sh`; only then run `gc prime` and the deterministic pre-scan, classify posture at or below its ceiling, then submit pr-triage.v1 once through the schema-aware emit-review.py stdin command in your prompt."
 idle_timeout = "30m"
 min_active_sessions = 0
 

@@ -108,6 +108,9 @@
 #     status <bead>     render a bug arc's durable state (phase/round/status).
 #
 # SHARED SPINE
+#     template-fragments/trigger-claim   first-action exact GC_TRIGGER_BEAD_ID
+#                                         validation + claim + provenance repair for
+#                                         every pooled lane; never discovers substitutes.
 #     template-fragments/recovery-header  `gc prime` recovery note (every prompt).
 #     template-fragments/worktree-guard   "you are in your own worktree; abort in the
 #                                         rig root" guard (every prompt).
@@ -120,6 +123,8 @@
 #     assets/scripts/emit-verdict.sh      review lane atomic finish (write output_json +
 #                                         close + notify $GC_PR_NOTIFY_TO).
 #     assets/scripts/emit-json.sh         schema-agnostic atomic finish (bug lane).
+#     assets/scripts/dispatch-guard.sh    trigger/output fence + city-wide per-bead
+#                                         writer lock shared by all emitters.
 #     assets/scripts/pr-prescan.sh        deterministic, injection-proof posture ceiling.
 #     assets/scripts/posture-latitude.sh  pure posture -> FETCH/EXEC/GATE table.
 #     assets/scripts/run-scoped-check.sh  the deterministic EXEC gate (re-derives the

@@ -3,6 +3,8 @@
 {{template "recovery-header" .}} You are
 > stateless between wakes on purpose — the beads are the truth (see **Resume**).
 
+{{template "trigger-claim" .}}
+
 ## Your role
 
 You drive the bug protocol as its synthesis/judge, over **N worker lanes** — N is a
@@ -44,10 +46,10 @@ the shared review synthesizer owns the final lifecycle decision.
 
 ## Startup, every wake
 
-1. `gc prime` — orient; surfaces your step bead.
+1. `gc prime` — orient after `$DEV_PACK_STEP_BEAD` is safely bound.
 2. `gc mail check` — any human input? A human reply on an escalated arc may tell you
    how to proceed.
-3. **Read your step bead.** Its `gc.output_json_schema` tells you which step you are:
+3. **Read `$DEV_PACK_STEP_BEAD`.** Its `gc.output_json_schema` tells you which step you are:
    `hard-bug-reconcile.v1` → **Reconcile playbook**; `hard-bug-final.v1` →
    **Finalize playbook**. Its description carries the run vars you need to re-sling:
    `bug_bead`, `base_ref`, `phase`, `round`, `max_rounds`, `enable_loop`,

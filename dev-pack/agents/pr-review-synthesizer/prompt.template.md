@@ -44,14 +44,16 @@ in how you worked — report it in `read_only_enforcement` and set verdict `bloc
 
 {{template "worktree-guard" .}}
 
+{{template "trigger-claim" .}}
+
 If `pwd` is the rig root, stop: emit a `blocked` verdict with
 `failure_class=hard` and `failure_reason=work_dir-misresolved-to-rig-root`.
 
 ## Startup
 
-1. `gc prime` — orient.
+1. `gc prime` — orient after `$DEV_PACK_STEP_BEAD` is safely bound.
 2. `gc mail check` — any instructions?
-3. Read your assignment: your step bead's description names the diff to review
+3. Read `$DEV_PACK_STEP_BEAD`: its description names the diff to review
    (`base_ref`...`head_ref`) and the exact JSON schema to emit. That description
    is authoritative for *what to produce this run*.
 

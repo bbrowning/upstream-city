@@ -20,6 +20,9 @@
 set -euo pipefail
 
 GC="${GC_BIN:-gc}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=dispatch-guard.sh
+source "$SCRIPT_DIR/dispatch-guard.sh"
 BEAD="" ; JF="" ; SCHEMA="" ; OUTCOME="pass" ; FCLASS="none" ; FREASON="" ; REASON="" ; NOTIFY="" ; SUBJECT="" ; RENDER="" ; CONSUME=0 ; QUIESCE=0
 WORK_OUTCOME="" ; WORK_COMMIT="" ; WORK_BRANCH=""
 
@@ -68,6 +71,12 @@ if [ -n "$WORK_OUTCOME$WORK_COMMIT$WORK_BRANCH" ]; then
     [ -n "$WORK_OUTCOME" ] && [ -n "$WORK_COMMIT" ] && [ -n "$WORK_BRANCH" ] \
         || die "work record requires --work-outcome, --work-commit, and --work-branch together"
 fi
+
+# The trigger fence precedes every provenance/output mutation. The lock is shared
+# city-wide across all rig worktrees, so two pooled sessions cannot both observe an
+# empty output slot and then clobber one another.
+dev_pack_acquire_output_lock "$BEAD" || exit $?
+dev_pack_assert_output_slot_empty "$BEAD" >/dev/null || exit $?
 
 # --- write metadata (MERGE — never --metadata '{…}', which wipes routing keys) ---
 "$GC" bd update "$BEAD" --set-metadata "gc.output_json=$OUT" --set-metadata "gc.outcome=$OUTCOME"

@@ -24,6 +24,8 @@ set -euo pipefail
 
 GC="${GC_BIN:-gc}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=dispatch-guard.sh
+source "$SCRIPT_DIR/dispatch-guard.sh"
 NORMALIZE="$SCRIPT_DIR/normalize-pr-target.sh"
 BEAD="" ; ROOT="" ; AF="" ; OUTCOME="pass" ; FCLASS="none" ; FREASON="" ; REASON="" ; CONSUME=0
 
@@ -63,6 +65,9 @@ if [ -n "$pr" ]; then
     pr=$(printf '%s' "$PN" | jq -r '.spec')
     OUT=$(printf '%s' "$OUT" | jq -c --arg pr "$pr" '.pr = $pr')
 fi
+
+dev_pack_acquire_output_lock "$BEAD" || exit $?
+dev_pack_assert_output_slot_empty "$BEAD" >/dev/null || exit $?
 
 # --- guard: --bead must be the caller's own step bead, never the workflow root
 # or the (unrelated) --root-bead verdict bead. Both mistakes have happened: the

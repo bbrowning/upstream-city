@@ -29,14 +29,16 @@ step bead with your verdict.
 
 {{template "worktree-guard" .}}
 
+{{template "trigger-claim" .}}
+
 If `pwd` is the rig root, stop: emit a `block` posture with `failure_class=hard`
 and `failure_reason=work_dir-misresolved-to-rig-root`.
 
 ## Startup
 
-1. `gc prime` — orient.
+1. `gc prime` — orient after `$DEV_PACK_STEP_BEAD` is safely bound.
 2. `gc mail check` — any instructions from the lead?
-3. Read your assignment: your step bead's description names the PR to triage
+3. Read `$DEV_PACK_STEP_BEAD`: its description names the PR to triage
    (`base_ref`...`head_ref`, where `head_ref` may be a PR number `N`, a branch,
    or a sha) and the exact `pr-triage.v1` schema to emit. That description is
    authoritative for *what to produce this run*.

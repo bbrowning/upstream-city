@@ -165,6 +165,30 @@ def resolve_retry_attempt(bead_id: str) -> str:
     return active[0]
 
 
+def validate_trigger(bead_id: str) -> None:
+    """Bind a managed pool emission to its exact immutable launch trigger."""
+    trigger = os.environ.get("GC_TRIGGER_BEAD_ID", "").strip()
+    if not trigger:
+        if os.environ.get("GC_SESSION_ORIGIN") == "ephemeral":
+            die("GC_TRIGGER_BEAD_ID is required in pooled sessions")
+        return
+    if trigger != bead_id:
+        die(f"--bead {bead_id!r} does not match GC_TRIGGER_BEAD_ID {trigger!r}")
+    gc = os.environ.get("GC_BIN", "gc")
+    completed = subprocess.run(
+        [gc, "bd", "show", trigger, "--json"], text=True, capture_output=True,
+    )
+    if completed.returncode != 0:
+        die(f"could not inspect trigger bead {trigger!r}: {completed.stderr.strip()}")
+    try:
+        value = json.loads(completed.stdout)
+        bead = value[0] if isinstance(value, list) else value
+    except (json.JSONDecodeError, IndexError, TypeError) as exc:
+        die(f"could not parse trigger bead {trigger!r}: {exc}")
+    if not isinstance(bead, dict) or bead.get("id") != trigger:
+        die(f"trigger lookup did not resolve exact bead id {trigger!r}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bead", required=True)
@@ -200,6 +224,9 @@ def main() -> None:
     if payload["failure_reason"] != args.failure_reason:
         die("JSON failure_reason does not match --failure-reason")
 
+    # This check is deliberately before retry resolution and before either child
+    # emitter can write failure provenance.
+    validate_trigger(args.bead)
     target_bead = resolve_retry_attempt(args.bead)
 
     script_dir = Path(__file__).resolve().parent
@@ -237,6 +264,8 @@ def main() -> None:
         handle.flush()
         command[command.index("PLACEHOLDER")] = handle.name
         emitter_env = os.environ.copy()
+        emitter_env["DEV_PACK_VALIDATED_TRIGGER_BEAD_ID"] = args.bead
+        emitter_env["DEV_PACK_VALIDATED_OUTPUT_BEAD_ID"] = target_bead
         if args.auto_settle and payload["has_disputed_major"]:
             # The initial disputed synthesis is durable but intermediate. Quality
             # auto-settle sends one human-facing verdict after final re-synthesis.

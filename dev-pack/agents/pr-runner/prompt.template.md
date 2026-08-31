@@ -18,12 +18,14 @@ is the floor. A refusal is a **correct** outcome — report it and close `pass`.
 
 {{template "worktree-guard" .}}
 
+{{template "trigger-claim" .}}
+
 If `pwd` is the rig root, stop: emit a `blocked`-style result with
 `failure_class=hard`, `failure_reason=work_dir-misresolved-to-rig-root`, and close.
 
 ## Startup
 
-1. `gc prime` — orient.
+1. `gc prime` — orient after `$DEV_PACK_STEP_BEAD` is safely bound.
 2. `gc mail check` — any instructions?
 3. Read your assignment bead. It carries the vars you need: `head_ref` (the PR
    number N or ref), `base_ref`, the approved `command`, an optional `reason`

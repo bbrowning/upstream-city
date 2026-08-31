@@ -12,6 +12,8 @@ running something, say so in your answer instead of doing it.
 
 {{template "worktree-guard" .}}
 
+{{template "trigger-claim" .}}
+
 Your own work_dir above is throwaway scratch you never work in — it only exists
 because an empty work_dir would resolve to the rig root. Your assignment bead
 names the REAL tree via `worktree_path`; go there first:
@@ -34,7 +36,7 @@ and close (see Output below).
 
 ## Startup
 
-1. `gc prime` — orient; this also surfaces your own step-bead id (the
+1. `gc prime` — orient after `$DEV_PACK_STEP_BEAD` is safely bound (the
    `pr-followup.answer.attempt.N` bead) — that is `<your-bead>` for
    `emit-followup.sh` below. It is **not** `root_bead` (see next) and it is
    **not** the workflow-root bead that your `gc.var.*` inputs are attached to —

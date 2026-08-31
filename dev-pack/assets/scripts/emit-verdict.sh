@@ -22,6 +22,8 @@ set -euo pipefail
 
 GC="${GC_BIN:-gc}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=dispatch-guard.sh
+source "$SCRIPT_DIR/dispatch-guard.sh"
 NORMALIZE="$SCRIPT_DIR/normalize-pr-target.sh"
 RESOLVE_LOCAL="$SCRIPT_DIR/resolve-local-change.sh"
 BEAD="" ; VF="" ; OUTCOME="pass" ; FCLASS="none" ; FREASON="" ; REASON=""
@@ -68,6 +70,11 @@ done
 [ -n "$BEAD" ] || die "usage: --bead is required"
 [ -n "$VF" ] && [ -f "$VF" ] || die "usage: --verdict-file must be an existing file"
 OUT=$(jq -c . "$VF") || die "verdict file is not valid JSON: $VF"
+
+# Fence the target before provenance validation can enter its retry-failure write
+# path, then serialize the entire durable write/readback/close transaction.
+dev_pack_acquire_output_lock "$BEAD" || exit $?
+dev_pack_assert_output_slot_empty "$BEAD" >/dev/null || exit $?
 
 # Local-change lane provenance is a controller contract, not reviewer prose. Validate
 # it immediately before the atomic close against both the assigned formula values and
