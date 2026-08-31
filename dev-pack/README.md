@@ -145,8 +145,10 @@ gc dev-pack review 53174 --rig vllm --dry-run
 
 Local refs and artifacts are resolved inside the selected rig without a remote
 fallback. Reviewers verify the exact base/head pair immediately before reading
-the diff. N=2 runs independent profiles followed by strict synthesis; the most
-conservative supported verdict wins.
+the diff. Canonical artifacts also require their producer workflow and work-bead
+lifecycle record to bind the exact artifact id, revision, branch, and SHA; a
+self-consistent or re-hashed JSON file is not enough. N=2 runs independent profiles
+followed by strict synthesis; the most conservative supported verdict wins.
 
 Results arrive as readable mail and remain durable as structured verdict
 evidence. Re-render a stored verdict without an LLM:
@@ -226,13 +228,15 @@ Approved-only closure and local-only guarantees remain active during recovery.
 
 ## Dynamic-check safety
 
-Review can execute one narrowly scoped test only when the deterministic prescan
-ceiling is `trusted`. A `limited` verdict may propose a command, but execution
-requires an explicit human-approved `pr-review-dynamic` dispatch. Restricted and
-blocked inputs run nothing. The gate rechecks posture, command shape, test path,
-expected PR SHA, timeout, output cap, and worktree cleanliness; an agent cannot
-widen it. Environment or network failures are reported as `could_not_verify`, not
-as code failures.
+Review can execute one narrowly scoped test when the deterministic prescan ceiling is
+`trusted`. A canonical internal-producer artifact may also execute at `limited` after
+the gate independently validates its allowlisted workflow, producer lifecycle bead,
+and exact immutable range. External `limited` input still requires an explicit
+human-approved `pr-review-dynamic` dispatch; restricted and blocked inputs run
+nothing regardless of provenance. The gate rechecks posture, authority, command
+shape, test path, expected SHA, timeout, output cap, and worktree cleanliness.
+Environment or network failures are reported as `could_not_verify`, not as code
+failures.
 
 Setup, trust-list, and prepared-test-environment details live in
 [Bootstrapping a new rig](../docs/rig-bootstrap.md#enable-dev-pack-on-the-rig).

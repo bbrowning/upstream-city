@@ -110,7 +110,7 @@ if [ "$VALIDATE_IMPL" -eq 1 ]; then
         if [ "$IMPL_ID" = "explicit-local-ref" ]; then
             resolve_args=(--repo "$REVIEW_REPO" --rig "${GC_RIG:-vllm}" --head "$IMPL_REF" --base "$IMPL_BASE")
         else
-            resolve_args=(--repo "$REVIEW_REPO" --rig "${GC_RIG:-vllm}" --artifact "$IMPL_REF")
+            resolve_args=(--repo "$REVIEW_REPO" --rig "${GC_RIG:-vllm}" --artifact "$IMPL_REF" --require-internal-producer)
         fi
         if ! fresh=$("$RESOLVE_LOCAL" "${resolve_args[@]}" 2>&1); then
             retry_provenance_failure "fresh artifact resolution failed: $fresh"

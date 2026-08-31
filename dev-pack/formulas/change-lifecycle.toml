@@ -64,7 +64,7 @@ title = "Validate immutable artifact and classify review posture"
 description = """
 This is an offline local-change triage for `{{work_bead}}`. Before emitting
 pr-triage.v1, run resolve-local-change.sh with `--artifact
-{{implementation_artifact_ref}}` and require artifact id
+{{implementation_artifact_ref}} --require-internal-producer` and require artifact id
 `{{implementation_artifact_id}}`, repository `{{implementation_repository_id}}`, branch
 `{{implementation_branch}}`, revision {{implementation_revision}}, and the exact range
 `{{base_ref}}...{{head_ref}}`. Fail hard on drift; never fetch. Then apply the normal
@@ -81,9 +81,13 @@ title = "Reviewer A: exact immutable artifact revision {{implementation_revision
 needs = ["triage"]
 description = """
 Follow the standard pr-review.v1 reviewer method and change-review persona lens. Re-run
-resolve-local-change.sh immediately before reading the diff and require the supplied
+resolve-local-change.sh --require-internal-producer immediately before reading the diff and require the supplied
 artifact/repository/branch/revision plus exact `{{base_ref}}...{{head_ref}}`. Review
-read-only and offline. Preserve all values in implementation_provenance. Emit
+read-only and offline. Apply internal-producer latitude: a `limited` content ceiling
+may run one bounded relevant check through run-scoped-check.sh with
+`--internal-artifact {{implementation_artifact_ref}} --min-ceiling limited`; restricted
+or block remains execution-denied.
+Preserve all values in implementation_provenance. Emit
 pr-review.v1 with skeptical findings and an independently reached verdict.
 """
 metadata = { "gc.run_target" = "{{lane_a_target}}", "gc.review_quorum_lane" = "reviewer-a", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
@@ -97,9 +101,11 @@ title = "Reviewer B: exact immutable artifact revision {{implementation_revision
 needs = ["triage"]
 description = """
 Follow the standard pr-review.v1 reviewer method and change-review persona lens. Re-run
-resolve-local-change.sh immediately before reading the diff and require the supplied
+resolve-local-change.sh --require-internal-producer immediately before reading the diff and require the supplied
 artifact/repository/branch/revision plus exact `{{base_ref}}...{{head_ref}}`. Review
-read-only and offline, independently of lane A. Preserve implementation_provenance and
+read-only and offline, independently of lane A. Apply the same internal-producer
+limited-only execution latitude through run-scoped-check.sh; restricted/block stays
+denied. Preserve implementation_provenance and
 emit pr-review.v1.
 """
 metadata = { "gc.run_target" = "{{lane_b_target}}", "gc.review_quorum_lane" = "reviewer-b", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }

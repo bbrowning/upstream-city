@@ -56,7 +56,8 @@ default = ""
 id = "triage"
 title = "Validate immutable artifact and classify review posture"
 description = """
-Offline local-change triage. Run resolve-local-change.sh and require artifact
+Offline local-change triage. Run resolve-local-change.sh with
+`--require-internal-producer` and require artifact
 `{{implementation_artifact_id}}`, repository `{{implementation_repository_id}}`, branch
 `{{implementation_branch}}`, revision {{implementation_revision}}, and exact
 `{{base_ref}}...{{head_ref}}`; never fetch. Emit standard pr-triage.v1.
@@ -73,7 +74,9 @@ needs = ["triage"]
 description = """
 Apply the standard pr-review.v1 method and change-review personas. Independently
 re-resolve the artifact immediately before reading, preserve exact implementation
-provenance, remain read-only/offline, and emit pr-review.v1.
+provenance, remain read-only/offline, and emit pr-review.v1. A `limited` ceiling may
+run one bounded relevant check through run-scoped-check.sh only with the validated
+`--internal-artifact` authority; restricted/block remains execution-denied.
 """
 metadata = { "gc.run_target" = "{{lane_a_target}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
 [steps.retry]

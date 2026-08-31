@@ -2,7 +2,8 @@
 # posture-latitude.sh — PURE fixed posture->latitude table. No diff, no network,
 # no LLM, no state. The reviewer evals this to gate ITSELF:
 #
-#   eval "$(posture-latitude.sh "$effective_posture")"   # sets FETCH EXEC GATE
+#   eval "$(posture-latitude.sh "$effective_posture" [external|internal-producer])"
+#                                                        # sets FETCH EXEC GATE
 #
 # Keeping it a trivially-auditable pure function is the point: a prompt-injected
 # reviewer cannot widen its own latitude by talking to this script — the mapping
@@ -21,22 +22,22 @@
 #           blocked   -> do not review; route to a human
 #           suggest   -> RETIRED in Phase 2 (was the Phase-1 trusted preview token)
 #
-# PHASE 2 (LIVE): only the `trusted` row grants EXEC=allow — the reviewer may
-# auto-run ONE in-scope check on changed code, unattended, via run-scoped-check.sh
-# (which re-derives the deterministic ceiling and refuses if it dropped). Every
-# other posture stays EXEC=deny: an agent NEVER runs limited/restricted/block code
-# on its own. `limited` execution happens ONLY out-of-band, when a human slings the
-# `pr-review-dynamic` approval lane — that lane adds the human's EXEC token on top
-# of this same deterministic floor; it does NOT go through this table (which
-# correctly still says `deny` for what an agent may do unattended).
+# PHASE 2 (LIVE): `trusted` external input grants EXEC=allow. A provenance-validated
+# internal producer artifact also grants bounded execution when content scanning caps
+# it at `limited`; the producer authority replaces GitHub author identity, but never
+# overrides `restricted` or `block` content signals. `limited` external execution
+# remains human-only through pr-review-dynamic.
 set -euo pipefail
 
-POSTURE="${1:?usage: posture-latitude.sh <trusted|limited|restricted|block>}"
+POSTURE="${1:?usage: posture-latitude.sh <trusted|limited|restricted|block> [external|internal-producer]}"
+AUTHORITY="${2:-external}"
+case "$AUTHORITY" in external|internal-producer) ;; *) echo "posture-latitude: unknown authority '$AUTHORITY'" >&2; exit 2 ;; esac
 
-case "$POSTURE" in
-    trusted)    echo 'FETCH=allowlist EXEC=allow GATE=none' ;;    # Phase 2: reviewer auto-runs one in-scope check
-    limited)    echo 'FETCH=metadata EXEC=deny GATE=human' ;;
-    restricted) echo 'FETCH=none EXEC=deny GATE=none' ;;
-    block)      echo 'FETCH=none EXEC=deny GATE=blocked' ;;
+case "$POSTURE:$AUTHORITY" in
+    trusted:*)                  echo 'FETCH=allowlist EXEC=allow GATE=none' ;;
+    limited:internal-producer)  echo 'FETCH=none EXEC=allow GATE=none' ;;
+    limited:external)           echo 'FETCH=metadata EXEC=deny GATE=human' ;;
+    restricted:*) echo 'FETCH=none EXEC=deny GATE=none' ;;
+    block:*)      echo 'FETCH=none EXEC=deny GATE=blocked' ;;
     *) echo "posture-latitude: unknown posture '$POSTURE'" >&2; exit 2 ;;
 esac

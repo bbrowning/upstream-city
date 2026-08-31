@@ -11,7 +11,8 @@
 #
 #   run-scoped-check.sh --head <ref|N> --base <ref> --min-ceiling <limited|trusted> \
 #       [--timeout SECS] [--output-cap BYTES] [--expect-head-sha SHA] \
-#       [--allow-path-prefix PREFIX] [--prescan PATH] -- python -m pytest <nodeid> ...
+#       [--allow-path-prefix PREFIX] [--prescan PATH]
+#       [--internal-artifact <file|bead>] -- python -m pytest <nodeid> ...
 #
 # Runs in the caller's own worktree, which MUST be checked out at the PR head (the
 # reviewer/runner fetches + `git checkout --detach` first). This gate VERIFIES that
@@ -45,6 +46,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 HEAD="" ; BASE="origin/main" ; MIN_CEILING="" ; TIMEOUT=600 ; CAP=65536
 EXPECT_SHA="" ; ALLOW_PREFIX="tests/" ; PRESCAN="$HERE/pr-prescan.sh"
+INTERNAL_ARTIFACT="" ; AUTHORITY="external"
+RESOLVE_LOCAL="$HERE/resolve-local-change.sh"
 declare -a CMD=()
 
 die() { printf '%s\n' "run-scoped-check: $*" >&2; exit 2; }
@@ -67,6 +70,8 @@ while [ $# -gt 0 ]; do
         --allow-path-prefix=*) ALLOW_PREFIX="${1#*=}"; shift ;;
         --prescan)          PRESCAN="${2:?}"; shift 2 ;;
         --prescan=*)        PRESCAN="${1#*=}"; shift ;;
+        --internal-artifact) INTERNAL_ARTIFACT="${2:?}"; shift 2 ;;
+        --internal-artifact=*) INTERNAL_ARTIFACT="${1#*=}"; shift ;;
         --)                 shift; CMD=("$@"); break ;;
         -*)                 die "unknown option '$1'" ;;
         *)                  die "unexpected argument '$1' (did you forget '--' before the command?)" ;;
@@ -83,6 +88,23 @@ HEAD=$(printf '%s' "$HEAD_NORM" | jq -r '.spec')
 
 rank() { case "$1" in block) echo 0;; restricted) echo 1;; limited) echo 2;; trusted) echo 3;; *) echo 3;; esac; }
 
+# Internal execution authority is never inferred from a ref or a self-consistent
+# JSON object. Re-resolve the canonical artifact against its producer lifecycle
+# bead and require this exact immutable range before considering execution.
+if [ -n "$INTERNAL_ARTIFACT" ]; then
+    [ -x "$RESOLVE_LOCAL" ] || die "local artifact resolver not found/executable: $RESOLVE_LOCAL"
+    INTERNAL_JSON=$("$RESOLVE_LOCAL" --repo . --rig "${GC_RIG:-vllm}" \
+        --artifact "$INTERNAL_ARTIFACT" --require-internal-producer) \
+        || die "internal artifact provenance validation failed"
+    INTERNAL_HEAD=$(printf '%s' "$INTERNAL_JSON" | jq -r '.head.sha')
+    INTERNAL_BASE=$(printf '%s' "$INTERNAL_JSON" | jq -r '.base.sha')
+    [ "$HEAD" = "$INTERNAL_HEAD" ] \
+        || die "internal artifact head mismatch: gate=$HEAD artifact=$INTERNAL_HEAD"
+    [ "$BASE" = "$INTERNAL_BASE" ] \
+        || die "internal artifact base mismatch: gate=$BASE artifact=$INTERNAL_BASE"
+    AUTHORITY="internal-producer"
+fi
+
 # emit <outcome> [k v k v ...] : print scoped-check.v1 and exit 0.
 # Fixed fields default empty/false/0; extra k/v pairs override via a JSON merge.
 emit() {
@@ -94,6 +116,7 @@ emit() {
         --arg outcome "$outcome" \
         --arg command "${CMD[*]}" \
         --arg head "$HEAD" --arg base "$BASE" --arg min_ceiling "$MIN_CEILING" \
+        --arg authority "$AUTHORITY" \
         --argjson timeout_s "$TIMEOUT" \
         --argjson extra "$extra" \
         '{schema:$schema, outcome:$outcome, command:$command, head_ref:$head,
@@ -101,13 +124,14 @@ emit() {
           ran:false, rc:null, ceiling:null, env_used:null, env_source:null,
           reason_if_skipped:"", duration_s:null, output_tail:"", head_sha:null,
           git_clean_before:null, git_clean_after:null, mutations_delta:[],
-          network_hint:false, failure_class:"none", failure_reason:""} + $extra'
+          network_hint:false, execution_authority:$authority,
+          failure_class:"none", failure_reason:""} + $extra'
     exit 0
 }
 
 # --- GATE 1: command form (prepared-env pytest, no shell metachars) -----------
 # argv is executed directly (no shell), but we still reject metacharacters and
-# non-prepared interpreters defensively. Command must be: python [-m] <args...>.
+# non-prepared interpreters defensively. The command must use prepared Python.
 case "${CMD[0]}" in
     python|python3) ;;
     *) emit skipped reason_if_skipped "command-not-in-prepared-env-form: must start with 'python' (got '${CMD[0]}')" ;;
@@ -233,6 +257,7 @@ jq -n \
     --arg head "$HEAD" --arg base "$BASE" --arg min_ceiling "$MIN_CEILING" \
     --arg ceiling "$CEILING" \
     --arg env_used "$PY" --arg env_source "$ENV_SOURCE" \
+    --arg authority "$AUTHORITY" \
     --arg head_sha "$CUR_SHA" \
     --arg output_tail "$OUTPUT_TAIL" \
     --argjson ran true \
@@ -249,4 +274,4 @@ jq -n \
       timeout_s:$timeout_s, duration_s:$duration_s, output_tail:$output_tail,
       head_sha:$head_sha, git_clean_before:$clean_before, git_clean_after:$clean_after,
       mutations_delta:$delta, network_hint:$net_hint, failure_class:"none",
-      failure_reason:""}'
+      failure_reason:"", execution_authority:$authority}'

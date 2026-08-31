@@ -67,7 +67,16 @@ done
 case "${1:-} ${2:-}" in
   "rig list") jq -cn --arg path "$MOCK_REPO" '{rigs:[{name:"paude",path:$path}]}' ;;
   "agent list") printf '%s\n' paude/pr-reviewer-a-frontier-xhigh paude/pr-reviewer-b-frontier-xhigh paude/pr-review-synthesizer ;;
-  "bd show") jq -cn --rawfile artifact "$MOCK_ARTIFACT" '[{metadata:{"gc.output_json":({local_change:($artifact|fromjson)}|tojson)}}]' ;;
+  "bd show")
+    if [ "${3:-}" = fixture-1 ]; then
+      jq -cn --rawfile artifact "$MOCK_ARTIFACT" '
+        ($artifact|fromjson) as $a |
+        [{metadata:{"gc.lifecycle_json":({schema:"work-lifecycle.v1",intent_kind:$a.producer.intent_kind,
+          checkpoint:"implementation",disposition:"awaiting_review",iteration:$a.revision.number,
+          artifact_id:$a.artifact_id,head_sha:$a.head.sha,branch:$a.head.branch}|tojson)}}]'
+    else
+      jq -cn --rawfile artifact "$MOCK_ARTIFACT" '[{metadata:{"gc.output_json":({local_change:($artifact|fromjson)}|tojson)}}]'
+    fi ;;
   *)
     if printf '%s\n' "${args[@]}" | grep -qx sling; then printf '%s\n' "${args[@]}"; else exit 2; fi ;;
 esac

@@ -6,6 +6,7 @@ GC="${GC_BIN:-gc}" ; CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VALIDATE_COMMITS="$SCRIPT_DIR/validate-commit-series.py"
 REPO="." ; RIG="" ; ARTIFACT="" ; HEAD="" ; BASE="origin/main"
+REQUIRE_INTERNAL_PRODUCER=false
 die() { printf '%s\n' "resolve-local-change: $*" >&2; exit 2; }
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -14,6 +15,7 @@ while [ $# -gt 0 ]; do
         --artifact) ARTIFACT="${2:?}"; shift 2 ;; --artifact=*) ARTIFACT="${1#*=}"; shift ;;
         --head) HEAD="${2:?}"; shift 2 ;; --head=*) HEAD="${1#*=}"; shift ;;
         --base) BASE="${2:?}"; shift 2 ;; --base=*) BASE="${1#*=}"; shift ;;
+        --require-internal-producer) REQUIRE_INTERNAL_PRODUCER=true; shift ;;
         -*) die "unknown option '$1'" ;; *) die "unexpected argument '$1'" ;;
     esac
 done
@@ -49,7 +51,9 @@ fi
 CHANGE=$(printf '%s' "$RAW" | jq -ce '.local_change // .') || die "could not read local change"
 printf '%s' "$CHANGE" | jq -e '
     .schema == "local-change.v1" and (.artifact_id|type=="string") and
-    (.producer.rig|type=="string") and (.repository.id|type=="string") and
+    (.producer.rig|type=="string") and (.producer.workflow|type=="string") and
+    (.producer.bead|type=="string") and (.producer.intent_kind|type=="string") and
+    (.repository.id|type=="string") and
     (.base.sha|test("^[0-9a-f]{40,64}$")) and (.head.sha|test("^[0-9a-f]{40,64}$")) and
     (.head.branch|type=="string") and (.revision.number|type=="number")' >/dev/null \
     || die "artifact does not satisfy local-change.v1"
@@ -61,6 +65,44 @@ ART_REPO=$(printf '%s' "$CHANGE" | jq -r '.repository.id')
 BODY=$(printf '%s' "$CHANGE" | jq -S -c 'del(.artifact_id)')
 EXPECTED_ID=$(printf '%s' "$BODY" | sha256sum | awk '{print $1}')
 [ "$(printf '%s' "$CHANGE" | jq -r '.artifact_id')" = "$EXPECTED_ID" ] || die "artifact integrity check failed"
+
+# Content addressing proves that the object is internally consistent, not that it
+# came from a dev-pack producer. Execution latitude requires the stronger ledger
+# binding below: an allowlisted producer workflow plus the producer work bead's
+# durable lifecycle record naming this exact artifact, revision, branch, and SHA.
+# Arbitrary local refs and merely re-hashed JSON therefore remain reviewable data
+# but cannot claim internal-producer execution authority.
+if [ "$REQUIRE_INTERNAL_PRODUCER" = true ]; then
+    PRODUCER_WORKFLOW=$(printf '%s' "$CHANGE" | jq -r '.producer.workflow')
+    PRODUCER_INTENT=$(printf '%s' "$CHANGE" | jq -r '.producer.intent_kind')
+    PRODUCER_BEAD=$(printf '%s' "$CHANGE" | jq -r '.producer.bead')
+    GENERATOR=$(printf '%s' "$CHANGE" | jq -r '.provenance.generator // ""')
+    case "$PRODUCER_WORKFLOW:$PRODUCER_INTENT" in
+        feature-dev:feature|hard-bug-finalize:hard_bug) ;;
+        *) die "artifact producer workflow is not eligible for internal execution: $PRODUCER_WORKFLOW/$PRODUCER_INTENT" ;;
+    esac
+    [ "$GENERATOR" = "dev-pack/emit-local-change.sh" ] \
+        || die "artifact generator is not eligible for internal execution: $GENERATOR"
+    [ -n "$PRODUCER_BEAD" ] || die "artifact has no producer lifecycle bead"
+    PRODUCER_RAW=$("$GC" --city "$CITY" --rig "$RIG" bd show "$PRODUCER_BEAD" --json 2>/dev/null) \
+        || die "producer lifecycle bead '$PRODUCER_BEAD' is missing in rig '$RIG'"
+    PRODUCER_LIFECYCLE=$(printf '%s' "$PRODUCER_RAW" | jq -cer '
+        (if type == "array" then .[0] else . end).metadata["gc.lifecycle_json"]
+        | if type == "string" then fromjson else . end') \
+        || die "producer lifecycle bead '$PRODUCER_BEAD' has no valid gc.lifecycle_json"
+    ARTIFACT_ID=$(printf '%s' "$CHANGE" | jq -r '.artifact_id')
+    ARTIFACT_HEAD=$(printf '%s' "$CHANGE" | jq -r '.head.sha')
+    ARTIFACT_BRANCH=$(printf '%s' "$CHANGE" | jq -r '.head.branch')
+    ARTIFACT_REVISION=$(printf '%s' "$CHANGE" | jq -r '.revision.number')
+    printf '%s' "$PRODUCER_LIFECYCLE" | jq -e \
+        --arg intent "$PRODUCER_INTENT" --arg id "$ARTIFACT_ID" \
+        --arg head "$ARTIFACT_HEAD" --arg branch "$ARTIFACT_BRANCH" \
+        --argjson revision "$ARTIFACT_REVISION" '
+        .schema == "work-lifecycle.v1" and .intent_kind == $intent and
+        .artifact_id == $id and .head_sha == $head and .branch == $branch and
+        .iteration == $revision' >/dev/null \
+        || die "producer lifecycle bead '$PRODUCER_BEAD' does not bind the exact artifact revision"
+fi
 
 BASE_SHA=$(printf '%s' "$CHANGE" | jq -r '.base.sha')
 HEAD_SHA=$(printf '%s' "$CHANGE" | jq -r '.head.sha')

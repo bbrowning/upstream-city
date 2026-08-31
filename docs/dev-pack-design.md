@@ -75,7 +75,11 @@ rejected with human extraction guidance, and valid human sign-offs are preserved
 The gate reports immutable evidence and never rewrites commit history or manufactures
 a human identity.
 Artifact review verifies same-repository identity and that the branch still
-resolves to the recorded SHA. Rewriting history requires a new artifact revision.
+resolves to the recorded SHA. Internal-producer execution authority additionally
+requires an allowlisted producing workflow and the producer work bead's durable
+`gc.lifecycle_json` to bind the exact artifact id, intent, revision, branch, and SHA.
+Content addressing alone is not producer provenance. Rewriting history requires a
+new artifact revision.
 
 ### Review verdicts
 
@@ -97,23 +101,38 @@ closure rules.
 ## Review posture and dynamic execution
 
 `pr-prescan.sh` deterministically derives the maximum posture from PR metadata and
-changed content. Prompts may downgrade that ceiling but cannot raise it.
+changed content. Prompts may downgrade that ceiling but cannot raise it. Execution
+authority is a separate input: external PR/ref review uses GitHub/operator identity;
+canonical local output uses the validated producer lifecycle described above.
 
 - `trusted`: at most one in-scope check may auto-run.
-- `limited`: the verdict may propose a scoped command; a human must explicitly
-  dispatch `pr-review-dynamic`.
-- `restricted` or `block`: no PR code runs.
+- `limited`: external input may only propose a human-dispatched dynamic check. A
+  canonical internal-producer artifact may run one scoped check because its identity
+  cap comes from local workflow provenance; content-derived `limited` reasons remain
+  visible in the verdict and gate evidence.
+- `restricted` or `block`: no changed code runs, regardless of authority.
 
-`run-scoped-check.sh` independently re-derives posture and rejects commands below
-the required floor. It accepts prepared-environment pytest commands only, rejects
-shell metacharacters and out-of-scope targets, verifies the expected PR head,
-bounds time and output, and records git status before and after. Network and
-environment limitations produce `could_not_verify`.
+`run-scoped-check.sh` independently re-derives posture and, for internal execution,
+revalidates the producer ledger binding and exact immutable range. It rejects
+restricted/block content regardless of producer, accepts prepared-environment Python
+test commands and (for internal-producer authority only) the exact isolated-uv CI
+reproducer form, rejects shell metacharacters and out-of-scope targets, verifies
+the expected head, bounds time and output, and records git status before and after.
+`--ci-color` unsets inherited `NO_COLOR` and forces a color-capable terminal so
+rendered-output assertions can reproduce CI behavior. Network and environment
+limitations produce `could_not_verify`.
 
-Trusted-author configuration changes identity posture only. File-pattern,
+Before selecting that one check, review lanes run
+`scan-rendered-output-assertions.py` over newly added test lines. A raw option-token
+assertion against `.output`/`.stdout` is deterministic major evidence when the test
+does not use the repository's ANSI-stripping helper; the reported pytest node takes
+priority for a `--ci-color` check. This static contract still returns
+`request_changes` if the runtime environment cannot be prepared.
+
+Trusted-author and internal-producer authority change identity posture only. File-pattern,
 dependency, CI, serialization, and dynamic-execution caps still apply, and the
-strictest signal wins. Keep the allowlist tracked because it controls unattended
-execution eligibility.
+strictest signal wins. Restricted and block signals can never be overridden. Keep
+the allowlist tracked because it controls unattended execution eligibility.
 
 ## Personas
 

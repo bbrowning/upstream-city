@@ -37,7 +37,18 @@ mkdir -p "$TMP/bin"
 cat >"$TMP/bin/gc" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$MOCK_GC_LOG"
-if [ "${1-} ${2-}" = "bd show" ]; then
+while [ $# -gt 0 ]; do
+  case "$1" in --city|--rig) shift 2 ;; *) break ;; esac
+done
+if [ "${1-} ${2-}" = "rig list" ]; then
+  jq -cn '{rigs:[{name:"fixture",path:"/unused"}]}'
+elif [ "${1-} ${2-} ${3-}" = "bd show fixture-impl" ]; then
+  lifecycle=$(jq -cn --arg id "$PRODUCER_ID" --arg head "$PRODUCER_HEAD" --arg branch "$PRODUCER_BRANCH" \
+    --argjson revision "$PRODUCER_REVISION" \
+    '{schema:"work-lifecycle.v1",intent_kind:"feature",checkpoint:"implementation",
+      disposition:"awaiting_review",iteration:$revision,artifact_id:$id,head_sha:$head,branch:$branch}')
+  jq -cn --arg lifecycle "$lifecycle" '[{metadata:{"gc.lifecycle_json":$lifecycle}}]'
+elif [ "${1-} ${2-}" = "bd show" ]; then
   line=$(grep "bd update $3 --set-metadata gc.output_json=" "$MOCK_GC_LOG" | tail -n 1)
   out=${line#*gc.output_json=}; out=${out% --set-metadata gc.outcome=*}
   outcome=${line##*gc.outcome=}; outcome=${outcome%% *}
@@ -50,6 +61,7 @@ chmod +x "$TMP/bin/gc"
 emit() {
   local bead=$1 verdict=$2
   MOCK_GC_LOG="$TMP/gc.log" GC_BIN="$TMP/bin/gc" GC_RIG=fixture GC_PR_NOTIFY_TO='' \
+    PRODUCER_ID="$ID" PRODUCER_HEAD="$HEAD" PRODUCER_BRANCH="$BRANCH" PRODUCER_REVISION="$REVISION" \
     "$EMIT_VERDICT" --bead "$bead" --verdict-file "$verdict" --outcome pass --repo "$TMP/repo" \
       --implementation-artifact-ref "$REF" --implementation-artifact-id "$ID" \
       --implementation-repository-id "$REPO_ID" --implementation-branch "$BRANCH" \

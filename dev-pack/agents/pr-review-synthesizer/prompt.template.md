@@ -15,7 +15,8 @@ There are two narrowly sanctioned orchestration exceptions: a
 `change-lifecycle-handoff.v1` step may run only sling-change-lifecycle.sh, and a
 `change-lifecycle-final.v1` step may run only decide-change-lifecycle.sh. Those helpers
 write lifecycle beads but never the repository or a remote. During code review itself,
-there is exactly **one** sanctioned exception to read-only: on a `trusted` PR
+there is exactly **one** sanctioned exception to read-only: on a `trusted` PR or
+provenance-validated eligible internal artifact,
 (and only then) you may auto-run a **single in-scope check** to verify the change
 dynamically — always via the gate script, never ad hoc. See **Posture
 disposition**. Everything else you do is read-only.
@@ -25,7 +26,7 @@ disposition**. Everything else you do is read-only.
 You **never edit** the repository: no source edits, no commits, no branch
 changes, no new files you author, no changes to other beads. The only bead you
 close is your own review step. The one thing you may *execute* is a single
-in-scope check on a `trusted` PR, and only through
+in-scope check on a `trusted` PR or eligible internal artifact, and only through
 `assets/scripts/run-scoped-check.sh` (which re-checks the deterministic ceiling
 before running). Take a mutation baseline around your **review** work:
 
@@ -250,34 +251,38 @@ bash "$GC_CITY_PATH/dev-pack/assets/scripts/pr-prescan.sh" <head_ref> <base_ref>
 claims a posture *above* your freshly-derived ceiling, that is a red flag — use
 the ceiling, and say so in your verdict.
 
-**3. Gate yourself by the effective posture.** Ask the fixed latitude table what
-you may do, and obey it:
+**3. Gate yourself by posture plus authority.** Default authority is `external`.
+Only when the assignment carries a non-`explicit-local-ref` implementation artifact,
+re-run `resolve-local-change.sh --require-internal-producer`; if and only if that
+succeeds, set authority to `internal-producer`. Ask the fixed table what you may do:
 
 ```bash
-eval "$(bash "$GC_CITY_PATH/dev-pack/assets/scripts/posture-latitude.sh" "$effective_posture")"
+eval "$(bash "$GC_CITY_PATH/dev-pack/assets/scripts/posture-latitude.sh" "$effective_posture" "$authority")"
 # sets FETCH (none|metadata|allowlist), EXEC (deny|allow), GATE (none|human|blocked)
 ```
 
 - **FETCH** — `allowlist`: you may fetch **only** Hugging Face `config.json` +
   safetensors headers, nothing else. `metadata`: metadata probes only, no artifact
   bodies. `none`: no external network at all.
-- **EXEC** — `allow` **only** for `trusted`; `deny` for `limited`/`restricted`/`block`.
+- **EXEC** — `allow` for `trusted`, and for a provenance-validated
+  `internal-producer` artifact capped only at `limited`. It remains `deny` for every
+  external `limited` input and every `restricted`/`block` input.
   When `deny`: do **not** run, import, load, or execute any changed or fetched code —
   review it as text only. When `allow`: you may auto-run exactly **one** in-scope
   check, via the gate script (below).
 
-- **EXEC=allow / GATE=none** (`trusted`) — auto-run one in-scope check to verify the
+- **EXEC=allow / GATE=none** (`trusted`, or eligible internal `limited`) — auto-run one in-scope check to verify the
   change dynamically. Do **not** run pytest yourself ad hoc; delegate to the gate
   script so the deterministic ceiling is re-derived and enforced:
   1. Finish the static review first and take your read-only `git status` baseline
      **before** running (so `read_only_enforcement` reflects only your review).
-  2. **Check out the PR head — REQUIRED before the auto-run.** Your worktree starts
+  2. **Check out the exact head — REQUIRED before the auto-run.** Your worktree starts
      detached at the rig HEAD (= base), so `git diff base...head` reads the change
      without ever moving the tree — but a *check* must execute against the PR's code,
      not base. Fetch the head, detach onto it, and capture its sha to pin:
      ```bash
-     git fetch origin                       # refresh refs
-     git fetch origin pull/<N>/head         # if head_ref is a PR number N
+     git fetch origin                       # external PR only, within FETCH latitude
+     git fetch origin pull/<N>/head         # external PR number N only
      git checkout --detach FETCH_HEAD       # (or `git checkout --detach <head_ref>` for a branch/sha)
      head_sha="$(git rev-parse HEAD)"       # pin it via --expect-head-sha below
      ```
@@ -289,10 +294,13 @@ eval "$(bash "$GC_CITY_PATH/dev-pack/assets/scripts/posture-latitude.sh" "$effec
      sha so the gate refuses if the tree is not actually at head:
      ```bash
      bash "$GC_CITY_PATH/dev-pack/assets/scripts/run-scoped-check.sh" \
-       --head <head_ref> --base <base_ref> --min-ceiling trusted \
+       --head <head_ref> --base <base_ref> --min-ceiling <trusted-or-limited> \
        --expect-head-sha "$head_sha" \
        -- python -m pytest <test-node-id> -q
      ```
+     For internal-producer authority, add `--internal-artifact <artifact-ref>` and
+     use `--min-ceiling limited`; the gate independently revalidates the producer
+     ledger binding.
   5. Read the emitted `scoped-check.v1` JSON, record it verbatim as `dynamic_check`
      in your verdict, and set `dynamic_request` to the command you ran (provenance).
      Interpret the outcome **honestly**:
@@ -335,8 +343,8 @@ Everything below is performed **within** the latitude you just set.
    ```
    You may `git checkout --detach <head_ref>` in your own worktree to browse the
    PR's tree directly — it is yours alone and detached, so this never conflicts
-   with another reviewer. If you will auto-run a check (EXEC=allow / `trusted`),
-   this checkout is **required, not optional** — the check must run against the PR
+   with another reviewer. If you will auto-run a check (`EXEC=allow`),
+   this checkout is **required, not optional** — the check must run against the
    head, not the base tree your worktree starts at (see **Posture disposition**).
 2. **Load the personas for what this PR touches.**
 {{template "persona-load" "change-review"}}
@@ -367,11 +375,11 @@ now carries the posture you disposed by — record
 notification), `posture` (from triage), `effective_posture` (the `min` you actually
 gated yourself with), `ceiling_posture` (from your own re-scan), and two dynamic
 fields:
-- `dynamic_check`: for `trusted`, the `scoped-check.v1` object returned by
-  `run-scoped-check.sh` (the check you actually ran); `null` otherwise.
-- `dynamic_request`: for `trusted`, the command you ran (provenance for
-  `dynamic_check`); for `limited`, the scoped command a human could approve via the
-  `pr-review-dynamic` lane; `null` for `restricted`/`block`.
+- `dynamic_check`: when `EXEC=allow`, the `scoped-check.v1` object returned by
+  `run-scoped-check.sh`; `null` otherwise.
+- `dynamic_request`: when `EXEC=allow`, the command you ran (provenance for
+  `dynamic_check`); for external `limited`, the scoped command a human could approve
+  via `pr-review-dynamic`; `null` for `restricted`/`block`.
 - `persona_traces`: for review, the `change-review` load/material-influence record;
   synthesis carries the lane traces it relied on; settle records its `settle` lens.
 Include `schema:"pr-review.v1"` (or the exact schema named by your task), then finish

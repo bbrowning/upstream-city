@@ -128,13 +128,15 @@ LOCAL_JSON="" ; DISPLAY_SPEC="$SPEC"
 if [ -n "$ARTIFACT" ]; then
     [ ! -f "$ARTIFACT" ] || ARTIFACT=$(realpath "$ARTIFACT")
     DISPLAY_SPEC="$ARTIFACT"
-    LOCAL_JSON=$("$RESOLVE_LOCAL" --repo "$RIG_PATH" --rig "$RIG" --artifact "$ARTIFACT") || exit $?
+    LOCAL_JSON=$("$RESOLVE_LOCAL" --repo "$RIG_PATH" --rig "$RIG" --artifact "$ARTIFACT" \
+        --require-internal-producer) || exit $?
 elif git -C "$RIG_PATH" rev-parse --verify "$SPEC^{commit}" >/dev/null 2>&1; then
     LOCAL_JSON=$("$RESOLVE_LOCAL" --repo "$RIG_PATH" --rig "$RIG" --head "$SPEC" --base "$BASE") || exit $?
 elif [[ "$SPEC" == "$RIG-"* ]]; then
     # A rig-prefixed non-ref is the positional artifact-bead form. Use
     # --artifact for cross-rig checks or file paths so intent is unambiguous.
-    LOCAL_JSON=$("$RESOLVE_LOCAL" --repo "$RIG_PATH" --rig "$RIG" --artifact "$SPEC") || exit $?
+    LOCAL_JSON=$("$RESOLVE_LOCAL" --repo "$RIG_PATH" --rig "$RIG" --artifact "$SPEC" \
+        --require-internal-producer) || exit $?
 fi
 
 LOCAL_ARTIFACT_ID="" ; LOCAL_ARTIFACT_REF="" ; LOCAL_REPOSITORY_ID="" ; LOCAL_BRANCH="" ; LOCAL_REVISION=""
