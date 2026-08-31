@@ -9,7 +9,7 @@
 # prompt-injected triage (or reviewer) can only ever downgrade trust, never buy
 # more fetch/exec latitude than the diff facts permit.
 #
-#   pr-prescan.sh <head_ref> [base_ref]
+#   pr-prescan.sh <head_ref> [base_ref] [expected_head_sha]
 #     head_ref : a PR number N (uses `gh pr diff/view`), or a branch/sha (uses git)
 #     base_ref : merge target for the local-ref path (default origin/main)
 #
@@ -21,6 +21,7 @@ set -euo pipefail
 
 HEAD_REF="${1:?usage: pr-prescan.sh <head_ref> [base_ref]}"
 BASE_REF="${2:-origin/main}"
+EXPECTED_HEAD_SHA="${3:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NORMALIZE="$SCRIPT_DIR/normalize-pr-target.sh"
 [ -x "$NORMALIZE" ] || { echo "pr-prescan: target normalizer not found/executable: $NORMALIZE" >&2; exit 2; }
@@ -47,7 +48,22 @@ SOURCE="git-local"
 
 if printf '%s' "$HEAD_REF" | grep -qE '^[0-9]+$'; then
     SOURCE="gh-pr"
-    if ! DIFF=$(gh pr diff "$HEAD_REF" 2>/dev/null); then
+    if [ -n "$EXPECTED_HEAD_SHA" ]; then
+        # The launcher already fetched and atomically published this immutable
+        # commit. Use it for diff contents, while retaining the PR number solely
+        # for trusted GitHub metadata. A missing object is infrastructure failure,
+        # not negative evidence about the change.
+        git cat-file -e "$EXPECTED_HEAD_SHA^{commit}" 2>/dev/null || {
+            echo "pr-prescan: infrastructure failure: materialized PR head $EXPECTED_HEAD_SHA is missing" >&2
+            exit 3
+        }
+        if ! DIFF=$(GIT_LFS_SKIP_SMUDGE=1 git diff "$BASE_REF...$EXPECTED_HEAD_SHA" 2>/dev/null); then
+            echo "pr-prescan: could not git diff materialized PR head $BASE_REF...$EXPECTED_HEAD_SHA" >&2
+            exit 3
+        fi
+        FILES_JSON=$(git diff --name-only "$BASE_REF...$EXPECTED_HEAD_SHA" 2>/dev/null \
+            | jq -R -s -c 'split("\n") | map(select(length > 0))')
+    elif ! DIFF=$(gh pr diff "$HEAD_REF" 2>/dev/null); then
         echo "pr-prescan: could not fetch diff for PR #$HEAD_REF via gh" >&2
         exit 3
     fi
@@ -56,7 +72,7 @@ if printf '%s' "$HEAD_REF" | grep -qE '^[0-9]+$'; then
     # keeping this pack portable). Fetch files separately: a failure in one probe
     # must not blank out the other (a single combined call that names an unknown
     # field fails wholesale, losing BOTH author trust and the file risk classes).
-    if META=$(gh pr view "$HEAD_REF" --json files 2>/dev/null); then
+    if [ -z "$EXPECTED_HEAD_SHA" ] && META=$(gh pr view "$HEAD_REF" --json files 2>/dev/null); then
         FILES_JSON=$(printf '%s' "$META" | jq -c '[.files[].path]')
     fi
     # Fetch association AND author login in ONE call: the login feeds the operator
@@ -66,6 +82,17 @@ if printf '%s' "$HEAD_REF" | grep -qE '^[0-9]+$'; then
     AUTHOR_ASSOC=$(printf '%s' "$PR_META" | jq -r '.author_association // empty' 2>/dev/null || true)
     AUTHOR_ASSOC=${AUTHOR_ASSOC:-UNKNOWN}
     AUTHOR_LOGIN=$(printf '%s' "$PR_META" | jq -r '.user.login // empty' 2>/dev/null || true)
+    if [ -n "$EXPECTED_HEAD_SHA" ]; then
+        CURRENT_HEAD=$(printf '%s' "$PR_META" | jq -r '.head.sha // empty' 2>/dev/null || true)
+        [ -n "$CURRENT_HEAD" ] || {
+            echo "pr-prescan: could not verify current head for PR #$HEAD_REF" >&2
+            exit 3
+        }
+        [ "$CURRENT_HEAD" = "$EXPECTED_HEAD_SHA" ] || {
+            echo "pr-prescan: immutable head drift for PR #$HEAD_REF: expected $EXPECTED_HEAD_SHA, current $CURRENT_HEAD" >&2
+            exit 3
+        }
+    fi
 else
     if ! DIFF=$(GIT_LFS_SKIP_SMUDGE=1 git diff "$BASE_REF...$HEAD_REF" 2>/dev/null); then
         echo "pr-prescan: could not git diff $BASE_REF...$HEAD_REF" >&2

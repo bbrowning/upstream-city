@@ -143,6 +143,11 @@ gc dev-pack review 53174 --rig vllm --lanes a-frontier-xhigh,b-frontier-xhigh
 gc dev-pack review 53174 --rig vllm --dry-run
 ```
 
+Before a real PR dispatch, the launcher resolves GitHub's advertised head, fetches
+and verifies it in the rig repository, and atomically publishes an immutable shared
+ref. Every reviewer receives that exact SHA. Head drift aborts the review; a missing
+materialized object is retried as infrastructure failure and is never review evidence.
+
 Local refs and artifacts are resolved inside the selected rig without a remote
 fallback. Reviewers verify the exact base/head pair immediately before reading
 the diff. Canonical artifacts also require their producer workflow and work-bead

@@ -33,6 +33,13 @@ Template fragments single-source recovery, method discipline, persona loading,
 output requirements, and worktree guards. Shared scripts resolve targets,
 construct artifacts, validate schemas, render mail, and update lifecycle state.
 
+External PR dispatch has a controller-owned readiness barrier. The launcher first
+resolves the advertised GitHub head, fetches it into a staging ref, verifies the
+exact SHA, and atomically creates a SHA-named shared ready ref. Only then can the
+formula create reviewer work. Lanes retain the PR number for metadata but diff the
+pinned commit, recheck remote head drift, and classify a missing object as transient
+infrastructure failure rather than review evidence.
+
 ## Worktree isolation and reaping
 
 Managed agents never implement in the rig root. Their `pre_start` hook calls the
