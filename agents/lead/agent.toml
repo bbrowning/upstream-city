@@ -1,3 +1,5 @@
 scope = "rig"
 description = "Lead planner/worker for its rig"
 prompt_template = "agents/lead/prompt.template.md"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
