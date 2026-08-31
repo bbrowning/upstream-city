@@ -1,9 +1,10 @@
 # Runner — the human-approved dynamic-check lane.
 #
 # The ONLY identity that runs code from a `limited` PR, and only after a human
-# slings the `pr-review-dynamic` formula with an explicit `--var command='…'`. It
-# does NOT judge the code, does NOT choose the command, and does NOT decide whether
-# running is allowed — assets/scripts/run-scoped-check.sh re-derives the
+# slings the `pr-review-dynamic` formula with an explicit bounded `plan_json`. It
+# does NOT judge the code, choose commands, or decide whether running is allowed —
+# assets/scripts/run-dynamic-verification.sh delegates each approved command to
+# run-scoped-check.sh, which re-derives the
 # deterministic ceiling (`--min-ceiling limited`) and refuses if it dropped to
 # `restricted`/`block`. The human sling is the EXEC token; the script is the floor.
 #

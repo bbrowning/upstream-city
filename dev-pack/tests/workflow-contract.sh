@@ -17,6 +17,16 @@ p = json.loads(policy_path.read_text())
 assert p['schema'] == 'dev-pack-workflow-policy.v2'
 assert p['defaults']['local_only'] is True
 assert p['defaults']['completion_checkpoint'] == 'approved'
+assert p['defaults']['dynamic_verification'] == {
+    'max_checks': 3, 'max_coverage_axes': 2, 'max_followups': 1,
+    'total_timeout_s': 600, 'total_output_cap_bytes': 65536,
+}
+gate = (root / 'dev-pack/assets/scripts/run-dynamic-verification.sh').read_text()
+for key, shell_name in (
+    ('max_checks', 'MAX_CHECKS'), ('max_coverage_axes', 'MAX_COVERAGE'),
+    ('total_timeout_s', 'TOTAL_TIMEOUT'), ('total_output_cap_bytes', 'TOTAL_CAP'),
+):
+    assert f'{shell_name}={p["defaults"]["dynamic_verification"][key]}' in gate
 assert p['presets']['quality']['feature'] == {'review_n': 2, 'formula': 'feature-dev'}
 assert p['presets']['quality']['bug']['formula'] == 'hard-bug-round'
 assert p['presets']['quality']['review'] == {'n': 2, 'formula': 'pr-review-quorum', 'enable_settle': True}
@@ -31,6 +41,9 @@ for name in ('hard-bug-finalize.toml', 'hard-bug-round.toml', 'hard-bug-round-so
     d = tomllib.loads((formulas/name).read_text())
     assert int(d['vars']['review_n']['default']) == p['presets']['quality']['bug']['review_n'], name
     assert int(d['vars']['max_review_iterations']['default']) == p['defaults']['max_review_iterations'], name
+d = tomllib.loads((formulas/'pr-review-dynamic.toml').read_text())
+assert 'plan_json' in d['vars']
+assert 'run-dynamic-verification.sh' in d['steps'][0]['description']
 for name in ('hard-bug-finalize.toml', 'hard-bug-round.toml', 'hard-bug-round-solo.toml'):
     d = tomllib.loads((formulas/name).read_text())
     assert int(d['vars']['max_rounds']['default']) == p['defaults']['max_rounds'], name

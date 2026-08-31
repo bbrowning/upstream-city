@@ -131,7 +131,8 @@ Then, per your method:
    the keystone by reading the call path/config/flag/token and cite every hop as
    `file:line`. Never execute changed code in settlement.
 3. Resolve each dispute to `resolved` (which_holds + severity + confidence + evidence[]) /
-   `needs_dynamic` (the single decisive scoped check) / `genuinely_ambiguous`. Cap
+   `needs_dynamic` (one decisive scoped check, or a bounded two-axis plan when the
+   disputed keystone itself spans independent behaviors) / `genuinely_ambiguous`. Cap
    confidence at `medium` for any keystone you could not verify.
 
 Emit the full `pr-review-settle.v1` object (the exact shape your method specifies) and
@@ -175,7 +176,7 @@ Start from the original verdict and preserve its exact head/base, implementation
 provenance, posture/effective_posture/ceiling_posture, lane identities, and targets.
 Adjust per each `resolutions[]` entry (resolved
 `>=major` -> stays/raised to a blocker with the arbiter's evidence folded into `detail`;
-needs_dynamic -> keep as unconfirmed, surface the exact check in `dynamic_request`, hold
+needs_dynamic -> keep as unconfirmed, surface the exact bounded request in `dynamic_request`, hold
 `verdict` at `request_changes`; refuted -> downgrade/drop the finding and relax `verdict`;
 genuinely_ambiguous -> keep + note for the human). Note in `summary` that this is a
 post-settle re-synthesis and cite the settle bead. Set `has_disputed_major=false` only

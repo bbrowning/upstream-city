@@ -233,13 +233,16 @@ Approved-only closure and local-only guarantees remain active during recovery.
 
 ## Dynamic-check safety
 
-Review can execute one narrowly scoped test when the deterministic prescan ceiling is
-`trusted`. A canonical internal-producer artifact may also execute at `limited` after
+Review can execute one bounded verification plan when the deterministic prescan ceiling
+is `trusted`: up to two distinct change-axis checks plus one final decisive follow-up,
+within 600 seconds and 64 KiB total. A canonical internal-producer artifact may also
+execute the same plan at `limited` after
 the gate independently validates its allowlisted workflow, producer lifecycle bead,
 and exact immutable range. External `limited` input still requires an explicit
 human-approved `pr-review-dynamic` dispatch; restricted and blocked inputs run
-nothing regardless of provenance. The gate rechecks posture, authority, command
-shape, test path, expected SHA, timeout, output cap, and worktree cleanliness.
+nothing regardless of provenance. Every planned check rechecks posture, authority,
+command shape, test path, expected SHA, timeout, output cap, and worktree cleanliness;
+the follow-up runs only after clean passing coverage.
 Environment or network failures are reported as `could_not_verify`, not as code
 failures.
 

@@ -1,6 +1,9 @@
 Review a PR or immutable local change without mutating it. Quality is the default: two
 independent reviewer profiles followed by strict synthesis. Results arrive as durable
 verdict evidence plus readable mail; the human retains the merge checkpoint.
+Trusted reviews use a bounded dynamic-verification plan: at most two independent
+coverage axes plus one decisive final follow-up, within 600 seconds/64 KiB total.
+Limited external plans require exact human approval; restricted/block runs nothing.
 
 `--execution` changes only the semantic reviewer leaves. Fan-out, posture, artifact
 handling, and the human checkpoint stay independent. `--lanes` overrides the selected

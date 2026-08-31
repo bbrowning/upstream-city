@@ -6,7 +6,14 @@
     "max_review_iterations": 3,
     "local_only": true,
     "completion_checkpoint": "approved",
-    "execution_profile": "frontier-xhigh"
+    "execution_profile": "frontier-xhigh",
+    "dynamic_verification": {
+      "max_checks": 3,
+      "max_coverage_axes": 2,
+      "max_followups": 1,
+      "total_timeout_s": 600,
+      "total_output_cap_bytes": 65536
+    }
   },
   "presets": {
     "quality": {

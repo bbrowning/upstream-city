@@ -1,23 +1,26 @@
 description = """
-Human-approved dynamic check (the Phase-2 approval lane).
+Human-approved bounded dynamic verification (the Phase-2 approval lane).
 
 When a `pr-review` verdict on a `limited` PR surfaces a scoped `dynamic_request`, a
-human APPROVES it by slinging this formula with the exact command:
+human APPROVES it by slinging this formula with the exact axis plan:
 
   gc sling <rig>/pr-runner pr-review-dynamic --formula \\
     --var head_ref=<N> --var base_ref=origin/main \\
-    --var command='python -m pytest tests/path/to/test_x.py::test_y -q' \\
+    --var plan_json='{"checks":[{"axis":"behavior-x","purpose":"coverage","command":["python","-m","pytest","tests/path/to/test_x.py::test_y","-q"]}]}' \\
     --var reason='approved from PR <N> review verdict' \\
     --title 'dynamic check PR <N>' --json
 
-The `runner` agent fetches the PR head into its own worktree and runs the command
-through the deterministic gate (`run-scoped-check.sh --min-ceiling limited`), which
-re-derives the injection-proof ceiling and REFUSES if it dropped to
+The `runner` agent fetches the PR head into its own worktree and runs the plan
+through `run-dynamic-verification.sh --min-ceiling limited`, which delegates each
+command to the deterministic scoped gate, re-derives the injection-proof ceiling,
+and REFUSES if it dropped to
 `restricted`/`block`. So the human sling is the EXEC token, but the deterministic
 floor still applies — an approved command on a now-restricted PR is declined. A
 refusal / could-not-verify is a normal, honest outcome (closed `pass`).
 
-Single human-slung step, routed by `gc.run_target` (default `pr-runner`).
+Human approval cannot widen the two-coverage-axis plus one-final-follow-up,
+600-second, 64-KiB aggregate budget. Single human-slung step, routed by
+`gc.run_target` (default `pr-runner`).
 """
 formula = "pr-review-dynamic"
 
@@ -34,7 +37,11 @@ description = "Baseline ref the diff is compared against (used by the ceiling re
 default = "origin/main"
 
 [vars.command]
-description = "The approved command, prepared-env form: `python -m pytest <repo-relative test node-id> -q`. NEVER `.venv/bin/python …` — the lane supplies the interpreter."
+description = "Deprecated compatibility form for one approved coverage-axis command. Prefer plan_json."
+default = ""
+
+[vars.plan_json]
+description = "The exact approved bounded plan: JSON with 1-2 distinct coverage axes and at most one final followup, each command an argv array. Empty falls back to command."
 default = ""
 
 [vars.reason]
@@ -51,12 +58,13 @@ default = "pr-runner"
 
 [[steps]]
 id = "run"
-title = "Run one human-approved in-scope check through the deterministic gate"
+title = "Run one human-approved bounded verification plan through the deterministic gate"
 description = """
-A human has approved running this exact command against PR `{{head_ref}}`
+A human has approved running this exact bounded plan against PR `{{head_ref}}`
 (base `{{base_ref}}`):
 
-    {{command}}
+    plan_json={{plan_json}}
+    compatibility_command={{command}}
 
 Reason / provenance: {{reason}}
 
@@ -65,14 +73,19 @@ method for detail:
 1. Sanity-check the worktree (abort → `blocked` if it is the rig root).
 2. Fetch the PR head and `git checkout --detach` it (if `{{head_ref}}` is a PR
    number N: `git fetch origin pull/N/head`).
-3. Run the approved command through the gate — it re-derives the ceiling and
-   refuses if it dropped below `limited`:
-   `bash "$GC_CITY_PATH/dev-pack/assets/scripts/run-scoped-check.sh" --head {{head_ref}} --base {{base_ref}} --min-ceiling limited -- {{command}}`
+3. Run the approved plan through the gate — it enforces at most two distinct
+   coverage axes plus one final follow-up, 600 seconds, and 64 KiB total, and each
+   delegated check re-derives the ceiling and every existing safety control:
+   `bash "$GC_CITY_PATH/dev-pack/assets/scripts/run-dynamic-verification.sh" --head {{head_ref}} --base {{base_ref}} --min-ceiling limited --plan-json '<exact plan_json>'`.
+   If `plan_json` is empty but `command` is not, parse that approved prepared-env
+   command without shell evaluation into one `coverage` check named
+   `human-approved`; do not add or improve commands.
    If `expect_head_sha` was provided (`{{expect_head_sha}}`), add
-   `--expect-head-sha {{expect_head_sha}}` before the `--`. If `{{command}}` is
-   empty, do nothing and report `skipped` with
-   `reason_if_skipped="no-command-provided"`.
-4. Interpret the `scoped-check.v1` result honestly — a network/egress failure
+   `--expect-head-sha {{expect_head_sha}}` before `--plan-json`. If both
+   `plan_json` and `command` are empty, do nothing and report `skipped` with
+   `reason_if_skipped="no-plan-provided"`.
+4. Interpret the aggregate `dynamic-verification.v1` and every nested
+   `scoped-check.v1` honestly — a network/egress failure
    (`network_hint`) or `could_not_verify`/`timeout` is an env limit, not a code
    defect; `skipped` (ceiling-below-required, out-of-scope, bad form, head-moved) is
    a correct refusal.
@@ -80,15 +93,14 @@ method for detail:
 Write this JSON object (schema `pr-review-dynamic.v1`) to `gc.output_json`:
 
 - `head_ref`, `base_ref`, `head_sha`: what you ran against
-- `command`: the approved command (verbatim)
+- `plan`: the approved plan (verbatim); `command`: the compatibility command or empty
 - `approved_reason`: the `{{reason}}` var; `authorized_by`: "human-sling"
 - `ceiling_posture`: the fresh ceiling from the gate's re-scan; `min_ceiling`: "limited"
-- `ran`: bool; `outcome`: one of `pass`, `fail`, `timeout`, `could_not_verify`, `skipped`
-- `rc`: integer or null; `duration_s`: number
-- `env_used`, `env_source`: the interpreter the gate resolved (or null)
-- `output_tail`: captured combined output (may be empty)
-- `reason_if_skipped`: the gate's reason, or ""
-- `git_clean_before`, `git_clean_after`: bools; `mutations_delta`: array (empty if none)
+- `ran_checks`: integer; `checks`: axis-tagged scoped results; `budget`: aggregate
+  limits/usage; `outcome`: one of `pass`, `fail`, `timeout`, `could_not_verify`, `skipped`
+- `git_clean_after`, `mutations_delta`, `reason_if_stopped`: aggregate gate evidence;
+  per-check `rc`, `duration_s`, environment, output tail, network hint, skip reason,
+  and before/after cleanliness remain verbatim in `checks[]`
 - `summary`: 1–3 sentences — what ran, the result, and any honesty note
 - `failure_class`: one of `none`, `transient`, `hard`; `failure_reason`: stable string or ""
 

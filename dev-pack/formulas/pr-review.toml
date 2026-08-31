@@ -7,9 +7,10 @@ proof pre-scan of the diff; then a read-only **review** step consumes that postu
 to bound its own network latitude and emits a durable, structured merge verdict.
 The verdict is the factory's output: a human consumes it and makes the merge call.
 
-Posture drives execution latitude (Phase 2, live): a `trusted` PR auto-runs ONE
-in-scope check on the changed code (via the deterministic run-scoped-check.sh gate,
-which re-derives the ceiling and refuses if it dropped); `limited`/`restricted`/
+Posture drives execution latitude (Phase 2, live): a `trusted` PR may spend one
+bounded multi-axis verification budget (via run-dynamic-verification.sh, which
+delegates each command to the deterministic run-scoped-check.sh gate and refuses
+if the ceiling dropped); `limited`/`restricted`/
 `block` run nothing. A `limited` PR instead surfaces a scoped `dynamic_request` a
 human can approve out-of-band via the companion `pr-review-dynamic` formula (routed
 to the `runner` agent). Execution needs a prepared interpreter in
@@ -159,10 +160,10 @@ mechanics):**
    this applies equally to external and internal-producer authority, with the city
    egress sandbox as the hard boundary;
    `EXEC=allow` for `trusted` or eligible internal-producer input capped at `limited`
-   → auto-run ONE in-scope check via `run-scoped-check.sh`. Internal execution must
+   → auto-run one bounded multi-axis plan via `run-dynamic-verification.sh`. Internal execution must
    pass `--min-ceiling limited --internal-artifact {{implementation_artifact_ref}}`;
    external trusted execution passes `--min-ceiling trusted`. Record its
-   `scoped-check.v1` result as `dynamic_check`; `EXEC=deny` otherwise —
+   `dynamic-verification.v1` result as `dynamic_check`; `EXEC=deny` otherwise —
    **do not run any changed code**; `GATE=human` (`limited`) → populate
    `dynamic_request` (a human runs it via `pr-review-dynamic`); `GATE=blocked`
    (`block`) → do not review, `gc mail send <rig>/lead`, and emit a `blocked` verdict.
@@ -211,13 +212,12 @@ notes — which personas, commands, and files backed each finding — live ONLY 
     - `file`: path
     - `line`: line or range (or null)
     - `suggested_fix`: concise, or null
-- `dynamic_check`: when `EXEC=allow`, the `scoped-check.v1` object returned by
-  `run-scoped-check.sh` (the in-scope check you auto-ran: `outcome`, `rc`,
-  `env_used`, `output_tail`, `duration_s`, `git_clean_after`, `network_hint`,
-  `reason_if_skipped`, …); `null` when execution is denied
-- `dynamic_request`: when `EXEC=allow`, an object `{command, reason}` naming the check you
-  ran (provenance for `dynamic_check`); for external `limited`, the scoped command a human can
-  approve via `gc sling <rig>/pr-runner pr-review-dynamic --var command='…'`; `null` for
+- `dynamic_check`: when `EXEC=allow`, the `dynamic-verification.v1` aggregate returned by
+  `run-dynamic-verification.sh` (including axis-tagged `scoped-check.v1` results and
+  aggregate budget/cleanliness evidence); `null` when execution is denied
+- `dynamic_request`: when `EXEC=allow`, an object naming the exact axis/command plan
+  run (provenance for `dynamic_check`); for external `limited`, the bounded plan a human can
+  approve via `gc sling <rig>/pr-runner pr-review-dynamic --var plan_json='…'`; `null` for
   `restricted`/`block`
 - `evidence`: internal provenance — the personas you loaded, the commands you ran,
   and the files you inspected — that back the findings. This is NOT shown in the

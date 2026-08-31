@@ -7,6 +7,7 @@ RESOLVE="$ROOT/dev-pack/assets/scripts/resolve-local-change.sh"
 PRESCAN="$ROOT/dev-pack/assets/scripts/pr-prescan.sh"
 LATITUDE="$ROOT/dev-pack/assets/scripts/posture-latitude.sh"
 RUN_CHECK="$ROOT/dev-pack/assets/scripts/run-scoped-check.sh"
+RUN_VERIFY="$ROOT/dev-pack/assets/scripts/run-dynamic-verification.sh"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -114,12 +115,13 @@ done
 git -C "$TMP/repo" switch -q feature/internal
 result=$(cd "$TMP/repo" && GC_BIN="$TMP/bin/gc" GC_CITY_PATH="$TMP" GC_RIG=paude \
   GC_PR_TEST_VENV="$TMP/venv" \
-  "$RUN_CHECK" --head "$INTERNAL_HEAD" --base "$BASE_SHA" --min-ceiling limited \
+  "$RUN_VERIFY" --head "$INTERNAL_HEAD" --base "$BASE_SHA" --min-ceiling limited \
     --internal-artifact "$TMP/internal.json" --expect-head-sha "$INTERNAL_HEAD" \
-    -- python tests/check_dynamic.py)
-jq -e '.outcome == "pass" and .ran == true and .ceiling == "limited" and
-  .execution_authority == "internal-producer"' <<<"$result" >/dev/null \
-  || fail "internal artifact check did not run"
+    --plan-json '{"checks":[{"axis":"internal-artifact","purpose":"coverage","command":["python","tests/check_dynamic.py"]}]}')
+jq -e '.outcome == "pass" and .ran_checks == 1 and .ceiling == "limited" and
+  .execution_authority == "internal-producer" and
+  .checks[0].execution_authority == "internal-producer"' <<<"$result" >/dev/null \
+  || fail "internal artifact bounded verification did not run"
 
 git -C "$TMP/repo" switch -q feature/restricted
 restricted=$(cd "$TMP/repo" && GC_BIN="$TMP/bin/gc" GC_CITY_PATH="$TMP" GC_RIG=paude \

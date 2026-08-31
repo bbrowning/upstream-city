@@ -161,8 +161,8 @@ checklist, skeptical finding filter, audience split), same as a solo review:
 2. Re-run the pre-scan yourself and set
    `effective_posture = min(triage.posture, your_rescan.ceiling_posture)`; honor
    `posture-latitude.sh` for FETCH/EXEC/GATE. Use `internal-producer` authority only
-   after canonical validation; it may run ONE in-scope check at a `limited` ceiling
-   via `run-scoped-check.sh --min-ceiling limited --internal-artifact
+   after canonical validation; it may run one bounded multi-axis plan at a `limited` ceiling
+   via `run-dynamic-verification.sh --min-ceiling limited --internal-artifact
    {{implementation_artifact_ref}}`. External inputs still require `trusted`.
    Restricted/block inputs run no changed code.
 3. Review `git diff {{base_ref}}...{{expected_head_sha}}` for a materialized PR (or
@@ -226,8 +226,8 @@ checklist, skeptical finding filter, audience split), same as a solo review:
 2. Re-run the pre-scan yourself and set
    `effective_posture = min(triage.posture, your_rescan.ceiling_posture)`; honor
    `posture-latitude.sh` for FETCH/EXEC/GATE. Use `internal-producer` authority only
-   after canonical validation; it may run ONE in-scope check at a `limited` ceiling
-   via `run-scoped-check.sh --min-ceiling limited --internal-artifact
+   after canonical validation; it may run one bounded multi-axis plan at a `limited` ceiling
+   via `run-dynamic-verification.sh --min-ceiling limited --internal-artifact
    {{implementation_artifact_ref}}`. External inputs still require `trusted`.
    Restricted/block inputs run no changed code.
 3. Review `git diff {{base_ref}}...{{expected_head_sha}}` for a materialized PR (or
@@ -281,7 +281,9 @@ Combine them:
   quorum (note genuine lane disagreement where it matters).
 - `posture`, `effective_posture`, `ceiling_posture` = the **most restrictive** across
   lanes (they triaged the same PR, so these normally agree).
-- `dynamic_check` / `dynamic_request` = carry forward a lane's object if present, else null.
+- `dynamic_check` / `dynamic_request` = preserve every lane's axis-tagged verification
+  evidence when present (deduplicate only byte-identical plans/results); never collapse
+  distinct lane coverage to one arbitrary check. Use null only when every lane has null.
 - `implementation_provenance` = require both lanes to match exactly and preserve it
   verbatim (including the exact reviewed head SHA); any mismatch is `blocked`.
 

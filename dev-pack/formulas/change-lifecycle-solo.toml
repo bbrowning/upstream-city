@@ -77,7 +77,7 @@ Apply the standard pr-review.v1 method and change-review personas. Independently
 re-resolve the artifact immediately before reading, preserve exact implementation
 provenance, and emit pr-review.v1. Do not fetch Git refs; sandbox-governed read-only
 web access follows the standard `FETCH` latitude. A `limited` ceiling may
-run one bounded relevant check through run-scoped-check.sh only with the validated
+run one bounded multi-axis verification plan through run-dynamic-verification.sh only with the validated
 `--internal-artifact` authority; restricted/block remains execution-denied.
 """
 metadata = { "gc.run_target" = "{{lane_a_target}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }

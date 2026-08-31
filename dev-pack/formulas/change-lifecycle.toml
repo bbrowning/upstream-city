@@ -87,7 +87,7 @@ artifact/repository/branch/revision plus exact `{{base_ref}}...{{head_ref}}`. Re
 read-only and do not fetch Git refs. Sandboxed read-only web access follows `FETCH`:
 trusted may use the allowlist, while limited internal authority remains `FETCH=none`.
 Apply internal-producer latitude: a `limited` content ceiling
-may run one bounded relevant check through run-scoped-check.sh with
+may run one bounded multi-axis verification plan through run-dynamic-verification.sh with
 `--internal-artifact {{implementation_artifact_ref}} --min-ceiling limited`; restricted
 or block remains execution-denied.
 Preserve all values in implementation_provenance. Emit
@@ -108,7 +108,7 @@ resolve-local-change.sh --require-internal-producer immediately before reading t
 artifact/repository/branch/revision plus exact `{{base_ref}}...{{head_ref}}`. Review
 read-only without fetching Git refs, independently of lane A. Apply the same
 sandboxed `FETCH` policy and internal-producer
-limited-only execution latitude through run-scoped-check.sh; restricted/block stays
+limited-only execution latitude through run-dynamic-verification.sh; restricted/block stays
 denied. Preserve implementation_provenance and
 emit pr-review.v1.
 """

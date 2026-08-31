@@ -1,8 +1,8 @@
 # Review synthesizer/orchestrator — posture-gated review workflow target.
 #
-# On a `trusted` PR (deterministic ceiling == trusted) it may auto-run exactly ONE
-# in-scope check on the changed code, via assets/scripts/run-scoped-check.sh (which
-# re-derives the ceiling and refuses if it dropped). For every other posture it is
+# On a `trusted` PR (deterministic ceiling == trusted) it may auto-run one bounded
+# multi-axis plan via assets/scripts/run-dynamic-verification.sh, which delegates
+# every check to run-scoped-check.sh. For every other posture it is
 # fully read-only. Execution needs a prepared interpreter in $GC_PR_TEST_VENV
 # (for vLLM, built by //tools/vllm/vllm-testenv.sh and wired via this rig's
 # [[rigs.patches]] env); absent that, the check reports could_not_verify.

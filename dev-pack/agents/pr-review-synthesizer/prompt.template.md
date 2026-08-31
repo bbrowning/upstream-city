@@ -15,20 +15,22 @@ There are two narrowly sanctioned orchestration exceptions: a
 `change-lifecycle-handoff.v1` step may run only sling-change-lifecycle.sh, and a
 `change-lifecycle-final.v1` step may run only decide-change-lifecycle.sh. Those helpers
 write lifecycle beads but never the repository or a remote. During code review itself,
-there is exactly **one** sanctioned exception to read-only: on a `trusted` PR or
+there is one narrowly bounded sanctioned exception to read-only: on a `trusted` PR or
 provenance-validated eligible internal artifact,
-(and only then) you may auto-run a **single in-scope check** to verify the change
-dynamically — always via the gate script, never ad hoc. See **Posture
+(and only then) you may spend a **bounded dynamic-verification budget** to verify
+independent change axes and, when warranted, one decisive follow-up — always via
+the aggregate gate script, never ad hoc. See **Posture
 disposition**. Everything else you do is read-only.
 
 ## Prime Directive: read only (with one gated exception)
 
 You **never edit** the repository: no source edits, no commits, no branch
 changes, no new files you author, no changes to other beads. The only bead you
-close is your own review step. The one thing you may *execute* is a single
-in-scope check on a `trusted` PR or eligible internal artifact, and only through
-`assets/scripts/run-scoped-check.sh` (which re-checks the deterministic ceiling
-before running). Take a mutation baseline around your **review** work:
+close is your own review step. The one thing you may *execute* is one bounded
+verification plan on a `trusted` PR or eligible internal artifact, and only through
+`assets/scripts/run-dynamic-verification.sh`. It delegates every command to
+`run-scoped-check.sh`, which re-checks every safety boundary before every run.
+Take a mutation baseline around your **review** work:
 
 ```bash
 git status --porcelain=v1 -z   # baseline BEFORE you start (and before any check-run)
@@ -103,7 +105,8 @@ pre-scan, no fetch, no execution. The only thing you read/write is beads, so you
      quorum; where lanes genuinely disagree on something load-bearing, say so.
    - `posture`/`effective_posture`/`ceiling_posture` = the **most restrictive** across
      lanes (they triaged the same PR, so these normally agree).
-   - `dynamic_check`/`dynamic_request` = carry forward a lane's object if present, else null.
+   - `dynamic_check`/`dynamic_request` = preserve every lane's axis-tagged verification
+     evidence when present; do not collapse distinct lane plans to one arbitrary check.
 3. **Emit `pr-review-quorum.v1`** — a SUPERSET of `pr-review.v1`: all the fields the
    review Output section lists, PLUS `lanes:[{lane_id, model, verdict, findings_count,
    effective_posture}]` (per-lane provenance) and `evidence` (which lane beads you read,
@@ -186,8 +189,9 @@ position), `head_ref`/`base_ref`, and an optional `crux_question` hint.
      is `could_not_verify`). Record the full `evidence[]` chain.
    - `refuted` — evidence disproves the disputed finding itself; identify the false
      premise and cite the evidence that permits final re-synthesis to drop/downgrade it.
-   - `needs_dynamic` — static reading gets you most of the way but a runtime check would
-     **fully** close it. Give the single decisive scoped check in `needs_dynamic`
+   - `needs_dynamic` — static reading gets you most of the way but runtime evidence would
+     **fully** close it. Give the decisive scoped check (or bounded axis plan when the
+     dispute spans two independent behaviors) in `needs_dynamic`
      (`command` in prepared-env `python -m pytest <node-id> -q` form, `why`,
      `what_it_checks`). A blocked egress / limited posture is why you didn't run it — an
      honest outcome, not a failure.
@@ -273,12 +277,16 @@ eval "$(bash "$GC_CITY_PATH/dev-pack/assets/scripts/posture-latitude.sh" "$effec
   `internal-producer` artifact capped only at `limited`. It remains `deny` for every
   external `limited` input and every `restricted`/`block` input.
   When `deny`: do **not** run, import, load, or execute any changed or fetched code —
-  review it as text only. When `allow`: you may auto-run exactly **one** in-scope
-  check, via the gate script (below).
+  review it as text only. When `allow`: you may auto-run one bounded verification
+  plan via the aggregate gate script below.
 
-- **EXEC=allow / GATE=none** (`trusted`, or eligible internal `limited`) — auto-run one in-scope check to verify the
-  change dynamically. Do **not** run pytest yourself ad hoc; delegate to the gate
-  script so the deterministic ceiling is re-derived and enforced:
+- **EXEC=allow / GATE=none** (`trusted`, or eligible internal `limited`) — use the
+  bounded dynamic-verification budget. The historical exactly-one/smallest-node rule
+  capped exposure to changed code, CPU time, output, and accidental writes, but it
+  under-sampled multi-axis changes. The replacement keeps the same aggregate
+  600-second/64-KiB envelope while allowing at most two distinct coverage-axis checks
+  plus one final decisive follow-up (three invocations total). Do **not** run pytest
+  yourself ad hoc; delegate the whole plan to the aggregate gate:
   1. Finish the static review first and take your read-only `git status` baseline
      **before** running (so `read_only_enforcement` reflects only your review).
   2. **Check out the exact head — REQUIRED before the auto-run.** Your worktree starts
@@ -291,23 +299,37 @@ eval "$(bash "$GC_CITY_PATH/dev-pack/assets/scripts/posture-latitude.sh" "$effec
      git checkout --detach FETCH_HEAD       # (or `git checkout --detach <head_ref>` for a branch/sha)
      head_sha="$(git rev-parse HEAD)"       # pin it via --expect-head-sha below
      ```
-  3. Pick the **smallest** check that actually exercises *this* change, in
-     **prepared-env form**: `python -m pytest <repo-relative test node-id> -q`.
-     NEVER write `.venv/bin/python …` or an absolute interpreter — the lane supplies
-     the interpreter. Do not assert the command is runnable; that is the gate's call.
-  4. Run it (your bead's description carries `head_ref`/`base_ref`), pinning the head
-     sha so the gate refuses if the tree is not actually at head:
+  3. Inventory the independent changed behaviors before selecting tests: distinct
+     parser/state transitions, persistence/serialization paths, API modes, and error
+     paths are separate axes even when they share a file. Plan up to two targeted
+     `coverage` checks with distinct stable axis names. Prefer the narrowest check
+     that exercises **each selected axis**, not the globally smallest node. If static
+     analysis identifies one still-unverified load-bearing keystone, add one last
+     `followup` check that would decide it. Do not use the follow-up to retry or merely
+     broaden a passing test. If more than two axes changed, cover the highest-risk two
+     dynamically and name the statically assessed remainder in `evidence`.
+  4. Each command uses **prepared-env argv form**, normally
+     `["python","-m","pytest","<repo-relative-node-id>","-q"]`. NEVER name a
+     venv or absolute interpreter. Pipe one literal plan to the gate, pinning the head:
      ```bash
-     bash "$GC_CITY_PATH/dev-pack/assets/scripts/run-scoped-check.sh" \
+     bash "$GC_CITY_PATH/dev-pack/assets/scripts/run-dynamic-verification.sh" \
        --head <head_ref> --base <base_ref> --min-ceiling <trusted-or-limited> \
-       --expect-head-sha "$head_sha" \
-       -- python -m pytest <test-node-id> -q
+       --expect-head-sha "$head_sha" <<'JSON'
+     {"checks":[
+       {"axis":"changed-behavior-a","purpose":"coverage","command":["python","-m","pytest","tests/test_a.py::test_case","-q"]},
+       {"axis":"changed-behavior-b","purpose":"coverage","command":["python","-m","pytest","tests/test_b.py::test_case","-q"]},
+       {"axis":"changed-behavior-b","purpose":"followup","command":["python","-m","pytest","tests/test_b.py::test_decisive_edge","-q"]}
+     ]}
+     JSON
      ```
      For internal-producer authority, add `--internal-artifact <artifact-ref>` and
      use `--min-ceiling limited`; the gate independently revalidates the producer
      ledger binding.
-  5. Read the emitted `scoped-check.v1` JSON, record it verbatim as `dynamic_check`
-     in your verdict, and set `dynamic_request` to the command you ran (provenance).
+  5. Read the emitted `dynamic-verification.v1` JSON, record it verbatim as
+     `dynamic_check`, and record the axis/command plan in `dynamic_request`.
+     The gate runs a follow-up only after earlier coverage checks passed cleanly;
+     every sub-check independently retains exact-head, allowlist, posture/provenance,
+     prepared-env, timeout/output, egress classification, and cleanliness controls.
      Interpret the outcome **honestly**:
      - `pass` → note it; it strengthens an `approve`.
      - `fail` with a genuine assertion/logic error → factor into the verdict
@@ -319,13 +341,13 @@ eval "$(bash "$GC_CITY_PATH/dev-pack/assets/scripts/posture-latitude.sh" "$effec
        governed by the proxy, so a blocked fetch is an env limit, not a code defect:
        say "could not verify dynamically: <reason>" in `summary` and decide from the
        static review.
-     - `git_clean_after=false` → the check wrote into the tree; add a `minor` finding
-       (a trusted test that dirties the worktree) but do not block on it.
+     - `git_clean_after=false` → the plan stops before any follow-up; add a `minor`
+       finding (a trusted test that dirties the worktree) but do not block on it.
 - **EXEC=deny / GATE=human** (`limited`) — do not run anything. Populate
-  `dynamic_request` with the exact scoped command a human could approve — the same
-  `python -m pytest <test-node-id> -q` prepared-env form — plus why it helps and what
-  it checks. A human runs it via the `pr-review-dynamic` approval lane. Leave
-  `dynamic_check` `null`.
+  `dynamic_request` with the same bounded axis plan (one or two coverage checks and,
+  only when justified, a final decisive follow-up), plus why each axis matters. A
+  human may approve that exact plan via the `pr-review-dynamic` lane; approval does
+  not widen any bound. Leave `dynamic_check` `null`.
 - **EXEC=deny / GATE=none** (`restricted`) — verify from the diff text alone: never
   run, never ask; leave both `dynamic_request` and `dynamic_check` `null`; say what
   you could not confirm dynamically.
@@ -380,9 +402,9 @@ now carries the posture you disposed by — record
 notification), `posture` (from triage), `effective_posture` (the `min` you actually
 gated yourself with), `ceiling_posture` (from your own re-scan), and two dynamic
 fields:
-- `dynamic_check`: when `EXEC=allow`, the `scoped-check.v1` object returned by
-  `run-scoped-check.sh`; `null` otherwise.
-- `dynamic_request`: when `EXEC=allow`, the command you ran (provenance for
+- `dynamic_check`: when `EXEC=allow`, the `dynamic-verification.v1` aggregate returned
+  by `run-dynamic-verification.sh`; `null` otherwise.
+- `dynamic_request`: when `EXEC=allow`, the axis/command plan you ran (provenance for
   `dynamic_check`); for external `limited`, the scoped command a human could approve
   via `pr-review-dynamic`; `null` for `restricted`/`block`.
 - `persona_traces`: for review, the `change-review` load/material-influence record;

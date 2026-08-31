@@ -171,10 +171,12 @@ elif (.verdict != null) then
              else (if ($blockers|length) > 0 then ["", "BLOCKERS - fix before merge"] + ($blockers | map(render_f) | add) else [] end)
                 + (if ($nits|length) > 0 then ["", "NITS"] + ($nits | map(render_f) | add) else [] end)
              end)
-          + (if (.dynamic_check == null) and (.dynamic_request != null) and ((.dynamic_request.command // "")|nn)
-             then ["", "suggested check available (see --full)"] else [] end)
+          + (if (.dynamic_check == null) and (.dynamic_request != null) and
+                 (((.dynamic_request.command // "")|nn) or ((.dynamic_request.checks // [])|length > 0))
+             then ["", "suggested dynamic verification available (see --full)"] else [] end)
           + ( ( if (.dynamic_check != null)
-                then "Dynamic check: \(.dynamic_check.outcome // "?")"
+                then "Dynamic verification: \(.dynamic_check.outcome // "?")"
+                     + (if ((.dynamic_check.checks // [])|length) > 0 then " (\(.dynamic_check.checks|length) checks)" else "" end)
                      + (if (.dynamic_check.rc != null) then " (rc=\(.dynamic_check.rc))" else "" end)
                 else null end ) as $dcline
               | ( (.read_only_enforcement // {}) as $roe
@@ -205,13 +207,18 @@ elif (.verdict != null) then
                       + (if ($f.suggested_fix|nn) then ["     fix: \($f.suggested_fix)"] else [] end)
                     ) | add )
              end)
-          + (if (.dynamic_check == null) and (.dynamic_request != null) and ((.dynamic_request.command // "")|nn)
+          + (if (.dynamic_check == null) and (.dynamic_request != null) and ((.dynamic_request.checks // [])|length > 0)
+             then ["", "Suggested dynamic verification plan (needs your approval):",
+                   "  \(.dynamic_request | tojson)",
+                   "  approve: gc sling \(if ($rig|length) > 0 then $rig else "<rig>" end)/pr-runner pr-review-dynamic --formula --var head_ref=\($head) --var plan_json='\(.dynamic_request | tojson)'"]
+             elif (.dynamic_check == null) and (.dynamic_request != null) and ((.dynamic_request.command // "")|nn)
              then ["", "Suggested check (needs your approval):",
                    "  \(.dynamic_request.command)",
                    "  approve: gc sling \(if ($rig|length) > 0 then $rig else "<rig>" end)/pr-runner pr-review-dynamic --formula --var head_ref=\($head) --var command='\(.dynamic_request.command)'"]
              else [] end)
           + ( ( if (.dynamic_check != null)
-                then "Dynamic check: \(.dynamic_check.outcome // "?")"
+                then "Dynamic verification: \(.dynamic_check.outcome // "?")"
+                     + (if ((.dynamic_check.checks // [])|length) > 0 then " (\(.dynamic_check.checks|length) checks)" else "" end)
                      + (if (.dynamic_check.rc != null) then " (rc=\(.dynamic_check.rc))" else "" end)
                 else null end ) as $dcline
               | ( (.read_only_enforcement // {}) as $roe
@@ -227,7 +234,8 @@ elif (.verdict != null) then
 else
     (.outcome // "?")            as $oc
   | (.head_ref // "?")           as $head
-  | (.command // "?")            as $cmd
+  | (if ((.command // "")|length) > 0 then .command
+     elif .plan != null then (.plan | tojson) else "?" end) as $cmd
   | (.rc)                        as $rc
   | (.ceiling_posture // "?")    as $ceil
   | (.summary // "")             as $summary
@@ -235,17 +243,20 @@ else
   | (.failure_class // "none")   as $fclass
   | (.failure_reason // "")      as $freason
   | (
-      [ ( ["dynamic check \($oc)"]
+      [ ( ["dynamic verification \($oc)"]
           + (if ($rc != null) then ["rc=\($rc)"] else [] end)
           + ["\($head)"] | join(" · ") ),
         "",
-        "## Dynamic check — \($head)",
-        "command: \($cmd)",
+        "## Dynamic verification — \($head)",
+        "plan/command: \($cmd)",
         "outcome: \($oc)   rc: \(if ($rc != null) then ($rc|tostring) else "n/a" end)   ceiling: \($ceil)" ]
       + (if $fclass != "none" then ["", "⚠ step \($fclass): \($freason)"] else [] end)
       + (if ($summary|length) > 0 then ["", "Summary", "  \($summary)"] else [] end)
       + (if ($tail|length) > 0
          then ["", "Output (tail)"] + ($tail | rtrimstr("\n") | split("\n") | map("  " + .))
+         else [] end)
+      + (if ((.checks // [])|length) > 0
+         then ["", "Checks"] + (.checks | map("  \(.purpose // "coverage") · \(.axis // "?") · \(.outcome // "?")"))
          else [] end)
       + (if (.git_clean_after == false) then ["", "read-only: MUTATIONS DETECTED: \((.mutations_delta // []) | join(", "))"]
          elif (.git_clean_after == true) then ["", "read-only: clean"]

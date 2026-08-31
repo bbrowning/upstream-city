@@ -120,9 +120,10 @@ changed content. Prompts may downgrade that ceiling but cannot raise it. Executi
 authority is a separate input: external PR/ref review uses GitHub/operator identity;
 canonical local output uses the validated producer lifecycle described above.
 
-- `trusted`: at most one in-scope check may auto-run.
+- `trusted`: one bounded verification plan may auto-run: at most two distinct
+  coverage-axis checks plus one final decisive follow-up.
 - `limited`: external input may only propose a human-dispatched dynamic check. A
-  canonical internal-producer artifact may run one scoped check because its identity
+  canonical internal-producer artifact may run the same bounded plan because its identity
   cap comes from local workflow provenance; content-derived `limited` reasons remain
   visible in the verdict and gate evidence.
 - `restricted` or `block`: no changed code runs, regardless of authority.
@@ -132,14 +133,28 @@ fetch latitude permitted by the city's network egress sandbox; that sandbox is t
 hard destination and method boundary. This does not permit local artifact resolution
 to fetch Git refs or contact a repository remote. Internal artifacts capped at
 `limited` remain `FETCH=none` even though their validated producer authority permits
-one scoped check.
+one bounded plan.
 
-`run-scoped-check.sh` independently re-derives posture and, for internal execution,
-revalidates the producer ledger binding and exact immutable range. It rejects
+The original exactly-one/smallest-check rule bounded exposure to changed code,
+resource use, captured output, and accidental writes, but coupled that safety limit
+to review quality: one passing narrow node could exhaust the allowance without
+exercising another independent changed behavior. The replacement separates those
+concerns. `run-dynamic-verification.sh` admits one plan with up to two distinct
+coverage axes and one final follow-up, while retaining the old aggregate worst-case
+envelope of 600 seconds and 64 KiB. The follow-up runs only after planned coverage
+passes cleanly; it closes a statically identified keystone rather than retrying.
+
+For every plan entry, `run-scoped-check.sh` independently re-derives posture and,
+for internal execution, revalidates the producer ledger binding and exact immutable range. It rejects
 restricted/block content regardless of producer, accepts prepared-environment Python
 test commands, rejects shell metacharacters and out-of-scope targets, verifies the
 expected head, bounds time and output, and records git status before and after.
-Network and environment limitations produce `could_not_verify`.
+Network and environment limitations produce `could_not_verify`. Each command is
+exact-head pinned and path/command allowlisted, uses the prepared environment,
+inherits the city egress boundary, and records cleanliness; a mutation stops the
+plan. External limited plans still require exact human approval. Quorum synthesis
+preserves every lane's axis-tagged evidence. Settlement remains static-first and
+surfaces a decisive bounded request when file:line evidence cannot close the crux.
 
 Trusted-author and internal-producer authority change identity posture only. File-pattern,
 dependency, CI, serialization, and dynamic-execution caps still apply, and the
