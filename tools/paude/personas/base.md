@@ -22,3 +22,8 @@
 5. **Tests must exercise the real command boundary.** Prefer temporary repositories
    and stateful CLI fakes that prove command arguments and persisted results. Static
    string checks alone do not establish workflow behavior.
+
+6. **Rendered CLI text is terminal-dependent.** GitHub CI enables ANSI styling while
+   city lanes may inherit `NO_COLOR`. Strip ANSI before asserting help/output strings
+   (reuse the repository helper), and run new rendered-output tests once with color
+   forced and `NO_COLOR` unset.

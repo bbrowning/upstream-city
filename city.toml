@@ -46,7 +46,7 @@ env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRE
 agent = "pr-runner"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "high" }
-env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude/paude-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/paude/personas" }
 
 [[rigs.patches]]
 agent = "pr-follow-up"
@@ -87,13 +87,13 @@ env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas" }
 agent = "pr-reviewer-a-frontier-xhigh"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
-env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude/paude-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
 
 [[rigs.patches]]
 agent = "pr-reviewer-b-frontier-xhigh"
 provider = "claude"
 option_defaults = { model = "claude-opus-4-8", effort = "xhigh" }
-env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude/paude-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
 
 [[rigs.patches]]
 agent = "feature-dev-frontier-medium"
@@ -116,13 +116,13 @@ env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas" }
 agent = "pr-reviewer-a-frontier-medium"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
-env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude/paude-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
 
 [[rigs.patches]]
 agent = "pr-reviewer-b-frontier-medium"
 provider = "claude"
 option_defaults = { model = "claude-opus-4-8", effort = "medium" }
-env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude/paude-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
 
 [[rigs.patches]]
 agent = "feature-dev-efficient-xhigh"
@@ -145,13 +145,13 @@ env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas" }
 agent = "pr-reviewer-a-efficient-xhigh"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "xhigh" }
-env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude/paude-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
 
 [[rigs.patches]]
 agent = "pr-reviewer-b-efficient-xhigh"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "xhigh" }
-env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude/paude-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
 
 [[rigs.patches]]
 agent = "feature-dev-efficient-medium"
@@ -174,13 +174,13 @@ env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas" }
 agent = "pr-reviewer-a-efficient-medium"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "medium" }
-env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude/paude-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
 
 [[rigs.patches]]
 agent = "pr-reviewer-b-efficient-medium"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "medium" }
-env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude/paude-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
 
 [[rigs]]
 name = "vllm"
