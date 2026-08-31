@@ -12,7 +12,7 @@
 #
 #   FETCH : none      -> no external network at all
 #           metadata  -> read-only metadata probes only (no artifact bodies)
-#           allowlist -> ONLY HF config JSON + safetensors headers
+#           allowlist -> read-only fetches permitted by the city egress sandbox
 #   EXEC  : deny      -> never run any changed/untrusted code
 #           allow     -> may run in-scope unit tests on changed code
 #   GATE  : none      -> no human gate; run the in-scope check iff EXEC=allow
@@ -22,11 +22,13 @@
 #           blocked   -> do not review; route to a human
 #           suggest   -> RETIRED in Phase 2 (was the Phase-1 trusted preview token)
 #
-# PHASE 2 (LIVE): `trusted` external input grants EXEC=allow. A provenance-validated
+# PHASE 2 (LIVE): `trusted` input grants the same allowlisted, read-only fetch
+# latitude whether its identity authority is external or an internal producer; the
+# city's egress sandbox remains the hard network boundary. A provenance-validated
 # internal producer artifact also grants bounded execution when content scanning caps
-# it at `limited`; the producer authority replaces GitHub author identity, but never
-# overrides `restricted` or `block` content signals. `limited` external execution
-# remains human-only through pr-review-dynamic.
+# it at `limited`, but does not gain network latitude at that posture. Producer
+# authority never overrides `restricted` or `block` content signals. `limited`
+# external execution remains human-only through pr-review-dynamic.
 set -euo pipefail
 
 POSTURE="${1:?usage: posture-latitude.sh <trusted|limited|restricted|block> [external|internal-producer]}"

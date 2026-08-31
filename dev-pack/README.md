@@ -238,6 +238,12 @@ shape, test path, expected SHA, timeout, output cap, and worktree cleanliness.
 Environment or network failures are reported as `could_not_verify`, not as code
 failures.
 
+At `trusted`, both external and internal-producer reviews may make the same read-only
+web requests permitted by the city's egress sandbox; that sandbox is the hard
+destination and method boundary. Local artifact resolution never fetches Git refs or
+contacts a repository remote. Internal artifacts capped at `limited` receive
+execution authority but no network-fetch latitude.
+
 Setup, trust-list, and prepared-test-environment details live in
 [Bootstrapping a new rig](../docs/rig-bootstrap.md#enable-dev-pack-on-the-rig).
 Architecture, worktree/reaper behavior, schemas, posture, and personas live in

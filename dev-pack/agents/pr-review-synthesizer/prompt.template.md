@@ -261,9 +261,12 @@ eval "$(bash "$GC_CITY_PATH/dev-pack/assets/scripts/posture-latitude.sh" "$effec
 # sets FETCH (none|metadata|allowlist), EXEC (deny|allow), GATE (none|human|blocked)
 ```
 
-- **FETCH** — `allowlist`: you may fetch **only** Hugging Face `config.json` +
-  safetensors headers, nothing else. `metadata`: metadata probes only, no artifact
-  bodies. `none`: no external network at all.
+- **FETCH** — `allowlist`: you may make read-only fetches permitted by the city's
+  egress sandbox; the sandbox, not reviewer discretion, is the hard destination and
+  method boundary. `metadata`: metadata probes only, no artifact bodies. `none`: no
+  external network at all. This latitude applies equally to external and
+  internal-producer authority. A local artifact never authorizes fetching Git refs
+  or contacting a repository remote to resolve its source range.
 - **EXEC** — `allow` for `trusted`, and for a provenance-validated
   `internal-producer` artifact capped only at `limited`. It remains `deny` for every
   external `limited` input and every `restricted`/`block` input.

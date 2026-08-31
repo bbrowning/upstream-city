@@ -112,22 +112,19 @@ canonical local output uses the validated producer lifecycle described above.
   visible in the verdict and gate evidence.
 - `restricted` or `block`: no changed code runs, regardless of authority.
 
+At `trusted`, external and internal-producer authority receive the same read-only
+fetch latitude permitted by the city's network egress sandbox; that sandbox is the
+hard destination and method boundary. This does not permit local artifact resolution
+to fetch Git refs or contact a repository remote. Internal artifacts capped at
+`limited` remain `FETCH=none` even though their validated producer authority permits
+one scoped check.
+
 `run-scoped-check.sh` independently re-derives posture and, for internal execution,
 revalidates the producer ledger binding and exact immutable range. It rejects
 restricted/block content regardless of producer, accepts prepared-environment Python
-test commands and (for internal-producer authority only) the exact isolated-uv CI
-reproducer form, rejects shell metacharacters and out-of-scope targets, verifies
-the expected head, bounds time and output, and records git status before and after.
-`--ci-color` unsets inherited `NO_COLOR` and forces a color-capable terminal so
-rendered-output assertions can reproduce CI behavior. Network and environment
-limitations produce `could_not_verify`.
-
-Before selecting that one check, review lanes run
-`scan-rendered-output-assertions.py` over newly added test lines. A raw option-token
-assertion against `.output`/`.stdout` is deterministic major evidence when the test
-does not use the repository's ANSI-stripping helper; the reported pytest node takes
-priority for a `--ci-color` check. This static contract still returns
-`request_changes` if the runtime environment cannot be prepared.
+test commands, rejects shell metacharacters and out-of-scope targets, verifies the
+expected head, bounds time and output, and records git status before and after.
+Network and environment limitations produce `could_not_verify`.
 
 Trusted-author and internal-producer authority change identity posture only. File-pattern,
 dependency, CI, serialization, and dynamic-execution caps still apply, and the

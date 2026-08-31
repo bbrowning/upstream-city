@@ -62,12 +62,13 @@ default = "pr-arbiter"
 id = "triage"
 title = "Validate immutable artifact and classify review posture"
 description = """
-This is an offline local-change triage for `{{work_bead}}`. Before emitting
+This is a local-only change triage for `{{work_bead}}`. Before emitting
 pr-triage.v1, run resolve-local-change.sh with `--artifact
 {{implementation_artifact_ref}} --require-internal-producer` and require artifact id
 `{{implementation_artifact_id}}`, repository `{{implementation_repository_id}}`, branch
 `{{implementation_branch}}`, revision {{implementation_revision}}, and the exact range
-`{{base_ref}}...{{head_ref}}`. Fail hard on drift; never fetch. Then apply the normal
+`{{base_ref}}...{{head_ref}}`. Fail hard on drift; never fetch Git refs or contact a
+repository remote. Then apply the normal
 deterministic pre-scan/posture contract used by pr-review-quorum.
 """
 metadata = { "gc.run_target" = "{{triage_target}}", "gc.output_json_schema" = "pr-triage.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
@@ -83,7 +84,9 @@ description = """
 Follow the standard pr-review.v1 reviewer method and change-review persona lens. Re-run
 resolve-local-change.sh --require-internal-producer immediately before reading the diff and require the supplied
 artifact/repository/branch/revision plus exact `{{base_ref}}...{{head_ref}}`. Review
-read-only and offline. Apply internal-producer latitude: a `limited` content ceiling
+read-only and do not fetch Git refs. Sandboxed read-only web access follows `FETCH`:
+trusted may use the allowlist, while limited internal authority remains `FETCH=none`.
+Apply internal-producer latitude: a `limited` content ceiling
 may run one bounded relevant check through run-scoped-check.sh with
 `--internal-artifact {{implementation_artifact_ref}} --min-ceiling limited`; restricted
 or block remains execution-denied.
@@ -103,7 +106,8 @@ description = """
 Follow the standard pr-review.v1 reviewer method and change-review persona lens. Re-run
 resolve-local-change.sh --require-internal-producer immediately before reading the diff and require the supplied
 artifact/repository/branch/revision plus exact `{{base_ref}}...{{head_ref}}`. Review
-read-only and offline, independently of lane A. Apply the same internal-producer
+read-only without fetching Git refs, independently of lane A. Apply the same
+sandboxed `FETCH` policy and internal-producer
 limited-only execution latitude through run-scoped-check.sh; restricted/block stays
 denied. Preserve implementation_provenance and
 emit pr-review.v1.

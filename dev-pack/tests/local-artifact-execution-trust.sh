@@ -101,6 +101,9 @@ eval "$("$LATITUDE" limited external)"
 [ "$EXEC $GATE" = "deny human" ] || fail "external limited posture was widened"
 eval "$("$LATITUDE" limited internal-producer)"
 [ "$EXEC $GATE" = "allow none" ] || fail "eligible internal limited artifact stayed denied"
+eval "$("$LATITUDE" trusted internal-producer)"
+[ "$FETCH $EXEC $GATE" = "allowlist allow none" ] \
+  || fail "trusted internal artifact lost its sandboxed fetch/execution latitude"
 for posture in restricted block; do
   eval "$("$LATITUDE" "$posture" internal-producer)"
   [ "$EXEC" = deny ] || fail "$posture internal artifact gained execution"
