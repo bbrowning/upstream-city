@@ -3,13 +3,13 @@
   "$id": "https://gascity.local/schemas/dev-pack-plan-result.schema.json",
   "title": "dev-pack plan result",
   "type": "object",
-  "required": ["schema_version", "source", "changed", "dry_run", "cleared", "plan", "message"],
+  "required": ["schema_version", "source", "changed", "dry_run", "canceled", "plan", "message"],
   "properties": {
     "schema_version": {"const": "dev-pack-plan.v1"},
     "source": {"type": "string"},
     "changed": {"type": "boolean"},
     "dry_run": {"type": "boolean"},
-    "cleared": {"type": "boolean"},
+    "canceled": {"type": "boolean"},
     "message": {"type": "string"},
     "plan": {
       "oneOf": [

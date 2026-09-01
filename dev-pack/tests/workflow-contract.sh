@@ -121,7 +121,7 @@ printf '%s' "$feedback_help" | grep -Fq -- 'newest authoritative finished review
 printf '%s' "$reconcile_help" | grep -Fq -- 'Always refreshes GitHub read-only' \
   || fail 'reconcile help missing verification contract'
 for phrase in 'CONDITION  ci | author' 'ACTION     approve | request-changes | re-review | inspect' \
-  'Valid combinations' '--note' '--clear' 'never reads or harvests'; do
+  'Valid combinations' '--note' '--cancel' 'never reads or harvests'; do
   printf '%s' "$plan_help" | grep -Fq -- "$phrase" || fail "plan help missing explicit-plan contract: $phrase"
 done
 for phrase in '## Human attention desk' 'gc dev-pack work show' \

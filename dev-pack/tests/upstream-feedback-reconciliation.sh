@@ -35,7 +35,10 @@ jq -n '
    source("47";"vllm-source-47"), result("47";"vllm-final-47";"request_changes";"ffffffffffffffffffffffffffffffffffffffff";"2026-09-01T00:03:00Z";{}),
    source("48";"vllm-source-48"), result("48";"vllm-final-48";"approve";"9999999999999999999999999999999999999999";"2026-09-01T00:03:00Z";{})]
    + [source("49";"vllm-source-49"), result("49";"vllm-final-49";"request_changes";"1111111111111111111111111111111111111111";"2026-09-01T00:03:00Z";{}),
-      source("50";"vllm-source-50")]
+      source("50";"vllm-source-50"),
+      source("51";"vllm-e5m8.2"), result("51";"vllm-old-51";"request_changes";"4b5d6bd800000000000000000000000000000000";"2026-09-01T00:03:00Z";{}),
+      source("52";"vllm-source-52"), source("53";"vllm-source-53"),
+      source("54";"vllm-source-54"), source("55";"vllm-source-55")]
 ' > "$TMP/vllm.json"
 
 cat > "$TMP/bin/gc" <<'PY'
@@ -84,8 +87,8 @@ number=sys.argv[3]
 states=json.loads((root/"gh-states.json").read_text())
 value=states.get(number)
 if value is None: raise SystemExit(1)
-print(json.dumps({"state":"OPEN","headRefOid":value["head"],"reviewDecision":value["review"],
- "statusCheckRollup":value.get("checks",[]),"mergedAt":None,"isDraft":False,"updatedAt":"2026-09-01T00:04:00Z",
+print(json.dumps({"state":value.get("state","OPEN"),"headRefOid":value["head"],"reviewDecision":value["review"],
+ "statusCheckRollup":value.get("checks",[]),"mergedAt":value.get("mergedAt"),"isDraft":False,"updatedAt":"2026-09-01T00:04:00Z",
  "url":f"https://github.com/example/project/pull/{number}"}))
 PY
 chmod +x "$TMP/bin/gc" "$TMP/bin/gh"
@@ -99,7 +102,12 @@ cat > "$TMP/gh-states.json" <<'JSON'
  "47":{"head":"ffffffffffffffffffffffffffffffffffffffff","review":"REVIEW_REQUIRED"},
  "48":{"head":"9999999999999999999999999999999999999999","review":"CHANGES_REQUESTED"},
  "49":{"head":"2222222222222222222222222222222222222222","review":"REVIEW_REQUIRED","checks":[{"state":"IN_PROGRESS"}]},
- "50":{"head":"5050505050505050505050505050505050505050","review":"REVIEW_REQUIRED","checks":[]}}
+ "50":{"head":"5050505050505050505050505050505050505050","review":"REVIEW_REQUIRED","checks":[]},
+ "51":{"head":"f0176d2200000000000000000000000000000000","review":"REVIEW_REQUIRED","checks":[{"conclusion":"SUCCESS"}]},
+ "52":{"head":"5252525252525252525252525252525252525252","review":"REVIEW_REQUIRED","checks":[{"conclusion":"SUCCESS"}]},
+ "53":{"head":"5353535353535353535353535353535353535353","review":"REVIEW_REQUIRED","checks":[{"conclusion":"SUCCESS"}]},
+ "54":{"head":"5454545454545454545454545454545454545454","review":"REVIEW_REQUIRED","checks":[{"state":"IN_PROGRESS"}]},
+ "55":{"head":"5555555555555555555555555555555555555555","review":"REVIEW_REQUIRED","checks":[{"conclusion":"SUCCESS"}]}}
 JSON
 
 export GC_BIN="$TMP/bin/gc" GH_BIN="$TMP/bin/gh" GC_CITY_PATH="$TMP/city" HANDOFF_FIXTURE="$TMP"
@@ -180,7 +188,7 @@ jq -e '.item.group == "waiting" and .item.human_plan.state == "waiting" and
 pending_text=$("$ROOT/dev-pack/commands/work/run.sh" show vllm-source-49 --rig vllm --no-network)
 grep -Fq 'HUMAN PLAN' <<< "$pending_text"
 grep -Fq 'No human action is required' <<< "$pending_text"
-grep -Fq 'gc dev-pack plan vllm/vllm-source-49 --clear' <<< "$pending_text"
+grep -Fq 'gc dev-pack plan vllm/vllm-source-49 --cancel' <<< "$pending_text"
 for transition in failing drift; do
   if [ "$transition" = failing ]; then
     jq '."49".checks=[{"conclusion":"FAILURE"}]' "$TMP/gh-states.json" > "$TMP/gh-next.json"
@@ -198,7 +206,7 @@ if "$ROOT/dev-pack/commands/reconcile/run.sh" vllm/vllm-source-49 --as approve >
   echo 'pending plan reconciliation unexpectedly succeeded' >&2; exit 1
 fi
 grep -Fq 'CI is still pending' "$TMP/plan-pending.err"
-"$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-49 --clear >/dev/null
+"$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-49 --cancel >/dev/null
 jq -e '.[] | select(.id=="vllm-source-49") | .status=="open" and
   (.metadata["gc.human_plan_json"] == null) and (.labels|index("wait:ci") == null)' "$TMP/vllm.json" >/dev/null
 "$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-49 --wait-for ci --then approve \
@@ -227,6 +235,72 @@ mv "$TMP/gh-next.json" "$TMP/gh-states.json"
 author_ready=$("$ROOT/dev-pack/commands/work/run.sh" show vllm-source-50 --rig vllm --refresh --json)
 jq -e '.item.group == "needs-you" and .item.human_plan.state == "ready" and
   .item.next_action == "Re-review for the current exact head"' <<< "$author_ready" >/dev/null
+
+# vllm-e5m8.2 incident: a passing exact-head plan was canceled before the human
+# approved and merged; only an older automated review exists at a different SHA.
+"$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-e5m8.2 --wait-for ci --then approve \
+  --note 'Coverage expansion is optional; comment posted on GitHub.' >/dev/null
+"$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-e5m8.2 --cancel >/dev/null
+jq -e '.[] | select(.id=="vllm-e5m8.2") | .status=="open" and
+  .metadata["gc.human_plan_json"] == null and
+  (.metadata["gc.human_plan_archive_json"]|fromjson|.plans[-1].head_sha) == "f0176d2200000000000000000000000000000000" and
+  (.metadata["gc.human_plan_archive_json"]|fromjson|.plans[-1].condition_satisfied) == true and
+  (.metadata["gc.human_plan_archive_json"]|fromjson|.plans[-1].archived_outcome) == "canceled"' "$TMP/vllm.json" >/dev/null
+jq '."51".review="APPROVED" | ."51".state="MERGED" | ."51".mergedAt="2026-09-01T00:06:00Z"' \
+  "$TMP/gh-states.json" > "$TMP/gh-next.json"
+mv "$TMP/gh-next.json" "$TMP/gh-states.json"
+# A later aggregate check failure cannot erase that CI was satisfied when archived.
+jq '."51".checks=[{"conclusion":"FAILURE"}]' "$TMP/gh-states.json" > "$TMP/gh-next.json"
+mv "$TMP/gh-next.json" "$TMP/gh-states.json"
+merged=$(DEV_PACK_WORK_NOW=2026-09-01T00:07:00Z "$ROOT/dev-pack/commands/work/run.sh" show vllm-e5m8.2 --rig vllm --refresh 2>&1)
+grep -Fq 'UPSTREAM COMPLETION OBSERVED' <<< "$merged"
+grep -Fq 'gc dev-pack reconcile vllm/vllm-e5m8.2 --as approve' <<< "$merged"
+! grep -Fq 'REVIEW REQUIRED' <<< "$merged"
+! grep -Fq 'head 4b5d6bd8' <<< "$merged"
+incident=$("$ROOT/dev-pack/commands/reconcile/run.sh" vllm/vllm-e5m8.2 --json 2>&1)
+jq -e '.changed == true and .action == "approve" and .reviewed_head_sha == "f0176d2200000000000000000000000000000000"' <<< "$incident" >/dev/null
+jq -e '.[] | select(.id=="vllm-e5m8.2") | .status=="closed" and
+  .metadata["gc.upstream_review_action"] == "approve" and
+  .metadata["gc.human_plan_archive_json"] != null' "$TMP/vllm.json" >/dev/null
+incident_again=$("$ROOT/dev-pack/commands/reconcile/run.sh" vllm/vllm-e5m8.2 --json)
+jq -e '.changed == false and (.message|startswith("already reconciled"))' <<< "$incident_again" >/dev/null
+
+# Cancellation cannot discard completion evidence once the live refresh sees it.
+"$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-52 --wait-for ci --then approve >/dev/null
+jq '."52".review="APPROVED"' "$TMP/gh-states.json" > "$TMP/gh-next.json"; mv "$TMP/gh-next.json" "$TMP/gh-states.json"
+if "$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-52 --cancel >/dev/null 2>"$TMP/cancel-approved.err"; then
+  echo 'cancel after observed approval unexpectedly succeeded' >&2; exit 1
+fi
+grep -Fq 'gc dev-pack reconcile vllm/vllm-source-52 --as approve' "$TMP/cancel-approved.err"
+jq -e '.[] | select(.id=="vllm-source-52") | .metadata["gc.human_plan_json"] != null' "$TMP/vllm.json" >/dev/null
+
+"$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-53 --wait-for ci --then approve >/dev/null
+jq '."53".state="MERGED" | ."53".mergedAt="2026-09-01T00:06:00Z"' "$TMP/gh-states.json" > "$TMP/gh-next.json"; mv "$TMP/gh-next.json" "$TMP/gh-states.json"
+if "$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-53 --cancel >/dev/null 2>"$TMP/cancel-merged.err"; then
+  echo 'cancel after observed merge unexpectedly succeeded' >&2; exit 1
+fi
+grep -Fq 'gc dev-pack reconcile vllm/vllm-source-53 --as approve' "$TMP/cancel-merged.err"
+
+# Archived evidence still enforces the original condition, exact head, and state.
+"$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-54 --wait-for ci --then approve >/dev/null
+"$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-54 --cancel >/dev/null
+jq '."54".review="APPROVED"' "$TMP/gh-states.json" > "$TMP/gh-next.json"; mv "$TMP/gh-next.json" "$TMP/gh-states.json"
+if "$ROOT/dev-pack/commands/reconcile/run.sh" vllm/vllm-source-54 --as approve >/dev/null 2>"$TMP/archive-pending.err"; then
+  echo 'unsatisfied archived plan unexpectedly reconciled' >&2; exit 1
+fi
+grep -Fq 'CI is still pending' "$TMP/archive-pending.err"
+
+"$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-55 --wait-for ci --then approve >/dev/null
+"$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-55 --wait-for ci --then request-changes >/dev/null
+jq -e '.[] | select(.id=="vllm-source-55") |
+  (.metadata["gc.human_plan_archive_json"]|fromjson|.plans[-1].archived_outcome) == "replaced"' "$TMP/vllm.json" >/dev/null
+"$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-55 --cancel >/dev/null
+jq '."55".review="APPROVED" | ."55".head="5656565656565656565656565656565656565656"' "$TMP/gh-states.json" > "$TMP/gh-next.json"; mv "$TMP/gh-next.json" "$TMP/gh-states.json"
+if "$ROOT/dev-pack/commands/reconcile/run.sh" vllm/vllm-source-55 --as approve >/dev/null 2>"$TMP/archive-drift.err"; then
+  echo 'head-drifted archived plan unexpectedly reconciled' >&2; exit 1
+fi
+grep -Eq 'head drift|exact head has changed' "$TMP/archive-drift.err"
+
 ! grep -Eq ' mail | api | pr review' "$TMP/gc.calls"
 ! grep -Eq ' pr review| api | graphql ' "$TMP/gh.calls"
 

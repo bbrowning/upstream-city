@@ -7,6 +7,7 @@ from typing import Any
 
 
 SCHEMA = "dev-pack-human-plan.v1"
+ARCHIVE_SCHEMA = "dev-pack-human-plan-archive.v1"
 WAIT_VALUES = ("ci", "author")
 THEN_VALUES = ("approve", "request_changes", "re_review", "inspect")
 VALID_COMBINATIONS = {
@@ -36,7 +37,7 @@ def evaluate_plan(raw: dict[str, Any] | None, item: dict[str, Any]) -> dict[str,
         "github_review_state": github.get("review_state"),
         "ci_state": github.get("ci_state"),
         "commands": {
-            "clear": f"gc dev-pack plan {qualified(item)} --clear",
+            "cancel": f"gc dev-pack plan {qualified(item)} --cancel",
             "replace": f"gc dev-pack plan {qualified(item)} --wait-for {wait_for} --then {then.replace('_', '-')}",
         },
     })
@@ -59,6 +60,42 @@ def evaluate_plan(raw: dict[str, Any] | None, item: dict[str, Any]) -> dict[str,
             f"gc dev-pack reconcile {qualified(item)} --as {then.replace('_', '-')}"
         )
     return plan
+
+
+def archive_plan(archive: dict[str, Any] | None, plan: dict[str, Any], outcome: str,
+                 archived_at: str) -> dict[str, Any]:
+    """Retain immutable explicit-plan evidence when its active slot is replaced."""
+    entries = list((archive or {}).get("plans") or []) if (archive or {}).get("schema") == ARCHIVE_SCHEMA else []
+    durable = ("schema", "wait_for", "then", "head_sha", "github_url", "created_at", "note")
+    record = {key: plan.get(key) for key in durable if key in plan}
+    condition_satisfied = bool(plan.get("condition_satisfied") or plan.get("state") == "ready")
+    record.update({"archived_outcome": outcome, "archived_at": archived_at})
+    record["condition_satisfied"] = condition_satisfied
+    if condition_satisfied:
+        record["condition_satisfied_at"] = plan.get("condition_satisfied_at") or archived_at
+    fingerprint = tuple(record.get(key) for key in ("schema", "wait_for", "then", "head_sha", "created_at"))
+    entries = [entry for entry in entries if tuple(entry.get(key) for key in
+               ("schema", "wait_for", "then", "head_sha", "created_at")) != fingerprint]
+    entries.append(record)
+    return {"schema": ARCHIVE_SCHEMA, "plans": entries}
+
+
+def evaluate_archive(raw: dict[str, Any] | None, item: dict[str, Any]) -> list[dict[str, Any]]:
+    if not raw or raw.get("schema") != ARCHIVE_SCHEMA:
+        return []
+    result = []
+    for entry in raw.get("plans") or []:
+        evaluated = evaluate_plan(entry, item) if isinstance(entry, dict) else None
+        if not evaluated:
+            continue
+        if entry.get("condition_satisfied") and evaluated.get("valid") and evaluated.get("head_matches"):
+            evaluated["state"] = "ready"
+            if evaluated.get("then") in {"approve", "request_changes"}:
+                evaluated["commands"]["reconcile_after_github"] = (
+                    f"gc dev-pack reconcile {qualified(item)} --as {evaluated['then'].replace('_', '-')}"
+                )
+        result.append(evaluated)
+    return result
 
 
 def action_label(action: str) -> str:

@@ -49,6 +49,7 @@ def main() -> int:
         item, bead = shown["item"], shown["evidence"]["bead"]
         decision = item.get("decision")
         plan = item.get("human_plan")
+        archived_plans = item.get("archived_human_plans") or []
         github = item.get("github") or {}
         if not github.get("available") or github.get("freshness") != "live":
             raise RuntimeError("a live GitHub observation is required; refresh was unavailable or stale")
@@ -58,6 +59,11 @@ def main() -> int:
             action = args.action.replace("-", "_")
         elif planned_action:
             action = str(planned_action)
+        elif (archived := next((candidate for candidate in reversed(archived_plans)
+                               if candidate.get("then") in {"approve", "request_changes"}
+                               and candidate.get("head_matches") and candidate.get("state") == "ready"
+                               and github.get("review_state") == ("APPROVED" if candidate.get("then") == "approve" else "CHANGES_REQUESTED")), None)):
+            action = str(archived["then"])
         elif decision:
             action = str(decision["recommended_action"])
         else:
@@ -70,11 +76,17 @@ def main() -> int:
             changed = False
             message = f"already reconciled {action.replace('_', '-')} on {reviewed[:8]}"
         else:
-            if plan:
-                if not planned_action:
+            evidence_plan = plan
+            if not evidence_plan:
+                evidence_plan = next((candidate for candidate in reversed(archived_plans)
+                                      if candidate.get("then") == action), None)
+            if evidence_plan:
+                plan = evidence_plan
+                evidence_action = plan.get("then") if plan.get("then") in {"approve", "request_changes"} else None
+                if not evidence_action:
                     raise RuntimeError("the active human plan does not end in an upstream review action")
-                if action != planned_action:
-                    raise RuntimeError(f"the active human plan ends in {planned_action.replace('_', '-')}; replace or clear it before reconciling as {action.replace('_', '-')}")
+                if action != evidence_action:
+                    raise RuntimeError(f"the explicit human plan ends in {evidence_action.replace('_', '-')}; replace or cancel it before reconciling as {action.replace('_', '-')}")
                 if plan.get("state") != "ready":
                     detail = ("CI is still pending" if plan.get("state") == "waiting" and plan.get("wait_for") == "ci"
                               else "CI is failing" if plan.get("state") == "ci-failing"
@@ -82,7 +94,7 @@ def main() -> int:
                               else "the plan condition is not satisfied")
                     raise RuntimeError(f"{detail}; do not reconcile the planned action yet")
                 reviewed = plan.get("head_sha")
-                evidence_ref = "explicit human plan"
+                evidence_ref = ("archived explicit human plan" if plan in archived_plans else "explicit human plan")
             else:
                 if not decision:
                     raise RuntimeError("no authoritative finished PR review is linked to this source bead")

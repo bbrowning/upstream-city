@@ -251,7 +251,9 @@ changes the real-world next step, `plan` explicitly stores only that human-autho
 outcome on the source bead. It pins a forced-live exact GitHub head and supports finite,
 projectable conditions/actions (`ci` or `author`; see `plan --help`). Pending conditions
 appear under WAITING; passing/failing CI, a new author head, or plan/head drift return
-the item to NEEDS YOU. `--note` carries optional context and `--clear` removes the plan.
+the item to NEEDS YOU. `--note` carries optional context. `--cancel` cancels rather than
+recording an upstream outcome, retains exact-head evidence, and redirects to the exact
+reconcile command when a live refresh already observes the planned review or merge.
 
 ## Monitor and retrieve results
 

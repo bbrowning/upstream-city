@@ -17,7 +17,7 @@ from typing import Any
 ASSETS_SCRIPTS = Path(__file__).resolve().parents[2] / "assets" / "scripts"
 sys.path.insert(0, str(ASSETS_SCRIPTS))
 from attention_decision import build_decision  # noqa: E402
-from human_plan import action_label as plan_action_label, evaluate_plan  # noqa: E402
+from human_plan import action_label as plan_action_label, evaluate_archive, evaluate_plan  # noqa: E402
 
 
 GROUPS = (
@@ -471,9 +471,23 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
     }
     decision = build_decision(item, children)
     item["decision"] = decision
+    archived_plans = evaluate_archive(metadata_json(bead, "gc.human_plan_archive_json"), item)
+    item["archived_human_plans"] = archived_plans
     human_plan = evaluate_plan(metadata_json(bead, "gc.human_plan_json"), item)
     item["human_plan"] = human_plan
-    if human_plan and status != "closed":
+    upstream_finished = bool(github and github.get("available") and github.get("state") in {"CLOSED", "MERGED"})
+    if upstream_finished and status != "closed":
+        matching = next((plan for plan in reversed(archived_plans + ([human_plan] if human_plan else []))
+                         if plan.get("then") in {"approve", "request_changes"}
+                         and plan.get("head_matches")), None)
+        suffix = f" --as {matching['then'].replace('_', '-')}" if matching else ""
+        command = f"gc dev-pack reconcile {rig}/{bead.get('id')}{suffix}"
+        item["upstream_completion"] = {"state": github.get("state"), "url": github.get("url"),
+                                       "reconcile_command": command}
+        item["group"] = "needs-you"
+        item["reason"] = f"GitHub reports the PR {str(github.get('state')).lower()} while the source remains open"
+        item["next_action"] = f"record the observed upstream completion with: {command}"
+    elif human_plan and status != "closed":
         state = human_plan["state"]
         wait_for = human_plan.get("wait_for")
         action = plan_action_label(str(human_plan.get("then") or ""))
@@ -715,8 +729,18 @@ def render_human_plan(plan: dict[str, Any], decision: dict[str, Any] | None) -> 
         print("The plan cannot be evaluated from the current GitHub observation.")
     if decision and (decision.get("commands") or {}).get("full_review"):
         print(f"\nPrior full automated review:\n{decision['commands']['full_review']}")
-    print(f"\nClear plan:\n{plan['commands']['clear']}")
+    print("\nCancel plan (does not record an upstream outcome):")
+    print(plan['commands']['cancel'])
     print(f"\nReplace plan:\n{plan['commands']['replace']}")
+
+
+def render_upstream_completion(completion: dict[str, Any]) -> None:
+    print("\nUPSTREAM COMPLETION OBSERVED")
+    print(f"GitHub reports this pull request {str(completion.get('state') or 'closed').lower()}.")
+    if completion.get("url"):
+        print(completion["url"])
+    print("\nRecord the upstream outcome locally:")
+    print(completion["reconcile_command"])
 
 
 def main() -> int:
@@ -902,7 +926,9 @@ def main() -> int:
         else:
             print(f"{item['rig']}/{item['id']} · {item['group']} · {item['status']}")
             print(item["title"])
-            if item.get("human_plan"):
+            if item.get("upstream_completion"):
+                render_upstream_completion(item["upstream_completion"])
+            elif item.get("human_plan"):
                 render_human_plan(item["human_plan"], item.get("decision"))
             elif item.get("decision"):
                 render_decision(item["decision"])
