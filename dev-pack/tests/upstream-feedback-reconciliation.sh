@@ -264,6 +264,11 @@ jq -e '.[] | select(.id=="vllm-e5m8.2") | .status=="closed" and
   .metadata["gc.human_plan_archive_json"] != null' "$TMP/vllm.json" >/dev/null
 incident_again=$("$ROOT/dev-pack/commands/reconcile/run.sh" vllm/vllm-e5m8.2 --json)
 jq -e '.changed == false and (.message|startswith("already reconciled"))' <<< "$incident_again" >/dev/null
+finished=$(DEV_PACK_WORK_NOW=2026-09-01T00:08:00Z "$ROOT/dev-pack/commands/work/run.sh" show vllm-e5m8.2 --rig vllm --refresh 2>&1)
+grep -Fq 'recently-finished · closed' <<< "$finished"
+grep -Fq 'next: none; reopen only if the human disposition changes' <<< "$finished"
+! grep -Fq 'REVIEW REQUIRED' <<< "$finished"
+! grep -Fq 'head 4b5d6bd8' <<< "$finished"
 
 # Cancellation cannot discard completion evidence once the live refresh sees it.
 "$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-52 --wait-for ci --then approve >/dev/null

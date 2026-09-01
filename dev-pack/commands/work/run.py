@@ -928,6 +928,8 @@ def main() -> int:
             print(item["title"])
             if item.get("upstream_completion"):
                 render_upstream_completion(item["upstream_completion"])
+            elif item.get("status") == "closed":
+                pass
             elif item.get("human_plan"):
                 render_human_plan(item["human_plan"], item.get("decision"))
             elif item.get("decision"):
