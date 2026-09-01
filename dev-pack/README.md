@@ -235,9 +235,12 @@ requires the human bead itself to be closed. `--watch` is explicitly deferred un
 an event-driven multi-store refresh contract exists; rerun the command to refresh.
 
 For a completed PR review, `work show` leads with the real upstream step: approve or
-request changes on the linked PR at the exact reviewed SHA. `feedback` selects the
+request changes on the linked PR at the exact reviewed SHA. It prints both the exact
+`summary <result-bead> --full` command for complete internal review evidence and the
+GitHub-ready `feedback` command. `feedback` selects the
 newest authoritative verdict, including post-settlement re-synthesis, and remains
-read-only; `--action` makes a human disagreement explicit. After the human submits
+read-only; it is a cleaned deterministic derivative, not a replacement for the full
+review, and `--action` makes a human disagreement explicit. After the human submits
 that review on GitHub, `reconcile` forces a live read-only observation and updates the
 source bead only if the SHA and observed review state match. It never posts a review
 or touches mail. Requested changes become `wait:author`; approvals close the source.

@@ -622,8 +622,9 @@ def render_decision(decision: dict[str, Any]) -> None:
         if decision.get("summary"):
             print(decision["summary"])
         if decision.get("findings"):
-            print(f"Findings: {len(decision['findings'])} (render the exact review text below)")
-        print(f"\nReview text:\n{decision['commands']['render_feedback']}")
+            print(f"Findings: {len(decision['findings'])} (inspect the full review or render GitHub-ready text below)")
+        print(f"\nFull automated review:\n{decision['commands']['full_review']}")
+        print(f"\nGitHub-ready review text:\n{decision['commands']['render_feedback']}")
         print(f"\nAFTER SUBMITTING\n{decision['commands']['reconcile_after_github']}")
         print(f"\nIf you disagree and want to {decision['disagree_action_label'].lower()} instead:")
         print(decision["commands"]["disagree_render"])

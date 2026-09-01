@@ -74,6 +74,8 @@ def build_decision(item: dict[str, Any], children: list[dict[str, Any]]) -> dict
     qualified = f"{item['rig']}/{item['id']}"
     feedback = f"gc dev-pack feedback {qualified}"
     reconcile = f"gc dev-pack reconcile {qualified}"
+    summary_rig = "" if item["rig"] == "hq" else f" --rig {item['rig']}"
+    full_review = f"gc dev-pack summary {result_bead.get('id')}{summary_rig} --full"
     if not github.get("available"):
         state = "github-unavailable"
     elif not reviewed:
@@ -106,6 +108,7 @@ def build_decision(item: dict[str, Any], children: list[dict[str, Any]]) -> dict
         "merge_recommendation": output.get("merge_recommendation") or "",
         "findings": findings,
         "commands": {
+            "full_review": full_review,
             "render_feedback": feedback,
             "reconcile_after_github": reconcile,
             "disagree_render": f"{feedback} --action {opposite.replace('_', '-')}",

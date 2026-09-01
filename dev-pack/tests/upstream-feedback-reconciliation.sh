@@ -105,11 +105,15 @@ jq -e '.item.decision.state == "upstream-action-required" and
   .item.decision.result_bead == "vllm-final-42" and
   .item.decision.recommended_action == "request_changes" and
   .item.decision.reviewed_head_sha == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" and
+  (.item.decision.commands.full_review == "gc dev-pack summary vllm-final-42 --rig vllm --full") and
   (.item.decision.commands.render_feedback == "gc dev-pack feedback vllm/vllm-source-42") and
   (.item.decision.commands.reconcile_after_github == "gc dev-pack reconcile vllm/vllm-source-42")' <<< "$show" >/dev/null
 text=$(DEV_PACK_WORK_NOW=2026-09-01T00:05:00Z "$ROOT/dev-pack/commands/work/run.sh" show vllm-source-42 --rig vllm --no-network)
 grep -Fq 'NEXT UPSTREAM ACTION' <<< "$text"
 grep -Fq 'https://github.com/example/project/pull/42' <<< "$text"
+grep -Fq 'Full automated review:' <<< "$text"
+grep -Fq 'gc dev-pack summary vllm-final-42 --rig vllm --full' <<< "$text"
+grep -Fq 'GitHub-ready review text:' <<< "$text"
 grep -Fq 'AFTER SUBMITTING' <<< "$text"
 
 : > "$TMP/gh.calls"

@@ -43,7 +43,9 @@ scans message beads under the same read-only ledger enforcement.
 each row has an exact `work show` pointer and any applicable `summary`/`status`
 pointer. For a current exact-head PR verdict, it leads with the GitHub action, PR
 URL, reviewed SHA, feedback-render command, and separate post-submission reconcile
-command. `gc dev-pack feedback <rig/source>` is the read-only upstream-text renderer;
+command. It also prints `gc dev-pack summary <result-bead> --full` for the complete
+stored review. `gc dev-pack feedback <rig/source>` is the cleaned, GitHub-ready,
+read-only derivative rather than a replacement for that full review;
 `gc dev-pack reconcile <rig/source>` mutates only the source bead after a forced live
 GitHub refresh proves that exact action on that exact head. Normal operation reuses a fresh disposable cache and refreshes stale
 entries. `--refresh` forces live observation; `--no-network` reports cached
