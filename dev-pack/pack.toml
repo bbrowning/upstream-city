@@ -109,6 +109,10 @@
 #     work               read-only human attention projection across HQ/rig beads,
 #                        workflow evidence, and local artifact state; `work show`
 #                        expands one bead or external ref without acknowledging mail.
+#     feedback <source>  render upstream-ready text from the newest durable review;
+#                        read-only, with an explicit human-disagreement override.
+#     reconcile <source> refresh GitHub and record the already-submitted review on
+#                        the source bead; never posts to GitHub or touches mail.
 #
 # SHARED SPINE
 #     template-fragments/trigger-claim   first-action exact GC_TRIGGER_BEAD_ID

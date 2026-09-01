@@ -209,6 +209,8 @@ gc dev-pack work show gh-51858 --json    # external-ref lookup, stable JSON
 gc dev-pack work --refresh               # bounded live read-only GitHub evidence
 gc dev-pack work --no-network            # honest local/cache-only degradation
 gc dev-pack work audit --refresh         # zero-omission shadow audit
+gc dev-pack feedback vllm/vllm-e5m8.2    # clean text to paste into the GitHub review
+gc dev-pack reconcile vllm/vllm-e5m8.2   # after posting: verify GitHub, update source
 ```
 
 GitHub observations are reused for 30 minutes by default. Set
@@ -231,6 +233,14 @@ read or acknowledged, and no parallel attention state is persisted. A closed
 automation workflow below an open human bead means NEEDS YOU; RECENTLY FINISHED
 requires the human bead itself to be closed. `--watch` is explicitly deferred until
 an event-driven multi-store refresh contract exists; rerun the command to refresh.
+
+For a completed PR review, `work show` leads with the real upstream step: approve or
+request changes on the linked PR at the exact reviewed SHA. `feedback` selects the
+newest authoritative verdict, including post-settlement re-synthesis, and remains
+read-only; `--action` makes a human disagreement explicit. After the human submits
+that review on GitHub, `reconcile` forces a live read-only observation and updates the
+source bead only if the SHA and observed review state match. It never posts a review
+or touches mail. Requested changes become `wait:author`; approvals close the source.
 
 ## Monitor and retrieve results
 

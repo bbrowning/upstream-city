@@ -41,7 +41,11 @@ scans message beads under the same read-only ledger enforcement.
 
 `show` returns the source bead plus durable output/lifecycle and workflow evidence;
 each row has an exact `work show` pointer and any applicable `summary`/`status`
-pointer. Normal operation reuses a fresh disposable cache and refreshes stale
+pointer. For a current exact-head PR verdict, it leads with the GitHub action, PR
+URL, reviewed SHA, feedback-render command, and separate post-submission reconcile
+command. `gc dev-pack feedback <rig/source>` is the read-only upstream-text renderer;
+`gc dev-pack reconcile <rig/source>` mutates only the source bead after a forced live
+GitHub refresh proves that exact action on that exact head. Normal operation reuses a fresh disposable cache and refreshes stale
 entries. `--refresh` forces live observation; `--no-network` reports cached
 freshness or unavailability honestly. By default observations stay fresh for 30
 minutes (`DEV_PACK_WORK_CACHE_TTL` overrides this in seconds), and the cache is

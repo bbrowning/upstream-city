@@ -109,11 +109,18 @@ done
 # Work is the canonical read-only attention contract, including its explicit watch
 # deferral rather than an accidental polling implementation.
 work_help=$(gc dev-pack work --help)
+feedback_help=$(gc dev-pack feedback --help)
+reconcile_help=$(gc dev-pack reconcile --help)
 for phrase in 'human-facing' 'GC_ATTENTION_ACTORS' 'NEEDS YOU' 'bd' '--readonly' \
   'never reads or acknowledges mail' 'explicitly deferred'; do
   printf '%s' "$work_help" | grep -Fq -- "$phrase" || fail "work help missing attention contract: $phrase"
 done
+printf '%s' "$feedback_help" | grep -Fq -- 'newest authoritative finished review' \
+  || fail 'feedback help missing upstream rendering contract'
+printf '%s' "$reconcile_help" | grep -Fq -- 'Always refreshes GitHub read-only' \
+  || fail 'reconcile help missing verification contract'
 for phrase in '## Human attention desk' 'gc dev-pack work show' \
+  'gc dev-pack feedback' 'gc dev-pack reconcile' \
   'STALE OR UNCLEAR' 'no parallel attention state' '--watch'; do
   grep -Fq -- "$phrase" "$ROOT/dev-pack/README.md" \
     || fail "operator runbook missing attention contract: $phrase"

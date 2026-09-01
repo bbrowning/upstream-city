@@ -14,6 +14,10 @@ import sys
 import tempfile
 from typing import Any
 
+ASSETS_SCRIPTS = Path(__file__).resolve().parents[2] / "assets" / "scripts"
+sys.path.insert(0, str(ASSETS_SCRIPTS))
+from attention_decision import build_decision  # noqa: E402
+
 
 GROUPS = (
     ("needs-you", "NEEDS YOU"),
@@ -227,7 +231,10 @@ def reviewed_head(children: list[dict[str, Any]]) -> tuple[str | None, str | Non
         output = metadata_json(child, "gc.output_json")
         if not output_schema(child, output).startswith("pr-review"):
             continue
-        sha = str(metadata.get("gc.reviewed_head_sha") or (output or {}).get("reviewed_head_sha") or "")
+        evidence = (output or {}).get("evidence")
+        nested_sha = evidence.get("reviewed_head_sha") if isinstance(evidence, dict) else None
+        sha = str(metadata.get("gc.reviewed_head_sha") or (output or {}).get("reviewed_head_sha") or
+                  nested_sha or "")
         if sha:
             candidates.append((parse_time(child.get("closed_at") or child.get("updated_at")) or dt.datetime.min.replace(tzinfo=dt.timezone.utc), sha))
     if not candidates:
@@ -434,7 +441,7 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
         reason = "open work has no active workflow, final result, or trustworthy explicit wait"
         next_action = "start it, record a canonical wait, defer it, or close it"
 
-    return {
+    item = {
         "group": group,
         "rig": rig,
         "id": bead.get("id"),
@@ -461,6 +468,22 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
         "local_artifact": artifact,
         "github": github,
     }
+    decision = build_decision(item, children)
+    item["decision"] = decision
+    if decision and status != "closed" and (github or {}).get("state") not in {"CLOSED", "MERGED"}:
+        state = decision["state"]
+        if state == "upstream-action-required":
+            group = item["group"] = "needs-you"
+            item["reason"] = (f"the automated verdict recommends {decision['action_label'].lower()} "
+                              "and GitHub has not recorded that review on the exact reviewed head")
+            item["next_action"] = (f"{decision['action_label']} on GitHub for reviewed head "
+                                   f"{decision['reviewed_head_sha'][:8]}, then reconcile")
+        elif state == "upstream-observed":
+            item["group"] = "needs-you"
+            item["reason"] = (f"GitHub now reports {decision['github_review_state']} on the exact reviewed head; "
+                              "the source bead has not been reconciled")
+            item["next_action"] = "run the displayed reconcile command to record the upstream action"
+    return item
 
 
 def parser() -> argparse.ArgumentParser:
@@ -588,6 +611,39 @@ def render_known_output(output: dict[str, Any], schema: str) -> str | None:
     return result.stdout.rstrip() if result.returncode == 0 else None
 
 
+def render_decision(decision: dict[str, Any]) -> None:
+    state = decision["state"]
+    sha = decision.get("reviewed_head_sha")
+    if state == "upstream-action-required":
+        print("\nNEXT UPSTREAM ACTION")
+        print(f"{decision['action_label']} on GitHub for reviewed head {sha[:8]}:")
+        print(decision.get("github_url") or "(GitHub URL unavailable)")
+        print(f"\nAutomated verdict: {decision['verdict']}")
+        if decision.get("summary"):
+            print(decision["summary"])
+        if decision.get("findings"):
+            print(f"Findings: {len(decision['findings'])} (render the exact review text below)")
+        print(f"\nReview text:\n{decision['commands']['render_feedback']}")
+        print(f"\nAFTER SUBMITTING\n{decision['commands']['reconcile_after_github']}")
+        print(f"\nIf you disagree and want to {decision['disagree_action_label'].lower()} instead:")
+        print(decision["commands"]["disagree_render"])
+        print(decision["commands"]["disagree_reconcile"])
+    elif state == "upstream-observed":
+        print("\nUPSTREAM ACTION OBSERVED")
+        print(f"GitHub reports {decision['github_review_state']} for reviewed head {sha[:8]}.")
+        print(f"Record it internally:\n{decision['commands']['reconcile_after_github']}")
+    elif state == "head-drift":
+        print("\nREVIEW REQUIRED")
+        print(f"GitHub head {str(decision.get('current_head_sha') or 'unknown')[:8]} no longer matches reviewed head {str(sha)[:8]}.")
+        print("Review the current head before taking an upstream action.")
+    elif state == "review-required":
+        print("\nREVIEW REQUIRED")
+        print("The durable review does not record an exact reviewed SHA; repeat the review before acting upstream.")
+    elif state == "github-unavailable":
+        print("\nGITHUB OBSERVATION UNAVAILABLE")
+        print("Refresh GitHub evidence before taking or reconciling an upstream action.")
+
+
 def main() -> int:
     args = parser().parse_args()
     if args.watch:
@@ -625,6 +681,8 @@ def main() -> int:
     for rig, bead in records:
         name = "hq" if rig.get("hq") else rig["name"]
         external = str(bead.get("external_ref") or "")
+        if args.subcommand == "show" and bead.get("id") != args.target and external != args.target:
+            continue
         if external.startswith("gh-") and is_marked(bead) and not is_internal(bead):
             github_sources.append((rig, bead, name, external))
     for index, (rig, bead, name, external) in enumerate(github_sources):
@@ -769,6 +827,8 @@ def main() -> int:
         else:
             print(f"{item['rig']}/{item['id']} · {item['group']} · {item['status']}")
             print(item["title"])
+            if item.get("decision"):
+                render_decision(item["decision"])
             print(f"\nwhy: {item['reason']}\nnext: {item['next_action']}\nsource: {item['authoritative_output']}")
             evidence = result["evidence"]
             if evidence.get("output"):

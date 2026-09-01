@@ -238,6 +238,14 @@ at 128. `work audit` reads (without acknowledging) message beads, normally hidde
 durable outputs, their human sources, and GitHub observations to enforce zero
 coverage omissions. Neither projection nor audit changes bead/mail/GitHub state.
 
+The PR handoff intentionally has two phases. `work show` and `feedback` remain pure
+readers: they identify the exact reviewed head, link the PR, and render the recommended
+GitHub review text. The maintainer submits the review upstream. Only the separate
+`reconcile` command may update the source bead, and only after a forced live GitHub read
+confirms the current head and the observed `APPROVED` or `CHANGES_REQUESTED` state. This
+keeps bead disposition downstream of upstream truth without granting the pack GitHub
+write authority or changing human-mail behavior.
+
 ## Maintainer gates
 
 - `gc lint dev-pack` validates pack structure and formulas.
