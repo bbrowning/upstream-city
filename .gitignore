@@ -11,6 +11,9 @@ hooks/
 .codex/skills/
 .codex/hooks.json
 
+# Python bytecode caches
+__pycache__/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 .dolt-backup/
