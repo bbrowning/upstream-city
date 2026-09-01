@@ -113,6 +113,8 @@
 #                        read-only, with an explicit human-disagreement override.
 #     reconcile <source> refresh GitHub and record the already-submitted review on
 #                        the source bead; never posts to GitHub or touches mail.
+#     plan <source>      explicitly persist a conditional exact-head human plan
+#                        without harvesting interactive ask sessions.
 #
 # SHARED SPINE
 #     template-fragments/trigger-claim   first-action exact GC_TRIGGER_BEAD_ID

@@ -246,6 +246,14 @@ confirms the current head and the observed `APPROVED` or `CHANGES_REQUESTED` sta
 keeps bead disposition downstream of upstream truth without granting the pack GitHub
 write authority or changing human-mail behavior.
 
+Interactive `ask` exploration remains intentionally session-only. The system does not
+harvest dialogue or infer a disposition from chat or GitHub comments. When the human
+explicitly chooses to remember an outcome, `plan` stores a small
+`dev-pack-human-plan.v1` record on the source: observable wait condition, finite next
+action, exact live head, timestamp, and optional human note. The work projection wakes
+that source on CI success/failure, author-head change, or invalidating drift. A satisfied
+plan can authorize exact-head reconciliation; unsatisfied plans cannot.
+
 ## Maintainer gates
 
 - `gc lint dev-pack` validates pack structure and formulas.

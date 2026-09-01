@@ -48,54 +48,85 @@ def main() -> int:
         shown = json.loads(probe.stdout)
         item, bead = shown["item"], shown["evidence"]["bead"]
         decision = item.get("decision")
-        if not decision:
-            raise RuntimeError("no authoritative finished PR review is linked to this source bead")
+        plan = item.get("human_plan")
         github = item.get("github") or {}
         if not github.get("available") or github.get("freshness") != "live":
             raise RuntimeError("a live GitHub observation is required; refresh was unavailable or stale")
-        reviewed, current = decision.get("reviewed_head_sha"), decision.get("current_head_sha")
-        if not reviewed:
-            raise RuntimeError("review evidence lacks the exact reviewed SHA; repeat the review")
-        if not current or current != reviewed:
-            raise RuntimeError(f"head drift: GitHub {current or 'unknown'} does not match reviewed SHA {reviewed}")
-        action = (args.action or decision["recommended_action"]).replace("-", "_")
-        expected = "CHANGES_REQUESTED" if action == "request_changes" else "APPROVED"
-        if github.get("review_state") != expected:
-            raise RuntimeError(f"GitHub reports {github.get('review_state') or 'UNKNOWN'}, not {expected}; perform the GitHub action first")
+        current = github.get("current_head_sha")
+        planned_action = (plan or {}).get("then") if (plan or {}).get("then") in {"approve", "request_changes"} else None
+        if args.action:
+            action = args.action.replace("-", "_")
+        elif planned_action:
+            action = str(planned_action)
+        elif decision:
+            action = str(decision["recommended_action"])
+        else:
+            raise RuntimeError("no actionable human plan or authoritative finished review is linked to this source bead")
         metadata = bead.get("metadata") or {}
-        if (metadata.get("gc.upstream_review_sha") == reviewed and
+        if (current and metadata.get("gc.upstream_review_sha") == current and
                 metadata.get("gc.upstream_review_action") == action):
+            reviewed = current
+            expected = "CHANGES_REQUESTED" if action == "request_changes" else "APPROVED"
             changed = False
             message = f"already reconciled {action.replace('_', '-')} on {reviewed[:8]}"
-        elif args.dry_run:
-            changed = False
-            message = f"would reconcile {action.replace('_', '-')} on {reviewed[:8]}"
         else:
-            prefix = [gc, "--city", city]
-            scope = item["rig"]
-            if scope != "hq":
-                prefix += ["--rig", scope]
-            note = (f"Observed GitHub review {expected} on exact reviewed head {reviewed}; "
-                    f"reconciled as {action.replace('_', '-')} from {decision.get('result_bead')}.")
-            update = prefix + ["bd", "update", item["id"], "--append-notes", note,
-                               "--set-metadata", f"gc.upstream_review_sha={reviewed}",
-                               "--set-metadata", f"gc.upstream_review_action={action}"]
-            if action == "request_changes":
-                update += ["--status", "blocked", "--add-label", "wait:author"]
-                for label in ("needs-you", "needs_you", "action-required", "human-action",
-                              "blocked", "needs-re-review"):
-                    update += ["--remove-label", label]
-                mutation = run(update)
+            if plan:
+                if not planned_action:
+                    raise RuntimeError("the active human plan does not end in an upstream review action")
+                if action != planned_action:
+                    raise RuntimeError(f"the active human plan ends in {planned_action.replace('_', '-')}; replace or clear it before reconciling as {action.replace('_', '-')}")
+                if plan.get("state") != "ready":
+                    detail = ("CI is still pending" if plan.get("state") == "waiting" and plan.get("wait_for") == "ci"
+                              else "CI is failing" if plan.get("state") == "ci-failing"
+                              else "the planned exact head has changed" if plan.get("state") == "head-drift"
+                              else "the plan condition is not satisfied")
+                    raise RuntimeError(f"{detail}; do not reconcile the planned action yet")
+                reviewed = plan.get("head_sha")
+                evidence_ref = "explicit human plan"
             else:
-                mutation = run(update)
-                if mutation.returncode == 0:
-                    mutation = run(prefix + ["bd", "close", item["id"], "--reason",
-                                              f"GitHub approval observed on reviewed head {reviewed}"])
-            if mutation.returncode:
-                raise RuntimeError(mutation.stderr.strip() or mutation.stdout.strip() or "bead reconciliation failed")
-            changed = True
-            message = ("recorded waiting on author" if action == "request_changes"
-                       else "recorded completion after GitHub approval")
+                if not decision:
+                    raise RuntimeError("no authoritative finished PR review is linked to this source bead")
+                reviewed = decision.get("reviewed_head_sha")
+                if not reviewed:
+                    raise RuntimeError("review evidence lacks the exact reviewed SHA; repeat the review")
+                evidence_ref = str(decision.get("result_bead") or "durable review")
+            if not current or current != reviewed:
+                raise RuntimeError(f"head drift: GitHub {current or 'unknown'} does not match reviewed SHA {reviewed}")
+            expected = "CHANGES_REQUESTED" if action == "request_changes" else "APPROVED"
+            if github.get("review_state") != expected:
+                raise RuntimeError(f"GitHub reports {github.get('review_state') or 'UNKNOWN'}, not {expected}; perform the GitHub action first")
+            if args.dry_run:
+                changed = False
+                message = f"would reconcile {action.replace('_', '-')} on {reviewed[:8]}"
+            else:
+                prefix = [gc, "--city", city]
+                scope = item["rig"]
+                if scope != "hq":
+                    prefix += ["--rig", scope]
+                note = (f"Observed GitHub review {expected} on exact reviewed head {reviewed}; "
+                        f"reconciled as {action.replace('_', '-')} from {evidence_ref}.")
+                update = prefix + ["bd", "update", item["id"], "--append-notes", note,
+                                   "--set-metadata", f"gc.upstream_review_sha={reviewed}",
+                                   "--set-metadata", f"gc.upstream_review_action={action}",
+                                   "--unset-metadata", "gc.human_plan_json",
+                                   "--remove-label", "wait:ci", "--remove-label", "wait:author"]
+                if action == "request_changes":
+                    update += ["--status", "blocked"]
+                    for label in ("needs-you", "needs_you", "action-required", "human-action",
+                                  "blocked", "needs-re-review"):
+                        update += ["--remove-label", label]
+                    update += ["--add-label", "wait:author"]
+                    mutation = run(update)
+                else:
+                    mutation = run(update)
+                    if mutation.returncode == 0:
+                        mutation = run(prefix + ["bd", "close", item["id"], "--reason",
+                                                  f"GitHub approval observed on reviewed head {reviewed}"])
+                if mutation.returncode:
+                    raise RuntimeError(mutation.stderr.strip() or mutation.stdout.strip() or "bead reconciliation failed")
+                changed = True
+                message = ("recorded waiting on author" if action == "request_changes"
+                           else "recorded completion after GitHub approval")
     except (ValueError, RuntimeError, KeyError, json.JSONDecodeError) as exc:
         print(f"reconcile: {exc}", file=sys.stderr)
         return 2

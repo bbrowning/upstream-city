@@ -50,7 +50,8 @@
         "active_workflow_children": {"type": "array", "items": {"type": ["string", "null"]}},
         "local_artifact": {"type": ["object", "null"]},
         "github": {"type": ["object", "null"]},
-        "decision": {"type": ["object", "null"]}
+        "decision": {"type": ["object", "null"]},
+        "human_plan": {"type": ["object", "null"]}
       },
       "additionalProperties": false
     },

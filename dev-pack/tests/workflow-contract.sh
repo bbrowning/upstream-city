@@ -111,6 +111,7 @@ done
 work_help=$(gc dev-pack work --help)
 feedback_help=$(gc dev-pack feedback --help)
 reconcile_help=$(gc dev-pack reconcile --help)
+plan_help=$(gc dev-pack plan --help)
 for phrase in 'human-facing' 'GC_ATTENTION_ACTORS' 'NEEDS YOU' 'bd' '--readonly' \
   'never reads or acknowledges mail' 'explicitly deferred'; do
   printf '%s' "$work_help" | grep -Fq -- "$phrase" || fail "work help missing attention contract: $phrase"
@@ -119,8 +120,12 @@ printf '%s' "$feedback_help" | grep -Fq -- 'newest authoritative finished review
   || fail 'feedback help missing upstream rendering contract'
 printf '%s' "$reconcile_help" | grep -Fq -- 'Always refreshes GitHub read-only' \
   || fail 'reconcile help missing verification contract'
+for phrase in 'CONDITION  ci | author' 'ACTION     approve | request-changes | re-review | inspect' \
+  'Valid combinations' '--note' '--clear' 'never reads or harvests'; do
+  printf '%s' "$plan_help" | grep -Fq -- "$phrase" || fail "plan help missing explicit-plan contract: $phrase"
+done
 for phrase in '## Human attention desk' 'gc dev-pack work show' \
-  'gc dev-pack feedback' 'gc dev-pack reconcile' \
+  'gc dev-pack feedback' 'gc dev-pack reconcile' 'gc dev-pack plan' \
   'STALE OR UNCLEAR' 'no parallel attention state' '--watch'; do
   grep -Fq -- "$phrase" "$ROOT/dev-pack/README.md" \
     || fail "operator runbook missing attention contract: $phrase"

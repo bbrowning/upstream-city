@@ -17,6 +17,7 @@ from typing import Any
 ASSETS_SCRIPTS = Path(__file__).resolve().parents[2] / "assets" / "scripts"
 sys.path.insert(0, str(ASSETS_SCRIPTS))
 from attention_decision import build_decision  # noqa: E402
+from human_plan import action_label as plan_action_label, evaluate_plan  # noqa: E402
 
 
 GROUPS = (
@@ -470,7 +471,39 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
     }
     decision = build_decision(item, children)
     item["decision"] = decision
-    if decision and status != "closed" and (github or {}).get("state") not in {"CLOSED", "MERGED"}:
+    human_plan = evaluate_plan(metadata_json(bead, "gc.human_plan_json"), item)
+    item["human_plan"] = human_plan
+    if human_plan and status != "closed":
+        state = human_plan["state"]
+        wait_for = human_plan.get("wait_for")
+        action = plan_action_label(str(human_plan.get("then") or ""))
+        short = str(human_plan.get("head_sha") or "")[:8]
+        if state == "waiting":
+            item["group"] = "waiting"
+            if wait_for == "ci":
+                item["reason"] = f"the explicit human plan is waiting for CI on exact head {short}"
+                item["next_action"] = f"when CI completes, {action.lower()} if appropriate"
+            else:
+                item["reason"] = f"the explicit human plan is waiting for an author update after head {short}"
+                item["next_action"] = f"when the head changes, {action.lower()}"
+        elif state == "ready":
+            item["group"] = "needs-you"
+            item["reason"] = ("CI is passing for the exact head pinned by the human plan" if wait_for == "ci"
+                              else "GitHub has a new author head after the one pinned by the human plan")
+            item["next_action"] = f"{action} for the current exact head"
+        elif state == "ci-failing":
+            item["group"] = "needs-you"
+            item["reason"] = f"CI is failing on exact head {short}"
+            item["next_action"] = "inspect CI failures before taking the planned action"
+        elif state == "head-drift":
+            item["group"] = "needs-you"
+            item["reason"] = "the current GitHub head differs from the exact head pinned by the human plan"
+            item["next_action"] = "re-evaluate and replace or clear the saved plan"
+        else:
+            item["group"] = "needs-you"
+            item["reason"] = "the explicit human plan cannot currently be evaluated"
+            item["next_action"] = "refresh GitHub evidence, then replace or clear the saved plan"
+    elif decision and status != "closed" and (github or {}).get("state") not in {"CLOSED", "MERGED"}:
         state = decision["state"]
         if state == "upstream-action-required":
             group = item["group"] = "needs-you"
@@ -643,6 +676,47 @@ def render_decision(decision: dict[str, Any]) -> None:
     elif state == "github-unavailable":
         print("\nGITHUB OBSERVATION UNAVAILABLE")
         print("Refresh GitHub evidence before taking or reconciling an upstream action.")
+
+
+def render_human_plan(plan: dict[str, Any], decision: dict[str, Any] | None) -> None:
+    wait_for = str(plan.get("wait_for") or "")
+    action = plan_action_label(str(plan.get("then") or ""))
+    planned = str(plan.get("head_sha") or "unknown")
+    current = str(plan.get("current_head_sha") or "unknown")
+    print("\nHUMAN PLAN")
+    print(f"Pinned GitHub head: {planned}")
+    print(f"Plan: wait for {wait_for}, then {action.lower()}.")
+    if plan.get("note"):
+        print(f"Context: {plan['note']}")
+    if wait_for == "ci":
+        print(f"Current CI: {plan.get('ci_state') or 'unknown'}")
+    state = plan.get("state")
+    if state == "waiting":
+        print("\nWAITING")
+        print("No human action is required until the recorded condition changes.")
+    elif state == "ready":
+        print("\nNEXT HUMAN ACTION")
+        if wait_for == "author":
+            print(f"{action} the new GitHub head {current[:8]}.")
+        else:
+            print(f"{action} on GitHub for exact head {planned[:8]}:")
+            print(plan.get("github_url") or "(GitHub URL unavailable)")
+            reconcile = (plan.get("commands") or {}).get("reconcile_after_github")
+            if reconcile:
+                print(f"\nAFTER SUBMITTING\n{reconcile}")
+    elif state == "ci-failing":
+        print("\nCI NEEDS INSPECTION")
+        print("Inspect the failing checks before taking the planned action.")
+    elif state == "head-drift":
+        print("\nPLAN NEEDS REVISION")
+        print(f"Current GitHub head {current[:8]} differs from planned head {planned[:8]}.")
+    else:
+        print("\nPLAN NEEDS ATTENTION")
+        print("The plan cannot be evaluated from the current GitHub observation.")
+    if decision and (decision.get("commands") or {}).get("full_review"):
+        print(f"\nPrior full automated review:\n{decision['commands']['full_review']}")
+    print(f"\nClear plan:\n{plan['commands']['clear']}")
+    print(f"\nReplace plan:\n{plan['commands']['replace']}")
 
 
 def main() -> int:
@@ -828,7 +902,9 @@ def main() -> int:
         else:
             print(f"{item['rig']}/{item['id']} · {item['group']} · {item['status']}")
             print(item["title"])
-            if item.get("decision"):
+            if item.get("human_plan"):
+                render_human_plan(item["human_plan"], item.get("decision"))
+            elif item.get("decision"):
                 render_decision(item["decision"])
             print(f"\nwhy: {item['reason']}\nnext: {item['next_action']}\nsource: {item['authoritative_output']}")
             evidence = result["evidence"]

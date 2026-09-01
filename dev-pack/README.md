@@ -211,6 +211,7 @@ gc dev-pack work --no-network            # honest local/cache-only degradation
 gc dev-pack work audit --refresh         # zero-omission shadow audit
 gc dev-pack feedback vllm/vllm-e5m8.2    # clean text to paste into the GitHub review
 gc dev-pack reconcile vllm/vllm-e5m8.2   # after posting: verify GitHub, update source
+gc dev-pack plan vllm/vllm-e5m8.2 --wait-for ci --then approve  # explicit reminder
 ```
 
 GitHub observations are reused for 30 minutes by default. Set
@@ -244,6 +245,13 @@ review, and `--action` makes a human disagreement explicit. After the human subm
 that review on GitHub, `reconcile` forces a live read-only observation and updates the
 source bead only if the SHA and observed review state match. It never posts a review
 or touches mail. Requested changes become `wait:author`; approvals close the source.
+
+Interactive `ask` remains session-only and is never harvested. When a discussion
+changes the real-world next step, `plan` explicitly stores only that human-authored
+outcome on the source bead. It pins a forced-live exact GitHub head and supports finite,
+projectable conditions/actions (`ci` or `author`; see `plan --help`). Pending conditions
+appear under WAITING; passing/failing CI, a new author head, or plan/head drift return
+the item to NEEDS YOU. `--note` carries optional context and `--clear` removes the plan.
 
 ## Monitor and retrieve results
 

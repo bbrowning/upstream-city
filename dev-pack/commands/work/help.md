@@ -53,6 +53,12 @@ freshness or unavailability honestly. By default observations stay fresh for 30
 minutes (`DEV_PACK_WORK_CACHE_TTL` overrides this in seconds), and the cache is
 capped at 128 entries.
 
+An explicit `gc dev-pack plan <rig/source> --wait-for ... --then ...` is projected
+ahead of automated verdict guidance. It remembers only a human-authored next-step
+outcome, pinned to a live exact head; interactive `ask` sessions remain ephemeral and
+are never harvested. `work show` displays the plan condition, current CI/head state,
+context note, and exact clear/replace commands.
+
 `audit` is the read-only shadow gate: it correlates routine-review refs from the
 human mailbox and durable (including normally hidden) outputs to exactly one
 human-facing source and its attention row. It reports nonzero status while any

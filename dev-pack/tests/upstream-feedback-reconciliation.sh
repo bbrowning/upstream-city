@@ -34,6 +34,8 @@ jq -n '
    source("46";"vllm-source-46"), result("46";"vllm-final-46";"approve";"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";"2026-09-01T00:03:00Z";{}),
    source("47";"vllm-source-47"), result("47";"vllm-final-47";"request_changes";"ffffffffffffffffffffffffffffffffffffffff";"2026-09-01T00:03:00Z";{}),
    source("48";"vllm-source-48"), result("48";"vllm-final-48";"approve";"9999999999999999999999999999999999999999";"2026-09-01T00:03:00Z";{})]
+   + [source("49";"vllm-source-49"), result("49";"vllm-final-49";"request_changes";"1111111111111111111111111111111111111111";"2026-09-01T00:03:00Z";{}),
+      source("50";"vllm-source-50")]
 ' > "$TMP/vllm.json"
 
 cat > "$TMP/bin/gc" <<'PY'
@@ -60,6 +62,7 @@ if op == "update":
     for i,arg in enumerate(args):
         if arg == "--set-metadata":
             key,value=args[i+1].split("=",1); bead["metadata"][key]=value
+        elif arg == "--unset-metadata": bead["metadata"].pop(args[i+1],None)
         elif arg == "--status": bead["status"]=args[i+1]
         elif arg == "--add-label" and args[i+1] not in bead["labels"]: bead["labels"].append(args[i+1])
         elif arg == "--remove-label" and args[i+1] in bead["labels"]: bead["labels"].remove(args[i+1])
@@ -82,7 +85,7 @@ states=json.loads((root/"gh-states.json").read_text())
 value=states.get(number)
 if value is None: raise SystemExit(1)
 print(json.dumps({"state":"OPEN","headRefOid":value["head"],"reviewDecision":value["review"],
- "statusCheckRollup":[],"mergedAt":None,"isDraft":False,"updatedAt":"2026-09-01T00:04:00Z",
+ "statusCheckRollup":value.get("checks",[]),"mergedAt":None,"isDraft":False,"updatedAt":"2026-09-01T00:04:00Z",
  "url":f"https://github.com/example/project/pull/{number}"}))
 PY
 chmod +x "$TMP/bin/gc" "$TMP/bin/gh"
@@ -94,7 +97,9 @@ cat > "$TMP/gh-states.json" <<'JSON'
  "45":{"head":"5555555555555555555555555555555555555555","review":"APPROVED"},
  "46":null,
  "47":{"head":"ffffffffffffffffffffffffffffffffffffffff","review":"REVIEW_REQUIRED"},
- "48":{"head":"9999999999999999999999999999999999999999","review":"CHANGES_REQUESTED"}}
+ "48":{"head":"9999999999999999999999999999999999999999","review":"CHANGES_REQUESTED"},
+ "49":{"head":"2222222222222222222222222222222222222222","review":"REVIEW_REQUIRED","checks":[{"state":"IN_PROGRESS"}]},
+ "50":{"head":"5050505050505050505050505050505050505050","review":"REVIEW_REQUIRED","checks":[]}}
 JSON
 
 export GC_BIN="$TMP/bin/gc" GH_BIN="$TMP/bin/gh" GC_CITY_PATH="$TMP/city" HANDOFF_FIXTURE="$TMP"
@@ -161,7 +166,68 @@ jq -e '.[] | select(.id=="vllm-source-43") | .status=="closed" and .metadata["gc
 
 disagree=$("$ROOT/dev-pack/commands/reconcile/run.sh" vllm/vllm-source-48 --as request-changes --json)
 jq -e '.changed == true and .action == "request_changes"' <<< "$disagree" >/dev/null
+
+if "$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-49 --wait-for author --then approve >/dev/null 2>"$TMP/invalid-plan.err"; then
+  echo 'invalid plan combination unexpectedly succeeded' >&2; exit 1
+fi
+grep -Fq 'valid choices: inspect, re-review' "$TMP/invalid-plan.err"
+plan=$("$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-49 --wait-for ci --then approve \
+  --note 'Coverage is optional; comment posted.' --json)
+jq -e '.changed == true and .plan.head_sha == "2222222222222222222222222222222222222222"' <<< "$plan" >/dev/null
+pending=$("$ROOT/dev-pack/commands/work/run.sh" show vllm-source-49 --rig vllm --no-network --json)
+jq -e '.item.group == "waiting" and .item.human_plan.state == "waiting" and
+  .item.human_plan.then == "approve" and .item.human_plan.note == "Coverage is optional; comment posted."' <<< "$pending" >/dev/null
+pending_text=$("$ROOT/dev-pack/commands/work/run.sh" show vllm-source-49 --rig vllm --no-network)
+grep -Fq 'HUMAN PLAN' <<< "$pending_text"
+grep -Fq 'No human action is required' <<< "$pending_text"
+grep -Fq 'gc dev-pack plan vllm/vllm-source-49 --clear' <<< "$pending_text"
+for transition in failing drift; do
+  if [ "$transition" = failing ]; then
+    jq '."49".checks=[{"conclusion":"FAILURE"}]' "$TMP/gh-states.json" > "$TMP/gh-next.json"
+  else
+    jq '."49".checks=[{"state":"IN_PROGRESS"}] | ."49".head="3333333333333333333333333333333333333333"' "$TMP/gh-states.json" > "$TMP/gh-next.json"
+  fi
+  mv "$TMP/gh-next.json" "$TMP/gh-states.json"
+  changed=$("$ROOT/dev-pack/commands/work/run.sh" show vllm-source-49 --rig vllm --refresh --json)
+  expected="ci-failing"; [ "$transition" = drift ] && expected="head-drift"
+  jq -e --arg expected "$expected" '.item.group == "needs-you" and .item.human_plan.state == $expected' <<< "$changed" >/dev/null
+  jq '."49".checks=[{"state":"IN_PROGRESS"}] | ."49".head="2222222222222222222222222222222222222222"' "$TMP/gh-states.json" > "$TMP/gh-next.json"
+  mv "$TMP/gh-next.json" "$TMP/gh-states.json"
+done
+if "$ROOT/dev-pack/commands/reconcile/run.sh" vllm/vllm-source-49 --as approve >/dev/null 2>"$TMP/plan-pending.err"; then
+  echo 'pending plan reconciliation unexpectedly succeeded' >&2; exit 1
+fi
+grep -Fq 'CI is still pending' "$TMP/plan-pending.err"
+"$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-49 --clear >/dev/null
+jq -e '.[] | select(.id=="vllm-source-49") | .status=="open" and
+  (.metadata["gc.human_plan_json"] == null) and (.labels|index("wait:ci") == null)' "$TMP/vllm.json" >/dev/null
+"$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-49 --wait-for ci --then approve \
+  --note 'Coverage is optional; comment posted.' >/dev/null
+jq '."49".review="REVIEW_REQUIRED" | ."49".checks=[{"conclusion":"SUCCESS"}]' "$TMP/gh-states.json" > "$TMP/gh-next.json"
+mv "$TMP/gh-next.json" "$TMP/gh-states.json"
+ready=$("$ROOT/dev-pack/commands/work/run.sh" show vllm-source-49 --rig vllm --refresh --json)
+jq -e '.item.group == "needs-you" and .item.human_plan.state == "ready" and
+  .item.next_action == "Approve for the current exact head"' <<< "$ready" >/dev/null
+if "$ROOT/dev-pack/commands/reconcile/run.sh" vllm/vllm-source-49 --as approve >/dev/null 2>"$TMP/plan-unsubmitted.err"; then
+  echo 'unsubmitted planned approval unexpectedly reconciled' >&2; exit 1
+fi
+grep -Fq 'perform the GitHub action first' "$TMP/plan-unsubmitted.err"
+jq '."49".review="APPROVED"' "$TMP/gh-states.json" > "$TMP/gh-next.json"
+mv "$TMP/gh-next.json" "$TMP/gh-states.json"
+planned_reconcile=$("$ROOT/dev-pack/commands/reconcile/run.sh" vllm/vllm-source-49 --as approve --json)
+jq -e '.changed == true and .reviewed_head_sha == "2222222222222222222222222222222222222222"' <<< "$planned_reconcile" >/dev/null
+jq -e '.[] | select(.id=="vllm-source-49") | .status=="closed" and
+  .metadata["gc.human_plan_json"] == null and .metadata["gc.upstream_review_action"] == "approve"' "$TMP/vllm.json" >/dev/null
+
+"$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-50 --wait-for author --then re-review >/dev/null
+author_wait=$("$ROOT/dev-pack/commands/work/run.sh" show vllm-source-50 --rig vllm --no-network --json)
+jq -e '.item.group == "waiting" and .item.human_plan.state == "waiting"' <<< "$author_wait" >/dev/null
+jq '."50".head="5151515151515151515151515151515151515151"' "$TMP/gh-states.json" > "$TMP/gh-next.json"
+mv "$TMP/gh-next.json" "$TMP/gh-states.json"
+author_ready=$("$ROOT/dev-pack/commands/work/run.sh" show vllm-source-50 --rig vllm --refresh --json)
+jq -e '.item.group == "needs-you" and .item.human_plan.state == "ready" and
+  .item.next_action == "Re-review for the current exact head"' <<< "$author_ready" >/dev/null
 ! grep -Eq ' mail | api | pr review' "$TMP/gc.calls"
-! grep -Eq 'review|approve|request' "$TMP/gh.calls"
+! grep -Eq ' pr review| api | graphql ' "$TMP/gh.calls"
 
 echo 'upstream-feedback-reconciliation: ok'
