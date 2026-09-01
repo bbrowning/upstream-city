@@ -62,6 +62,7 @@ jq -e '
   ([.groups[] | select(.key=="needs-you") | .items[] | select(.id=="vllm-human-42")][0]) as $new |
   ([.groups[] | select(.key=="needs-you") | .items[] | select(.id=="vllm-human-43")][0]) as $legacy |
   ([.groups[] | select(.key=="needs-you") | .items[] | select(.id=="vllm-human-44")][0]) as $merged |
+  .cache.ttl_seconds == 1800 and
   $new.github.current_head_sha == "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" and
   $new.github.reviewed_head_sha == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" and
   $new.github.changed_since_review == true and $new.github.ci_state == "passing" and

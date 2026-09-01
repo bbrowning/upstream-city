@@ -211,6 +211,10 @@ gc dev-pack work --no-network            # honest local/cache-only degradation
 gc dev-pack work audit --refresh         # zero-omission shadow audit
 ```
 
+GitHub observations are reused for 30 minutes by default. Set
+`DEV_PACK_WORK_CACHE_TTL` to override that window in seconds; use `--refresh`
+when an explicitly live view is worth the network cost.
+
 From inside a rig, the default scope is that rig. From the city root, it is
 citywide. The bounded default groups are NEEDS YOU, IN FLIGHT, WAITING ON OTHERS,
 STALE OR UNCLEAR, and RECENTLY FINISHED; `--all` removes the per-group bound.

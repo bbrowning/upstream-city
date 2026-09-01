@@ -43,7 +43,9 @@ scans message beads under the same read-only ledger enforcement.
 each row has an exact `work show` pointer and any applicable `summary`/`status`
 pointer. Normal operation reuses a fresh disposable cache and refreshes stale
 entries. `--refresh` forces live observation; `--no-network` reports cached
-freshness or unavailability honestly. The cache is capped at 128 entries.
+freshness or unavailability honestly. By default observations stay fresh for 30
+minutes (`DEV_PACK_WORK_CACHE_TTL` overrides this in seconds), and the cache is
+capped at 128 entries.
 
 `audit` is the read-only shadow gate: it correlates routine-review refs from the
 human mailbox and durable (including normally hidden) outputs to exactly one

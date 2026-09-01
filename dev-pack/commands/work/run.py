@@ -36,6 +36,7 @@ FINAL_OUTPUT_PREFIXES = ("pr-review", "local-change", "feature-dev")
 CACHE_SCHEMA = "dev-pack-github-cache.v1"
 CACHE_LIMIT = 128
 GITHUB_QUERY_LIMIT = 64
+DEFAULT_CACHE_TTL = 1800
 
 
 def parse_time(value: str | None) -> dt.datetime | None:
@@ -278,7 +279,7 @@ def github_observation(city: str, rig: str, rig_path: str, external_ref: str, no
                        refresh: bool, no_network: bool) -> dict[str, Any]:
     path = cache_file(city, rig, external_ref)
     cached = read_cache(path)
-    ttl = bounded_env("DEV_PACK_WORK_CACHE_TTL", 300, 86400)
+    ttl = bounded_env("DEV_PACK_WORK_CACHE_TTL", DEFAULT_CACHE_TTL, 86400)
     observed = parse_time((cached or {}).get("observed_at"))
     age = int((now - observed).total_seconds()) if observed else None
     fresh = age is not None and age <= ttl
@@ -786,7 +787,7 @@ def main() -> int:
         "scope": scope_result,
         "selection": {"actors": sorted(actors), "attention_labels": sorted(ATTENTION_LABELS)},
         "network_mode": "no-network" if args.no_network else "refresh" if args.refresh else "cached",
-        "cache": {"schema_version": CACHE_SCHEMA, "ttl_seconds": bounded_env("DEV_PACK_WORK_CACHE_TTL", 300, 86400),
+        "cache": {"schema_version": CACHE_SCHEMA, "ttl_seconds": bounded_env("DEV_PACK_WORK_CACHE_TTL", DEFAULT_CACHE_TTL, 86400),
                   "maximum_entries": CACHE_LIMIT, "disposable": True,
                   "github_query_budget": query_budget,
                   "github_timeout_seconds": bounded_env("DEV_PACK_WORK_GITHUB_TIMEOUT", 20, 60)},
