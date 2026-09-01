@@ -83,6 +83,12 @@ def footer($brief):
            else [] end)
    else [] end);
 
+# Legacy pr-review.v1 allowed dynamic_request to be the command string. Normalize
+# that historical durable shape so every advertised summary path remains usable.
+(if (.dynamic_request | type) == "string"
+ then .dynamic_request = {command: .dynamic_request}
+ else . end)
+|
 if (.resolutions != null) then
     (.head_ref // "?")                              as $head
   | (.settle_of // "")                             as $settle_of

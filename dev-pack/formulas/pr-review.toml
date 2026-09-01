@@ -39,6 +39,10 @@ default = "HEAD"
 description = "Immutable PR head materialized before dispatch; empty only for dry rendering or non-PR refs."
 default = ""
 
+[vars.human_source_bead]
+description = "Canonical human-facing source bead for an external routine review."
+default = ""
+
 [vars.implementation_artifact_ref]
 description = "Artifact file/bead used for a local implementation review; empty for PR review."
 default = ""
@@ -249,7 +253,7 @@ transient` (or `hard`) with a stable `--failure-reason` on an infrastructure
 failure (provider down, rate-limited, repo unreachable). Do not run a separate
 `gc bd close` or `gc mail send`.
 """
-metadata = { "gc.run_target" = "{{review_target}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true" }
+metadata = { "gc.run_target" = "{{review_target}}", "gc.human_source_bead" = "{{human_source_bead}}", "gc.reviewed_head_sha" = "{{expected_head_sha}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true" }
 
 [steps.retry]
 max_attempts = 2

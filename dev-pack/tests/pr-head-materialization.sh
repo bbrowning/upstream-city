@@ -85,6 +85,10 @@ if [[ "$args" == *" rig list --json "* ]]; then
 elif [[ "$args" == *" agent list "* ]]; then
   printf '%s\n' vllm/pr-review-synthesizer vllm/pr-triage \
     vllm/pr-reviewer-a-frontier-xhigh vllm/pr-reviewer-b-frontier-xhigh vllm/pr-arbiter
+elif [[ "$args" == *" bd list "* ]]; then
+  printf '%s\n' '[]'
+elif [[ "$args" == *" bd create "* ]]; then
+  printf '%s\n' 'vllm-human-42'
 elif [[ "$args" == *" sling "* ]]; then
   printf '%s\n' "$*" > "${GC_TEST_LOG:?}"
   printf '%s\n' '{"id":"vllm-workflow"}'
@@ -100,5 +104,7 @@ grep -Fq -- "--var expected_head_sha=$PR_SHA" "$GC_TEST_LOG" \
     || fail 'launcher did not pass the pinned head SHA'
 grep -Fq -- '--var head_ref=42' "$GC_TEST_LOG" \
     || fail 'launcher did not preserve the PR identity'
+grep -Fq -- '--var human_source_bead=vllm-human-42' "$GC_TEST_LOG" \
+    || fail 'launcher did not link the canonical human-facing source bead'
 
 printf '%s\n' 'ok: atomic PR-head materialization before review dispatch'

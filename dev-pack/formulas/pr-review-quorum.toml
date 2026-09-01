@@ -32,6 +32,10 @@ default = "HEAD"
 description = "Immutable PR head materialized before dispatch; empty only for dry rendering or non-PR refs."
 default = ""
 
+[vars.human_source_bead]
+description = "Canonical human-facing source bead for an external routine review."
+default = ""
+
 [vars.implementation_artifact_ref]
 description = "Artifact file/bead used for a local implementation review; empty for PR review."
 default = ""
@@ -332,7 +336,7 @@ SETTLE ROUND (the divergence dial):
   second manual sling. One settle formula has one arbiter and one final re-synthesis;
   unresolved evidence escalates in that final verdict and never starts another round.
 """
-metadata = { "gc.run_target" = "{{synthesis_target}}", "gc.review_quorum_role" = "synthesis", "gc.auto_settle_enabled" = "{{enable_settle}}", "gc.output_json_schema" = "pr-review-quorum.v1", "gc.output_json_required" = "true" }
+metadata = { "gc.run_target" = "{{synthesis_target}}", "gc.human_source_bead" = "{{human_source_bead}}", "gc.reviewed_head_sha" = "{{expected_head_sha}}", "gc.review_quorum_role" = "synthesis", "gc.auto_settle_enabled" = "{{enable_settle}}", "gc.output_json_schema" = "pr-review-quorum.v1", "gc.output_json_required" = "true" }
 
 [steps.retry]
 max_attempts = 2

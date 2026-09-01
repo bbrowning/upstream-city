@@ -225,9 +225,18 @@ reason, next action, rig/id, and authoritative output pointer for every item. `w
 show` adds the raw source bead, parsed output/lifecycle, child evidence, and local
 branch comparison; PR review output uses the existing verdict renderer for text.
 The offline MVP explicitly defers `--watch` until Gas City exposes an event-driven
-read-only multi-store refresh boundary. Read-only GitHub observation and disposable
-freshness-labeled caching are a separate follow-up; this command does not infer live
-remote state from stale local prose.
+read-only multi-store refresh boundary. Routine GitHub review launch first resolves
+or creates exactly one external-ref-bearing human source bead under a per-ref lock,
+then stamps that source and the exact materialized SHA on the durable result step.
+The attention projection reconciles that reviewed SHA with GitHub's current exact
+head and state. Legacy results without a reviewed SHA remain actionable uncertainty.
+
+Normal use reuses a fresh disposable GitHub cache and refreshes stale entries;
+`--refresh` forces bounded read-only observation and `--no-network` uses only local
+evidence/cache. Cache entries are freshness-labeled, atomically replaced, and capped
+at 128. `work audit` reads (without acknowledging) message beads, normally hidden
+durable outputs, their human sources, and GitHub observations to enforce zero
+coverage omissions. Neither projection nor audit changes bead/mail/GitHub state.
 
 ## Maintainer gates
 

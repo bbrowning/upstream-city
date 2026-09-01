@@ -206,6 +206,9 @@ gc dev-pack work --rig vllm             # one explicit rig
 gc dev-pack work --group needs-you --all
 gc dev-pack work show vllm-e5m8.3       # deeper source/output/lifecycle evidence
 gc dev-pack work show gh-51858 --json    # external-ref lookup, stable JSON
+gc dev-pack work --refresh               # bounded live read-only GitHub evidence
+gc dev-pack work --no-network            # honest local/cache-only degradation
+gc dev-pack work audit --refresh         # zero-omission shadow audit
 ```
 
 From inside a rig, the default scope is that rig. From the city root, it is

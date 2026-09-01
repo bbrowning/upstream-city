@@ -8,8 +8,10 @@ import datetime as dt
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
+import tempfile
 from typing import Any
 
 
@@ -31,6 +33,9 @@ WAIT_LABEL_PREFIXES = (
     "wait:", "waiting:", "waiting-on:", "hold:", "blocked:",
 )
 FINAL_OUTPUT_PREFIXES = ("pr-review", "local-change", "feature-dev")
+CACHE_SCHEMA = "dev-pack-github-cache.v1"
+CACHE_LIMIT = 128
+GITHUB_QUERY_LIMIT = 64
 
 
 def parse_time(value: str | None) -> dt.datetime | None:
@@ -48,6 +53,13 @@ def duration(value: str) -> dt.timedelta:
         return dt.timedelta(seconds=int(value[:-1]) * units[value[-1]])
     except (KeyError, ValueError):
         raise argparse.ArgumentTypeError("use a whole-number duration such as 12h, 7d, or 2w")
+
+
+def bounded_env(name: str, default: int, maximum: int) -> int:
+    try:
+        return max(0, min(int(os.environ.get(name, str(default))), maximum))
+    except ValueError:
+        return default
 
 
 def compact_age(seconds: int) -> str:
@@ -151,6 +163,7 @@ def workflow_children(bead: dict[str, Any], all_beads: list[dict[str, Any]]) -> 
             output_schema(child, output).startswith("pr-review")
         )
         if (child.get("parent") == bead_id or metadata.get("gc.root_bead_id") == bead_id or
+                metadata.get("gc.human_source_bead") == bead_id or
                 same_external_review):
             found.append(child)
     return found
@@ -180,6 +193,10 @@ def local_artifact(lifecycle: dict[str, Any] | None, rig_path: str) -> dict[str,
     return result
 
 
+def rig_arg(rig: str) -> str:
+    return "" if rig == "hq" else f" --rig {rig}"
+
+
 def authoritative_pointer(rig: str, bead: dict[str, Any], schema: str) -> str:
     rig_arg = "" if rig == "hq" else f" --rig {rig}"
     if schema.startswith("pr-review"):
@@ -189,8 +206,145 @@ def authoritative_pointer(rig: str, bead: dict[str, Any], schema: str) -> str:
     return f"gc{rig_arg} bd show {bead['id']}"
 
 
+def retrieval_paths(rig: str, bead: dict[str, Any], children: list[dict[str, Any]]) -> dict[str, Any]:
+    arg = rig_arg(rig)
+    result = [f"gc dev-pack work show {bead['id']}{arg}"]
+    for child in children:
+        output = metadata_json(child, "gc.output_json")
+        schema = output_schema(child, output)
+        if schema.startswith("pr-review"):
+            result.append(f"gc dev-pack summary {child['id']}{arg}")
+        elif schema == "hard-bug-state.v1":
+            result.append(f"gc dev-pack status {child['id']}{arg}")
+    return {"work_show": result[0], "summary_or_status": list(dict.fromkeys(result[1:]))}
+
+
+def reviewed_head(children: list[dict[str, Any]]) -> tuple[str | None, str | None]:
+    candidates: list[tuple[dt.datetime, str]] = []
+    for child in children:
+        metadata = child.get("metadata", {})
+        output = metadata_json(child, "gc.output_json")
+        if not output_schema(child, output).startswith("pr-review"):
+            continue
+        sha = str(metadata.get("gc.reviewed_head_sha") or (output or {}).get("reviewed_head_sha") or "")
+        if sha:
+            candidates.append((parse_time(child.get("closed_at") or child.get("updated_at")) or dt.datetime.min.replace(tzinfo=dt.timezone.utc), sha))
+    if not candidates:
+        return None, "legacy review evidence does not record the exact reviewed SHA"
+    return max(candidates)[1], None
+
+
+def repository_slug(path: str) -> str | None:
+    probe = subprocess.run(["git", "-C", path, "remote", "get-url", "origin"], text=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    if probe.returncode:
+        return None
+    match = re.search(r"(?:github\.com[:/])([^/]+/[^/]+?)(?:\.git)?$", probe.stdout.strip())
+    return match.group(1) if match else None
+
+
+def cache_file(city: str, rig: str, external_ref: str) -> Path:
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", external_ref)
+    return Path(city, ".gc", "cache", "dev-pack-work", "github", f"{rig}-{safe}.json")
+
+
+def read_cache(path: Path) -> dict[str, Any] | None:
+    try:
+        value = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    return value if value.get("schema_version") == CACHE_SCHEMA else None
+
+
+def write_cache(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".refresh-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            json.dump(value, stream, sort_keys=True)
+            stream.write("\n")
+        os.replace(temporary, path)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+    entries = sorted(path.parent.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True)
+    for old in entries[CACHE_LIMIT:]:
+        old.unlink(missing_ok=True)
+
+
+def github_observation(city: str, rig: str, rig_path: str, external_ref: str, now: dt.datetime,
+                       refresh: bool, no_network: bool) -> dict[str, Any]:
+    path = cache_file(city, rig, external_ref)
+    cached = read_cache(path)
+    ttl = bounded_env("DEV_PACK_WORK_CACHE_TTL", 300, 86400)
+    observed = parse_time((cached or {}).get("observed_at"))
+    age = int((now - observed).total_seconds()) if observed else None
+    fresh = age is not None and age <= ttl
+    use_cache = cached is not None and (no_network or (fresh and not refresh))
+    if use_cache:
+        result = dict(cached["github"])
+        result["freshness"] = "fresh-cache" if fresh else "stale-cache-no-network"
+        result["cache_age_seconds"] = age
+        return result
+    if no_network:
+        return {"authority": "GitHub", "available": False, "freshness": "unavailable-no-network",
+                "observed_at": None, "error": "no cached GitHub observation"}
+    slug = repository_slug(rig_path)
+    number = external_ref[3:] if external_ref.startswith("gh-") else ""
+    if not slug or not number.isdigit():
+        return {"authority": "GitHub", "available": False, "freshness": "unavailable",
+                "observed_at": None, "error": "could not resolve GitHub repository or PR number"}
+    command = [os.environ.get("GH_BIN", "gh"), "pr", "view", number, "--repo", slug, "--json",
+               "state,headRefOid,reviewDecision,statusCheckRollup,mergedAt,isDraft,updatedAt,url"]
+    try:
+        probe = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               timeout=bounded_env("DEV_PACK_WORK_GITHUB_TIMEOUT", 20, 60))
+    except subprocess.TimeoutExpired:
+        probe = subprocess.CompletedProcess(command, 124, "", "GitHub query timed out")
+    if probe.returncode == 0:
+        raw = json.loads(probe.stdout)
+        checks = raw.get("statusCheckRollup") or []
+        states = [str(check.get("conclusion") or check.get("state") or "UNKNOWN") for check in checks]
+        github = {"authority": "GitHub", "kind": "pull_request", "available": True, "freshness": "live",
+                  "observed_at": now.isoformat().replace("+00:00", "Z"), "url": raw.get("url"),
+                  "state": raw.get("state"), "merged_at": raw.get("mergedAt"),
+                  "draft": raw.get("isDraft"), "current_head_sha": raw.get("headRefOid"),
+                  "review_state": raw.get("reviewDecision") or "UNKNOWN",
+                  "ci_state": ("none" if not states else ("passing" if all(s in {"SUCCESS", "SKIPPED", "NEUTRAL"} for s in states)
+                               else "pending" if any(s in {"", "UNKNOWN", "PENDING", "QUEUED", "IN_PROGRESS"} for s in states) else "failing")),
+                  "source_updated_at": raw.get("updatedAt")}
+        write_cache(path, {"schema_version": CACHE_SCHEMA, "observed_at": github["observed_at"], "github": github})
+        return github
+    issue_command = [os.environ.get("GH_BIN", "gh"), "issue", "view", number, "--repo", slug,
+                     "--json", "state,updatedAt,url"]
+    try:
+        issue_probe = subprocess.run(issue_command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                     timeout=bounded_env("DEV_PACK_WORK_GITHUB_TIMEOUT", 20, 60))
+    except subprocess.TimeoutExpired:
+        issue_probe = subprocess.CompletedProcess(issue_command, 124, "", "GitHub issue query timed out")
+    if issue_probe.returncode == 0:
+        raw = json.loads(issue_probe.stdout)
+        github = {"authority": "GitHub", "kind": "issue", "available": True, "freshness": "live",
+                  "observed_at": now.isoformat().replace("+00:00", "Z"), "url": raw.get("url"),
+                  "state": raw.get("state"), "merged_at": None, "draft": None,
+                  "current_head_sha": None, "review_state": "NOT_APPLICABLE", "ci_state": "NOT_APPLICABLE",
+                  "source_updated_at": raw.get("updatedAt")}
+        write_cache(path, {"schema_version": CACHE_SCHEMA, "observed_at": github["observed_at"], "github": github})
+        return github
+    if cached:
+        result = dict(cached["github"])
+        result.update({"freshness": "stale-cache-refresh-failed", "cache_age_seconds": age,
+                       "refresh_error": probe.stderr.strip() or "GitHub query failed"})
+        return result
+    return {"authority": "GitHub", "available": False, "freshness": "unavailable",
+            "observed_at": now.isoformat().replace("+00:00", "Z"),
+            "error": issue_probe.stderr.strip() or probe.stderr.strip() or "GitHub query failed"}
+
+
 def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datetime,
-             rig: str, rig_path: str) -> dict[str, Any] | None:
+             rig: str, rig_path: str, github: dict[str, Any] | None = None) -> dict[str, Any] | None:
     status = bead.get("status", "open")
     changed = parse_time(bead.get("closed_at") if status == "closed" else bead.get("updated_at"))
     changed = changed or parse_time(bead.get("created_at")) or now
@@ -205,10 +359,28 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
     reason: str
     next_action: str
     bead_labels = labels(bead)
+    reviewed_sha, reviewed_uncertainty = reviewed_head(children)
+    if github is not None:
+        github["reviewed_head_sha"] = reviewed_sha
+        github["changed_since_review"] = (None if not reviewed_sha or not github.get("current_head_sha")
+                                            else reviewed_sha != github.get("current_head_sha"))
+        github["reviewed_head_uncertainty"] = reviewed_uncertainty
     if status == "closed":
         group = "recently-finished"
         reason = "the human-facing bead itself is closed"
         next_action = "none; reopen only if the human disposition changes"
+    elif github and github.get("available") and github.get("state") in {"CLOSED", "MERGED"}:
+        group = "needs-you"
+        reason = f"GitHub reports the PR {str(github.get('state')).lower()} while the human disposition remains open"
+        next_action = "reconcile and record the human disposition; external closure never closes this bead"
+    elif github and github.get("available") and github.get("changed_since_review") is True:
+        group = "needs-you"
+        reason = "the current exact GitHub head differs from the exact reviewed head"
+        next_action = "review the new author head and record a human disposition"
+    elif github is not None and reviewed_uncertainty and any(output_schema(child, metadata_json(child, "gc.output_json")).startswith("pr-review") for child in children):
+        group = "needs-you"
+        reason = reviewed_uncertainty
+        next_action = "refresh or repeat review to establish exact-head evidence, then record a disposition"
     elif bead_labels & NEEDS_LABELS:
         group = "needs-you"
         reason = f"explicit human-action marker: {sorted(bead_labels & NEEDS_LABELS)[0]}"
@@ -269,8 +441,10 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
         },
         "output_schema": schema or None,
         "authoritative_output": authoritative_pointer(rig, bead, schema),
+        "retrieval": retrieval_paths(rig, bead, children),
         "active_workflow_children": [child.get("id") for child in active_children],
         "local_artifact": artifact,
+        "github": github,
     }
 
 
@@ -282,7 +456,7 @@ def parser() -> argparse.ArgumentParser:
                 "attention, attention=true, or maintainer labels. --watch is explicitly deferred "
                 "until the event-driven projection contract is available."),
     )
-    p.add_argument("subcommand", nargs="?", choices=("show",))
+    p.add_argument("subcommand", nargs="?", choices=("show", "audit"))
     p.add_argument("target", nargs="?", help="bead id or external_ref for 'show'")
     p.add_argument("--rig", action="append", default=[], help="restrict to a rig (repeatable; use hq for city root)")
     p.add_argument("--citywide", action="store_true", help="aggregate HQ and every initialized rig")
@@ -293,6 +467,9 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--finished-within", type=duration, default=dt.timedelta(days=14), metavar="DURATION")
     p.add_argument("--json", action="store_true", help="emit stable dev-pack-work.v1 JSON")
     p.add_argument("--verbose", action="store_true", help="include deeper workflow evidence and qualifying internals")
+    network = p.add_mutually_exclusive_group()
+    network.add_argument("--refresh", action="store_true", help="force bounded live read-only GitHub refresh")
+    network.add_argument("--no-network", action="store_true", help="use bead/local evidence and any disposable cache only")
     p.add_argument("--watch", action="store_true", help="reserved; explicitly deferred in the local MVP")
     return p
 
@@ -349,7 +526,8 @@ def collect(gc: str, city: str, scopes: list[dict[str, Any]], target: str | None
         regular = run_json(base)
         convoys = run_json(base + ["--include-infra", "--type", "convoy"])
         outputs = run_json(base + ["--include-infra", "--include-gates", "--has-metadata-key", "gc.output_json"])
-        unique = {bead.get("id"): bead for bead in [*regular, *convoys, *outputs] if bead.get("id")}
+        messages = run_json(base + ["--include-infra", "--type", "message"])
+        unique = {bead.get("id"): bead for bead in [*regular, *convoys, *outputs, *messages] if bead.get("id")}
         if target:
             try:
                 shown = run_json(prefix + ["bd", "--readonly", "show", target, "--json"])
@@ -426,6 +604,106 @@ def main() -> int:
         name = "hq" if rig.get("hq") else rig["name"]
         all_by_rig.setdefault(name, []).append(bead)
 
+    github_by_source: dict[tuple[str, str], dict[str, Any]] = {}
+    query_budget = bounded_env("DEV_PACK_WORK_GITHUB_BUDGET", GITHUB_QUERY_LIMIT, GITHUB_QUERY_LIMIT)
+    github_sources = []
+    for rig, bead in records:
+        name = "hq" if rig.get("hq") else rig["name"]
+        external = str(bead.get("external_ref") or "")
+        if external.startswith("gh-") and is_marked(bead) and not is_internal(bead):
+            github_sources.append((rig, bead, name, external))
+    for index, (rig, bead, name, external) in enumerate(github_sources):
+        if index >= query_budget and not args.no_network:
+            github_by_source[(name, str(bead["id"]))] = {
+                "authority": "GitHub", "available": False, "freshness": "budget-exhausted",
+                "observed_at": None, "error": f"per-invocation GitHub query budget is {query_budget}",
+            }
+        else:
+            github_by_source[(name, str(bead["id"]))] = github_observation(
+                city, name, rig["path"], external, now, args.refresh, args.no_network)
+
+    if args.subcommand == "audit":
+        findings: list[dict[str, Any]] = []
+        checked_outputs = 0
+        checked_mail = 0
+        global_sources: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        for source_rig, source_beads in all_by_rig.items():
+            for source in source_beads:
+                external = str(source.get("external_ref") or "")
+                if external.startswith("gh-") and is_marked(source) and not is_internal(source):
+                    global_sources.setdefault((source_rig, external), []).append(source)
+        reported: set[tuple[str, str, str]] = set()
+        for name, beads in all_by_rig.items():
+            sources: dict[str, list[dict[str, Any]]] = {}
+            for bead in beads:
+                external = str(bead.get("external_ref") or "")
+                if external.startswith("gh-") and is_marked(bead) and not is_internal(bead):
+                    sources.setdefault(external, []).append(bead)
+            for external, matches in sources.items():
+                if len(matches) != 1:
+                    findings.append({"rig": name, "external_ref": external, "kind": "duplicate-human-source",
+                                     "beads": [item.get("id") for item in matches]})
+            for bead in beads:
+                output = metadata_json(bead, "gc.output_json")
+                schema = output_schema(bead, output)
+                if schema.startswith("pr-review") and output:
+                    head = str(output.get("head_ref") or "")
+                    match = re.search(r"(?:#|^)([0-9]+)$", head)
+                    if not match:
+                        continue
+                    checked_outputs += 1
+                    external = f"gh-{match.group(1)}"
+                    linked = str(bead.get("metadata", {}).get("gc.human_source_bead") or "")
+                    candidates = sources.get(external, [])
+                    key = (name, external, "durable-output-omission")
+                    if key not in reported and (len(candidates) != 1 or (linked and linked != candidates[0].get("id"))):
+                        reported.add(key)
+                        findings.append({"rig": name, "external_ref": external, "kind": "durable-output-omission",
+                                         "output_bead": bead.get("id"), "linked_source": linked or None,
+                                         "candidate_sources": [item.get("id") for item in candidates]})
+                if bead.get("issue_type") == "message":
+                    title = str(bead.get("title") or "")
+                    sender = str(bead.get("metadata", {}).get("mail.from_display") or bead.get("sender") or "")
+                    if "/pr-review" not in sender and not title.lower().startswith("pr review"):
+                        continue
+                    target = re.match(r"^PR review\s+#?([0-9]+)(?![0-9A-Za-z])", title, re.I)
+                    refs = {target.group(1)} if target else set()
+                    mail_rig = sender.split("/", 1)[0] if name == "hq" and "/" in sender else name
+                    for number in refs:
+                        checked_mail += 1
+                        external = f"gh-{number}"
+                        candidates = global_sources.get((mail_rig, external), [])
+                        key = (mail_rig, external, "human-mail-omission")
+                        if key not in reported and len(candidates) != 1:
+                            reported.add(key)
+                            findings.append({"rig": mail_rig, "external_ref": external, "kind": "human-mail-omission",
+                                             "mail_bead": bead.get("id"),
+                                             "candidate_sources": [item.get("id") for item in candidates]})
+        if args.refresh:
+            for (name, source_id), observation in github_by_source.items():
+                if not observation.get("available") or observation.get("freshness") != "live":
+                    findings.append({"rig": name, "source_bead": source_id,
+                                     "kind": "github-observation-unavailable",
+                                     "freshness": observation.get("freshness"),
+                                     "error": observation.get("error") or observation.get("refresh_error")})
+        result = {
+            "schema_version": "dev-pack-work-audit.v1",
+            "generated_at": now.isoformat().replace("+00:00", "Z"),
+            "scope": {"mode": mode, "rigs": list(all_by_rig)},
+            "read_only": True,
+            "network_mode": "no-network" if args.no_network else "refresh" if args.refresh else "cached",
+            "checked": {"durable_review_outputs": checked_outputs, "human_mail_refs": checked_mail,
+                        "human_sources": len(github_by_source), "github_observations": len(github_by_source)},
+            "outstanding_omissions": len(findings), "findings": findings,
+        }
+        if args.json:
+            json.dump(result, sys.stdout, indent=2, sort_keys=True); print()
+        else:
+            print(f"work audit · {mode} · omissions={len(findings)}")
+            for finding in findings:
+                print(f"  {finding['rig']}/{finding['external_ref']} · {finding['kind']}")
+        return 0 if not findings else 1
+
     selected: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for rig, bead in records:
         marked = is_marked(bead)
@@ -442,7 +720,7 @@ def main() -> int:
     for rig, bead in selected:
         name = "hq" if rig.get("hq") else rig["name"]
         children = workflow_children(bead, all_by_rig[name])
-        item = classify(bead, children, now, name, rig["path"])
+        item = classify(bead, children, now, name, rig["path"], github_by_source.get((name, str(bead["id"]))))
         if not item:
             continue
         if (args.subcommand != "show" and item["group"] == "recently-finished" and
@@ -507,6 +785,11 @@ def main() -> int:
         "generated_at": now.isoformat().replace("+00:00", "Z"),
         "scope": scope_result,
         "selection": {"actors": sorted(actors), "attention_labels": sorted(ATTENTION_LABELS)},
+        "network_mode": "no-network" if args.no_network else "refresh" if args.refresh else "cached",
+        "cache": {"schema_version": CACHE_SCHEMA, "ttl_seconds": bounded_env("DEV_PACK_WORK_CACHE_TTL", 300, 86400),
+                  "maximum_entries": CACHE_LIMIT, "disposable": True,
+                  "github_query_budget": query_budget,
+                  "github_timeout_seconds": bounded_env("DEV_PACK_WORK_GITHUB_TIMEOUT", 20, 60)},
         "groups": grouped,
     }
     if args.verbose:

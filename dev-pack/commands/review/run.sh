@@ -22,6 +22,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NORMALIZE="$SCRIPT_DIR/../../assets/scripts/normalize-pr-target.sh"
 RESOLVE_LOCAL="$SCRIPT_DIR/../../assets/scripts/resolve-local-change.sh"
 MATERIALIZE_HEAD="$SCRIPT_DIR/../../assets/scripts/materialize-pr-head.sh"
+ENSURE_SOURCE="$SCRIPT_DIR/../../assets/scripts/ensure-review-source.sh"
 POLICY="$SCRIPT_DIR/../../assets/workflow-policy.json"
 VALIDATE_EXECUTION="$SCRIPT_DIR/../../assets/scripts/validate-execution-profile.py"
 [ -r "$POLICY" ] || { printf '%s\n' "review: workflow policy not found: $POLICY" >&2; exit 2; }
@@ -192,7 +193,11 @@ fi
 # diff/checkout and verify that the object remains present. Dry-run is deliberately
 # non-mutating and therefore reports the unmaterialized command shape.
 EXPECTED_HEAD_SHA="$LOCAL_HEAD_SHA"
+HUMAN_SOURCE_BEAD=""
 if [ "$DRYRUN" != "yes" ] && [ -z "$LOCAL_JSON" ] && [[ "$SPEC" =~ ^[0-9]+$ ]]; then
+    [ -x "$ENSURE_SOURCE" ] || die "human-source linker not found/executable: $ENSURE_SOURCE"
+    HUMAN_SOURCE_BEAD=$("$ENSURE_SOURCE" --rig "$RIG" --pr "$SPEC") \
+        || die "could not establish exactly one human-facing source bead"
     [ -x "$MATERIALIZE_HEAD" ] || die "PR-head materializer not found/executable: $MATERIALIZE_HEAD"
     EXPECTED_HEAD_SHA=$("$MATERIALIZE_HEAD" --repo "$RIG_PATH" --pr "$SPEC") \
         || die "PR head materialization failed before dispatch (infrastructure failure)"
@@ -207,6 +212,7 @@ if [ "$N" = "1" ]; then
     set -- "$RIG/pr-review-synthesizer" pr-review --formula \
         --var "head_ref=$SPEC" --var "base_ref=$BASE" \
         --var "expected_head_sha=$EXPECTED_HEAD_SHA" \
+        --var "human_source_bead=$HUMAN_SOURCE_BEAD" \
         --var "implementation_artifact_ref=$LOCAL_ARTIFACT_REF" \
         --var "implementation_artifact_id=$LOCAL_ARTIFACT_ID" \
         --var "implementation_repository_id=$LOCAL_REPOSITORY_ID" \
@@ -224,6 +230,7 @@ else
     set -- "$RIG/pr-review-synthesizer" pr-review-quorum --formula \
         --var "head_ref=$SPEC" --var "base_ref=$BASE" \
         --var "expected_head_sha=$EXPECTED_HEAD_SHA" \
+        --var "human_source_bead=$HUMAN_SOURCE_BEAD" \
         --var "implementation_artifact_ref=$LOCAL_ARTIFACT_REF" \
         --var "implementation_artifact_id=$LOCAL_ARTIFACT_ID" \
         --var "implementation_repository_id=$LOCAL_REPOSITORY_ID" \

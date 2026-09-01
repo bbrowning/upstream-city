@@ -4,12 +4,13 @@
   "title": "dev-pack work result",
   "oneOf": [
     {"$ref": "#/$defs/list"},
-    {"$ref": "#/$defs/show"}
+    {"$ref": "#/$defs/show"},
+    {"$ref": "#/$defs/audit"}
   ],
   "$defs": {
     "item": {
       "type": "object",
-      "required": ["group", "rig", "id", "title", "status", "reason", "next_action", "age_seconds", "freshness", "authoritative_output"],
+      "required": ["group", "rig", "id", "title", "status", "reason", "next_action", "age_seconds", "freshness", "authoritative_output", "retrieval"],
       "properties": {
         "group": {"enum": ["needs-you", "in-flight", "waiting", "stale-unclear", "recently-finished"]},
         "rig": {"type": "string"},
@@ -37,8 +38,18 @@
         },
         "output_schema": {"type": ["string", "null"]},
         "authoritative_output": {"type": "string"},
+        "retrieval": {
+          "type": "object",
+          "required": ["work_show", "summary_or_status"],
+          "properties": {
+            "work_show": {"type": "string"},
+            "summary_or_status": {"type": "array", "items": {"type": "string"}}
+          },
+          "additionalProperties": false
+        },
         "active_workflow_children": {"type": "array", "items": {"type": ["string", "null"]}},
-        "local_artifact": {"type": ["object", "null"]}
+        "local_artifact": {"type": ["object", "null"]},
+        "github": {"type": ["object", "null"]}
       },
       "additionalProperties": false
     },
@@ -82,6 +93,8 @@
           }
         },
         "evidence": {"type": "object"}
+        ,"network_mode": {"enum": ["cached", "refresh", "no-network"]}
+        ,"cache": {"type": "object"}
       },
       "additionalProperties": false
     },
@@ -104,6 +117,21 @@
           },
           "additionalProperties": false
         }
+      },
+      "additionalProperties": false
+    },
+    "audit": {
+      "type": "object",
+      "required": ["schema_version", "generated_at", "scope", "read_only", "network_mode", "checked", "outstanding_omissions", "findings"],
+      "properties": {
+        "schema_version": {"const": "dev-pack-work-audit.v1"},
+        "generated_at": {"type": "string", "format": "date-time"},
+        "scope": {"type": "object"},
+        "read_only": {"const": true},
+        "network_mode": {"enum": ["cached", "refresh", "no-network"]},
+        "checked": {"type": "object"},
+        "outstanding_omissions": {"type": "integer", "minimum": 0},
+        "findings": {"type": "array", "items": {"type": "object"}}
       },
       "additionalProperties": false
     }

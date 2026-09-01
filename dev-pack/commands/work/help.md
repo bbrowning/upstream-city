@@ -3,6 +3,7 @@
 ```text
 gc dev-pack work [options]
 gc dev-pack work show <bead|external-ref> [options]
+gc dev-pack work audit [options]
 
 Options:
   --rig NAME             restrict to one rig; repeatable (use hq for city root)
@@ -14,6 +15,8 @@ Options:
   --finished-within 14d  recent-finish window
   --json                 stable machine-readable output
   --verbose              include deeper workflow evidence
+  --refresh              force bounded live read-only GitHub reconciliation
+  --no-network           use local evidence/cache without any network call
 ```
 
 With no scope flag, invocation inside a rig shows that rig. Invocation at the city
@@ -27,14 +30,25 @@ identity; or when it has `human-facing`, `attention`, `attention=true`, or
 retry, message, gate, order, and agent beads are evidence rather than rows. A marked
 internal may be inspected with `--verbose`.
 
-The groups are derived only from canonical status, dependency/hold labels, active
-children, durable `gc.output_json` / `gc.lifecycle_json`, and current local branch
-state. A finished automation result on an open human bead is NEEDS YOU; only closure
-of the human bead is RECENTLY FINISHED. Every ledger invocation uses bd's
-`--readonly` enforcement and the command never reads or acknowledges mail.
+The groups combine canonical bead/workflow/local evidence with freshness-labeled,
+read-only GitHub PR observation. Exact current and reviewed heads are compared. A
+new author head, an externally closed/merged PR with an open source bead, or legacy
+review evidence missing its exact reviewed SHA is NEEDS YOU. Only closure of the
+human bead is RECENTLY FINISHED. Every ledger invocation uses bd's `--readonly`
+enforcement; GitHub calls are read-only and mail is never acknowledged or changed.
+The ordinary list/show path never reads or acknowledges mail; only explicit `audit`
+scans message beads under the same read-only ledger enforcement.
 
 `show` returns the source bead plus durable output/lifecycle and workflow evidence;
-its `authoritative_output` points to `gc dev-pack summary`, `status`, or `gc bd show`
-as appropriate. `--watch` is explicitly deferred from this offline MVP until Gas
-City exposes an event-driven, read-only multi-store refresh contract. Rerun the
-command to refresh; polling is intentionally not embedded here.
+each row has an exact `work show` pointer and any applicable `summary`/`status`
+pointer. Normal operation reuses a fresh disposable cache and refreshes stale
+entries. `--refresh` forces live observation; `--no-network` reports cached
+freshness or unavailability honestly. The cache is capped at 128 entries.
+
+`audit` is the read-only shadow gate: it correlates routine-review refs from the
+human mailbox and durable (including normally hidden) outputs to exactly one
+human-facing source and its attention row. It reports nonzero status while any
+omission or duplicate remains and never marks mail read.
+
+Continuous `--watch` remains explicitly deferred; bounded refresh is operator-
+initiated or may be performed by an optional rate-limited cache-prewarm order.
