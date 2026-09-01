@@ -14,8 +14,14 @@ before=$(dev_pack_guard_bead_json "$TRIGGER") || exit $?
 route=$(printf '%s' "$before" | jq -r \
     '(if type == "array" then .[0] else . end).metadata["gc.routed_to"] // empty')
 if [ -n "$route" ] && [ -n "${GC_AGENT:-}" ] && [ "$route" != "$GC_AGENT" ]; then
-    dev_pack_guard_die "trigger $TRIGGER is routed to $route, not $GC_AGENT"
-    exit $?
+    # Pools route to the configured template while the concrete session has a
+    # numeric instance suffix. Accept only that exact relationship; arbitrary
+    # prefix and near matches still fail closed.
+    instance=${GC_AGENT#"$route"-}
+    if [ "$instance" = "$GC_AGENT" ] || ! [[ "$instance" =~ ^[1-9][0-9]*$ ]]; then
+        dev_pack_guard_die "trigger $TRIGGER is routed to $route, not $GC_AGENT"
+        exit $?
+    fi
 fi
 
 # The only claim in dev-pack startup is now mechanically bound to the exact id

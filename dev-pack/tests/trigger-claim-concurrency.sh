@@ -87,6 +87,22 @@ if (cd "$TMP/work-a"; GC_TRIGGER_BEAD_ID=lane-a GC_AGENT=rig/worker-b GC_SESSION
 fi
 [ ! -s "$TMP/gc.log" ] || fail 'foreign-routed trigger caused a mutation'
 
+# A controller pool routes to its template while the concrete session identity
+# has a positive numeric suffix. That exact relationship is valid; lookalike
+# names remain rejected.
+jq -cn '{route:"rig/synth"}' >"$TMP/state/pool-step.json"
+(cd "$TMP/work-a"; GC_TRIGGER_BEAD_ID=pool-step GC_AGENT=rig/synth-1 GC_SESSION_NAME=pool-session-1 \
+  GC_SESSION_ORIGIN=ephemeral "$CLAIM" >/dev/null)
+jq -e '.assignee == "pool-session-1"' "$TMP/state/pool-step.json" >/dev/null \
+  || fail 'numeric pool instance did not claim template-routed work'
+for lookalike in rig/synth-blue rig/synth-0 rig/synth-1-extra; do
+  jq -cn '{route:"rig/synth"}' >"$TMP/state/pool-step.json"
+  if (cd "$TMP/work-a"; GC_TRIGGER_BEAD_ID=pool-step GC_AGENT="$lookalike" GC_SESSION_NAME=intruder \
+      GC_SESSION_ORIGIN=ephemeral "$CLAIM" >/dev/null 2>&1); then
+    fail "lookalike pool identity $lookalike was accepted"
+  fi
+done
+
 run_json_race() {
   local schema=$1 bead=$2
   printf '%s\n' '{}' >"$TMP/state/$bead.json"
