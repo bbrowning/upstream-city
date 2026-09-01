@@ -355,6 +355,16 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
     schema = output_schema(bead, output)
     artifact = local_artifact(lifecycle, rig_path)
     child_outputs = [child for child in children if metadata_json(child, "gc.output_json")]
+    final_output_children = [
+        child for child in child_outputs
+        if output_schema(child, metadata_json(child, "gc.output_json")).startswith(FINAL_OUTPUT_PREFIXES)
+    ]
+    final_times = [
+        timestamp for child in final_output_children
+        if (timestamp := parse_time(child.get("closed_at") or child.get("updated_at"))) is not None
+    ]
+    latest_final = max(final_times, default=None)
+    final_after_human_update = bool(latest_final and latest_final > changed)
     active_children = [child for child in children if child.get("status") in {"open", "in_progress", "blocked"}]
 
     reason: str
@@ -386,6 +396,10 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
         group = "needs-you"
         reason = f"explicit human-action marker: {sorted(bead_labels & NEEDS_LABELS)[0]}"
         next_action = "review the authoritative evidence and record a disposition"
+    elif final_after_human_update:
+        group = "needs-you"
+        reason = "automation produced durable final evidence after the last recorded human disposition"
+        next_action = "review the new result and record a fresh human disposition on the source bead"
     elif (waiting := wait_reason(bead)) is not None:
         group = "waiting"
         reason = waiting

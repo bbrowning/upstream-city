@@ -55,6 +55,8 @@ cat >"$TMP/vllm.json" <<'JSON'
  {"id":"vllm-review","external_ref":"gh-42","title":"Maintainer review","status":"blocked","priority":1,"issue_type":"task","owner":"human@example.com","parent":"vllm-backlog","created_at":"2026-08-20T00:00:00Z","updated_at":"2026-08-31T21:00:00Z","labels":["maintainer","wait:author"]}
  ,{"id":"vllm-needs","external_ref":"gh-99","title":"Consume completed review","status":"open","priority":1,"issue_type":"task","owner":"human@example.com","created_at":"2026-08-20T00:00:00Z","updated_at":"2026-08-31T21:00:00Z","labels":["maintainer"]}
  ,{"id":"vllm-review-output","title":"review synthesis","status":"closed","priority":1,"issue_type":"task","owner":"automation","created_at":"2026-08-31T20:00:00Z","updated_at":"2026-08-31T22:00:00Z","metadata":{"gc.step_id":"synthesize","gc.output_json_schema":"pr-review-quorum.v1","gc.output_json":"{\"schema\":\"pr-review-quorum.v1\",\"head_ref\":\"99\",\"verdict\":\"approve\"}"},"labels":[]}
+ ,{"id":"vllm-recheck","external_ref":"gh-100","title":"Waiting disposition superseded by new review","status":"blocked","priority":1,"issue_type":"task","owner":"human@example.com","created_at":"2026-08-20T00:00:00Z","updated_at":"2026-08-31T21:00:00Z","labels":["maintainer","wait:author"]}
+ ,{"id":"vllm-recheck-output","title":"new review synthesis","status":"closed","priority":1,"issue_type":"task","owner":"automation","created_at":"2026-08-31T21:30:00Z","updated_at":"2026-08-31T22:00:00Z","closed_at":"2026-08-31T22:00:00Z","metadata":{"gc.step_id":"synthesize","gc.human_source_bead":"vllm-recheck","gc.output_json_schema":"pr-review-quorum.v1","gc.output_json":"{\"schema\":\"pr-review-quorum.v1\",\"head_ref\":\"100\",\"verdict\":\"request_changes\"}"},"labels":[]}
 ]
 JSON
 
@@ -67,6 +69,7 @@ jq -e '
   .schema_version == "dev-pack-work.v1" and
   ([.groups[] | select(.key == "needs-you") | .items[].id] | index("wo-action") != null) and
   ([.groups[] | select(.key == "needs-you") | .items[].id] | index("vllm-needs") != null) and
+  ([.groups[] | select(.key == "needs-you") | .items[].id] | index("vllm-recheck") != null) and
   ([.groups[] | select(.key == "in-flight") | .items[].id] | index("wo-flight") != null) and
   ([.groups[] | select(.key == "waiting") | .items[].id] | index("wo-wait") != null) and
   ([.groups[] | select(.key == "waiting") | .items[].id] | index("vllm-review") != null) and
@@ -80,7 +83,7 @@ jq -e '
 rig_json=$(cd "$TMP/city/rigs/vllm" && DEV_PACK_WORK_NOW="$NOW" GC_RIG=vllm \
   "$ROOT/dev-pack/commands/work/run.sh" --json)
 jq -e '.scope.mode == "rig" and .scope.rigs == ["vllm"] and
-       ([.groups[].items[].id] | sort == ["vllm-needs", "vllm-review"])' <<<"$rig_json" >/dev/null
+       ([.groups[].items[].id] | sort == ["vllm-needs", "vllm-recheck", "vllm-review"])' <<<"$rig_json" >/dev/null
 
 show=$(DEV_PACK_WORK_NOW="$NOW" "$ROOT/dev-pack/commands/work/run.sh" show gh-42 --citywide --json)
 jq -e '.item.id == "vllm-review" and .item.external_ref == "gh-42" and
