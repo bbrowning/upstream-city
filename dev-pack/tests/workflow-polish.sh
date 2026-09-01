@@ -215,6 +215,8 @@ elif [ "${1-} ${2-}" = "mail send" ]; then
   printf '%s\n' '{"id":"mail-1"}'
 elif [ "${1-} ${2-}" = "runtime drain" ]; then
   :
+elif [ "${1-} ${2-}" = "runtime drain-ack" ]; then
+  :
 else
   printf 'unexpected hardbug gc call: %s\n' "$*" >&2; exit 99
 fi
@@ -237,6 +239,8 @@ jq -e '.status=="report_only"' "$TMP/state/arc.json" >/dev/null \
   || fail 'report-only coordinator sequence leaked temp files'
 ! grep -q ' sling ' "$TMP/hardbug.log" || fail 'report-only terminal sequence launched fix/finalize work'
 grep -q 'bd show arc --json' "$TMP/hardbug.log" || fail 'report-only sequence did not verify open human-follow-up arc'
+grep -q 'runtime drain-ack vllm/bug-coordinator' "$TMP/hardbug.log" \
+  || fail 'report-only terminal sequence did not release its pool slot'
 
 # A drifted durable readback must fail closed and still consume both coordinator
 # inputs, even though emit-json never receives the verdict on this path.

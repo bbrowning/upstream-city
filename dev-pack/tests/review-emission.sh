@@ -56,6 +56,8 @@ elif [ "${1-} ${2-}" = "bd close" ]; then
   :
 elif [ "${1-} ${2-}" = "runtime drain" ]; then
   :
+elif [ "${1-} ${2-}" = "runtime drain-ack" ]; then
+  :
 elif [ "${1-} ${2-}" = "mail send" ]; then
   printf '%s\n' '{"id":"fallback-mail"}'
 else
@@ -109,6 +111,8 @@ printf '%s\n' "$quorum" | emit synthesis pr-review-quorum.v1
 grep -q 'bd close synthesis' "$MOCK_GC_LOG" || fail "synthesis did not close"
 grep -q 'runtime drain vllm/test-reviewer' "$MOCK_GC_LOG" \
   || fail "successful schema emitter did not quiesce its completed session"
+grep -q 'runtime drain-ack vllm/test-reviewer' "$MOCK_GC_LOG" \
+  || fail "successful schema emitter did not release its completed session slot"
 
 settle=$(jq -cn '{schema:"pr-review-settle.v1",head_ref:"feature/safe",base_ref:"main",
   settle_of:"synthesis",lane_beads:["lane-a","lane-b"],implementation_provenance:null,
@@ -165,6 +169,8 @@ assert_logical_attempt_close() {
     || fail "$schema closed the logical retry bead directly"
   grep -q 'runtime drain vllm/test-reviewer' "$MOCK_GC_LOG" \
     || fail "$schema left the closed attempt session eligible for a duplicate nudge"
+  grep -q 'runtime drain-ack vllm/test-reviewer' "$MOCK_GC_LOG" \
+    || fail "$schema left the closed attempt occupying its pool slot"
   unset MOCK_LOGICAL_BEAD MOCK_ATTEMPT_BEAD
 }
 assert_logical_attempt_close logical-triage attempt-triage pr-triage.v1 "$triage"
@@ -194,6 +200,8 @@ grep -q 'bd update truncated' "$MOCK_GC_LOG" || fail "truncation case did not wr
 ! grep -q 'bd close truncated' "$MOCK_GC_LOG" || fail "truncated storage closed"
 ! grep -q 'runtime drain vllm/test-reviewer' "$MOCK_GC_LOG" \
   || fail "pre-close emitter failure drained the open attempt needed for recovery"
+! grep -q 'runtime drain-ack vllm/test-reviewer' "$MOCK_GC_LOG" \
+  || fail "pre-close emitter failure released the open attempt's pool slot"
 
 if rg -n 'rm -f' "$ROOT/dev-pack/agents" "$ROOT/dev-pack/formulas" \
     --glob '*.md' --glob '*.toml' >/dev/null; then
