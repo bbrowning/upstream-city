@@ -1,5 +1,6 @@
 [workspace]
 provider = "codex"
+install_agent_hooks = ["codex"]
 
 [providers]
 [providers.claude]
