@@ -1,0 +1,15 @@
+{
+  "schema": "persona-eval-review.v1",
+  "case": "caseTerminalLabelReuse",
+  "arm": "baseline-without-candidate",
+  "workflow": "vllm-naix2",
+  "review_attempt": "vllm-1hdj4",
+  "execution": "frontier-medium",
+  "lanes": 1,
+  "base_sha": "07242faa4667adcec25e40cb5f580cec60f2faac",
+  "head_sha": "8457a37a073927ffda9df114cd25eb53fd50ec8f",
+  "verdict": "approve",
+  "findings": [],
+  "grade": "miss",
+  "note": "The reviewer reported no verified correctness defect. Its atomic emitter later rejected a null local-ref provenance object; the review conclusion was captured in the durable session and attempt before the serialization failure."
+}

@@ -1,0 +1,18 @@
+{
+  "id": "caseTerminalLabelReuse",
+  "source": "pre-fix branch state before b3258f1b73",
+  "domains": ["parser"],
+  "base_sha": "07242faa4667adcec25e40cb5f580cec60f2faac",
+  "head_sha": "8457a37a073927ffda9df114cd25eb53fd50ec8f",
+  "has_answer_key": true,
+  "changed_files": [
+    "tests/parser/engine/test_parser_engine.py",
+    "vllm/parser/abstract_parser.py",
+    "vllm/parser/engine/adapters.py",
+    "vllm/parser/engine/parser_engine.py",
+    "vllm/parser/engine/streaming_parser_engine.py"
+  ],
+  "blind_reconstruction": "Review the second-parent diff of merge commit 8457a37a073927ffda9df114cd25eb53fd50ec8f. This is the feature diff after newer main introduced Inkling, but before the corrective commit b3258f1b73. Do not expose the later correction, its commit message, or review outputs.",
+  "gold": "The global skip_reasoning_parsing bypass is keyed only on THINK_START/THINK_END labels. Inkling labels <|end_message|> as THINK_END even though it closes content, reasoning, headers, and tool blocks. In a tool-only deployment the early return bypasses Inkling's state-specific transitions, leaking closers and leaving tool calls unterminated. The reviewer should request a transition- or config-aware rule and Inkling regressions.",
+  "tests_green_at_head": "The added no-reasoning-parser tests cover qwen3_coder and deepseek_v4, not Inkling. The gold catch is graded on transition-table reasoning; dedicated Inkling regressions were added by the later correction."
+}

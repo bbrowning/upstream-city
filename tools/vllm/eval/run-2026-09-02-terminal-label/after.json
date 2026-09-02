@@ -1,0 +1,24 @@
+{
+  "schema": "persona-eval-review.v1",
+  "case": "caseTerminalLabelReuse",
+  "arm": "candidate-gotcha",
+  "workflow": "vllm-z8qii",
+  "review_attempt": "vllm-4w4tn",
+  "execution": "frontier-medium",
+  "lanes": 1,
+  "base_sha": "07242faa4667adcec25e40cb5f580cec60f2faac",
+  "head_sha": "8457a37a073927ffda9df114cd25eb53fd50ec8f",
+  "verdict": "request_changes",
+  "grade": "catch",
+  "findings": [
+    {
+      "severity": "major",
+      "title": "Reasoning passthrough breaks Inkling block boundaries",
+      "file": "vllm/parser/engine/streaming_parser_engine.py",
+      "line": "378-379",
+      "mechanism": "Inkling's shared THINK_END label bypasses state-specific content and tool transitions, leaking closers and leaving TOOL_ARGS open."
+    }
+  ],
+  "new_noise": false,
+  "note": "The durable pr-review.v1 verdict contained exactly one finding, matching the later corrective commit's mechanism."
+}

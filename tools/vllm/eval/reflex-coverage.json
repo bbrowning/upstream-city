@@ -6,7 +6,7 @@
   "base.5": ["caseLocalReview"],
   "base.6": ["caseLocalReview"],
   "base.7": ["caseLocalReview"],
-  "parser.1": ["caseW"],
+  "parser.1": ["caseW", "caseTerminalLabelReuse"],
   "parser.2": ["caseY"],
   "parser.3": ["caseR"],
   "parser.4": ["caseR", "caseVPD"],

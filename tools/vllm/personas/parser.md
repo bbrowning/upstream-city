@@ -70,6 +70,12 @@ highest-value first:
    and tool parsing are both active (combined flows are a known break).
 
 ## Specific gotchas (each cost a real bug)
+- **Terminal labels are not semantic guarantees.** When reviewing shared parser logic
+  that assigns behavior based on a delimiter or terminal label, verify that the grammar
+  actually uses it exclusively for the assumed role. Names such as `THINK_END` are
+  configuration labels, not semantic guarantees; a model format may reuse the same
+  delimiter across reasoning, content, and tool structures. Check every transition that
+  uses the label: one use outside the assumed role invalidates a global label-based rule.
 - (Harmony format / gpt-oss models) Don't gate tool-call capture on an exact channel name
   (e.g. `commentary`) — real Harmony outputs vary (`comment` vs `commentary`), so a strict
   per-path check silently drops valid calls.
