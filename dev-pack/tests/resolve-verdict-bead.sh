@@ -26,7 +26,7 @@ elif [[ "$args" == *" bd list "* ]]; then
          findings_count:$count, findings:[], summary:$summary,
          merge_recommendation:"test recommendation"} | tojson;
       def bead($id; $logical; $ts; $reason; $schema; $lane; $role; $json):
-        {id:$id, closed_at:$ts, close_reason:$reason,
+        {id:$id, status:"closed", closed_at:$ts, close_reason:$reason,
          metadata: ({"gc.output_json_schema":$schema,"gc.output_json":$json}
                     + (if $logical == null then {} else {"gc.logical_bead_id":$logical} end)
                     + (if $lane == null then {} else {"gc.review_quorum_lane":$lane} end)
@@ -49,6 +49,14 @@ elif [[ "$args" == *" bd list "* ]]; then
         bead("vllm-solo-work"; "vllm-solo-logical"; "2026-08-26T00:11:00Z"; "review: approve (0 findings)"; "pr-review.v1"; null; null;
              verdict("70002"; "approve"; 0; "genuine solo verdict")),
 
+        # A newer dynamic result must not displace either authoritative review.
+        bead("vllm-dynamic-quorum"; null; "2026-08-26T00:10:00Z"; "dynamic check: pass"; "pr-review-dynamic.v1"; null; null;
+             ({schema:"pr-review-dynamic.v1",head_ref:"70001",head_sha:"sha-70001",outcome:"pass",checks:[{outcome:"pass"}],summary:"matching quorum check"}|tojson)),
+        bead("vllm-dynamic-solo-stale"; null; "2026-08-26T00:13:00Z"; "dynamic check: fail"; "pr-review-dynamic.v1"; null; null;
+             ({schema:"pr-review-dynamic.v1",head_ref:"70002",head_sha:"old-sha-70002",outcome:"fail",checks:[],summary:"stale solo check"}|tojson)),
+        bead("vllm-dynamic-solo"; null; "2026-08-26T00:14:00Z"; "dynamic check: pass"; "pr-review-dynamic.v1"; null; null;
+             ({schema:"pr-review-dynamic.v1",head_ref:"vllm#70002",head_sha:"sha-70002",outcome:"pass",checks:[],summary:"matching solo check"}|tojson)),
+
         # An incomplete quorum must never degrade to a partial lane.
         bead("vllm-only-lane"; null; "2026-08-26T00:20:00Z"; "review: approve (0 findings)"; "pr-review.v1"; "reviewer-a"; null;
              verdict("70003"; "approve"; 0; "incomplete lane")),
@@ -60,9 +68,11 @@ elif [[ "$args" == *" bd list "* ]]; then
              verdict("70004"; "request_changes"; 1; "role-marked synthesis"))
       ]'
 elif [[ "$args" == *" bd show vllm-synth-work --json "* ]]; then
-    jq -cn '[{id:"vllm-synth-work",metadata:{"gc.root_bead_id":"vllm-run","gc.output_json_schema":"pr-review-quorum.v1","gc.output_json":({head_ref:"70001",base_ref:"origin/main",verdict:"request_changes",posture:"trusted",effective_posture:"trusted",findings_count:5,findings:[],summary:"authoritative quorum",merge_recommendation:"test recommendation"}|tojson)}}]'
+    jq -cn '[{id:"vllm-synth-work",metadata:{"gc.root_bead_id":"vllm-run","gc.reviewed_head_sha":"sha-70001","gc.output_json_schema":"pr-review-quorum.v1","gc.output_json":({head_ref:"70001",base_ref:"origin/main",verdict:"request_changes",posture:"trusted",effective_posture:"trusted",findings_count:5,findings:[],summary:"authoritative quorum",merge_recommendation:"test recommendation"}|tojson)}}]'
 elif [[ "$args" == *" bd show vllm-solo-work --json "* ]]; then
-    jq -cn '[{id:"vllm-solo-work",metadata:{"gc.output_json_schema":"pr-review.v1","gc.output_json":({head_ref:"70002",base_ref:"origin/main",verdict:"approve",findings_count:0,findings:[],summary:"genuine solo verdict"}|tojson)}}]'
+    jq -cn '[{id:"vllm-solo-work",metadata:{"gc.root_bead_id":"vllm-solo-run","gc.reviewed_head_sha":"sha-70002","gc.output_json_schema":"pr-review.v1","gc.output_json":({head_ref:"70002",base_ref:"origin/main",verdict:"approve",findings_count:0,findings:[],summary:"genuine solo verdict"}|tojson)}}]'
+elif [[ "$args" == *" bd show vllm-dynamic-solo --json "* ]]; then
+    jq -cn '[{id:"vllm-dynamic-solo",metadata:{"gc.root_bead_id":"vllm-dynamic-run","gc.output_json_schema":"pr-review-dynamic.v1","gc.output_json":({schema:"pr-review-dynamic.v1",head_ref:"70002",head_sha:"sha-70002",outcome:"pass",checks:[],summary:"matching solo check"}|tojson)}}]'
 else
     printf 'unexpected gc call: %s\n' "$*" >&2
     exit 99
@@ -92,8 +102,18 @@ fi
 
 summary_out=$("$ROOT/dev-pack/commands/summary/run.sh" 70001 --rig vllm --full 2>&1)
 [[ "$summary_out" == *'vllm-synth-work'* && "$summary_out" == *'request_changes'* \
-   && "$summary_out" == *'authoritative quorum'* ]] \
-    || fail "summary did not render the synthesis verdict: $summary_out"
+   && "$summary_out" == *'authoritative quorum'* && "$summary_out" == *'Dynamic verification: pass'* ]] \
+    || fail "summary did not render and enrich the synthesis verdict: $summary_out"
+
+solo_out=$("$ROOT/dev-pack/commands/summary/run.sh" 70002 --rig vllm --full 2>&1)
+[[ "$solo_out" == *'genuine solo verdict'* && "$solo_out" == *'Dynamic verification: pass'* \
+   && "$solo_out" != *'stale solo check'* ]] \
+    || fail "summary did not attach only the matching solo dynamic result: $solo_out"
+
+dynamic_out=$("$ROOT/dev-pack/commands/summary/run.sh" vllm-dynamic-solo --rig vllm --full 2>&1)
+[[ "$dynamic_out" == *'## Dynamic verification — 70002'* \
+   && "$dynamic_out" == *'matching solo check'* && "$dynamic_out" != *'genuine solo verdict'* ]] \
+    || fail "direct dynamic summary no longer rendered independently: $dynamic_out"
 
 ask_out=$("$ROOT/dev-pack/commands/ask/run.sh" 70001 'why?' --rig vllm --dry-run 2>&1)
 [[ "$ask_out" == *'root verdict bead vllm-synth-work'* \

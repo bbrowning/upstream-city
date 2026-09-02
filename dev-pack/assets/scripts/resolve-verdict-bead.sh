@@ -82,10 +82,14 @@ if printf '%s' "$SPEC" | grep -qE '^[0-9]+$'; then
               | select($vj != null
                        and ((($vj.head_ref // "") | tostring) as $head
                             | ($head == $n or $head == ($rig + "#" + $n))))
+              | select((($b.metadata["gc.output_json_schema"] // $vj.schema // "")
+                        | test("^pr-review(-quorum)?\\.v1$"))
+                       or (($b.metadata["gc.review_quorum_role"] // "") == "synthesis"))
               | {id: $b.id,
                  mirror_key: ($b.metadata["gc.logical_bead_id"] // $b.id),
                  ts: ($b.closed_at // $b.updated_at // $b.created_at // ""),
                  canon: (($b.close_reason // "") | test("^(review|dynamic check):")),
+                 is_review: (($b.metadata["gc.output_json_schema"] // "") == "pr-review.v1"),
                  is_synthesis: (($b.metadata["gc.output_json_schema"] // "") == "pr-review-quorum.v1"
                                 or ($b.metadata["gc.review_quorum_role"] // "") == "synthesis"),
                  is_lane: ($b.metadata["gc.review_quorum_lane"] != null)}
@@ -97,7 +101,9 @@ if printf '%s' "$SPEC" | grep -qE '^[0-9]+$'; then
                      | (if ($canon | length) > 0 then $canon else . end)
                      | sort_by(.ts) | last)) as $steps
             | ($steps | map(select(.is_synthesis))) as $synth
-            | (if ($synth|length) > 0 then $synth else ($steps | map(select(.is_lane | not))) end) as $tier
+            | (if ($synth|length) > 0 then $synth
+               else ($steps | map(select(.is_review and (.is_lane | not))))
+               end) as $tier
             | if ($tier|length) > 0 then {bead: ($tier | sort_by(.ts) | last | .id), reason: null}
               elif ($all|length) == 0 then {bead: null, reason: "none"}
               else {bead: null, reason: "lanes-only"}

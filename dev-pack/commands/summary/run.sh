@@ -89,12 +89,64 @@ SHOW=$("$GC" --city "$CITY" --rig "$RIG" bd show "$BEAD" --json 2>/dev/null) \
 VJSON=$(printf '%s' "$SHOW" | jq -r '.[0].metadata["gc.output_json"] // empty')
 [ -n "$VJSON" ] \
     || die "bead '$BEAD' has no gc.output_json verdict (not a finished review / dynamic-check step?)"
+SCHEMA=$(printf '%s' "$SHOW" | jq -r '.[0].metadata["gc.output_json_schema"] // empty')
+[ -n "$SCHEMA" ] || SCHEMA=$(printf '%s' "$VJSON" | jq -r '.schema // empty')
 HEAD_REF=$(printf '%s' "$VJSON" | jq -r '.head_ref // empty')
 if [ -n "$HEAD_REF" ]; then
     HEAD_NORM=$("$NORMALIZE" "$HEAD_REF" --rig "$RIG" --rig-explicit) || exit $?
     HEAD_REF=$(printf '%s' "$HEAD_NORM" | jq -r '.spec')
     VJSON=$(printf '%s' "$VJSON" | jq -c --arg head "$HEAD_REF" '.head_ref = $head')
 fi
+
+# A PR review and its approved dynamic verification are separate durable beads.
+# Keep direct dynamic-bead summaries independent, but enrich review summaries
+# with the newest completed dynamic result for the exact same normalized PR and
+# immutable reviewed commit. Matching the SHA is intentionally mandatory: a
+# head-changed/re-reviewed PR must never inherit an older run's result.
+case "$SCHEMA" in
+    pr-review.v1|pr-review-quorum.v1)
+        REVIEW_SHA=$(printf '%s' "$SHOW" | jq -r '.[0].metadata["gc.reviewed_head_sha"] // empty')
+        if [ -z "$REVIEW_SHA" ]; then
+            REVIEW_SHA=$(printf '%s' "$VJSON" | jq -r \
+                '(if (.evidence | type) == "object"
+                  then (.evidence.reviewed_commit // .evidence.reviewed_head_sha)
+                  else null end)
+                 // (if (.implementation_provenance | type) == "object"
+                     then .implementation_provenance.head_sha
+                     else null end)
+                 // empty')
+        fi
+        if [ -n "$HEAD_REF" ] && [ -n "$REVIEW_SHA" ]; then
+            DYNAMIC_JSON=$(
+                ("$GC" --city "$CITY" --rig "$RIG" bd list --all --json -n 0 2>/dev/null || printf '[]') \
+                | jq -c --arg head "$HEAD_REF" --arg rig "$RIG" --arg sha "$REVIEW_SHA" '
+                    [ .[]?
+                      | . as $b
+                      | ($b.metadata["gc.output_json"] // "" | fromjson?) as $dj
+                      | select($dj != null
+                               and ($b.metadata["gc.output_json_schema"] // $dj.schema // "") == "pr-review-dynamic.v1"
+                               and (($b.status // (if $b.closed_at != null then "closed" else "" end)) == "closed")
+                               and ((($dj.head_ref // "") | tostring) as $dh
+                                    | ($dh == $head or $dh == ($rig + "#" + $head)))
+                               and (($dj.head_sha // "") == $sha))
+                      | {json: $dj,
+                         mirror_key: ($b.metadata["gc.logical_bead_id"] // $b.id),
+                         ts: ($b.closed_at // $b.updated_at // $b.created_at // ""),
+                         canon: (($b.close_reason // "") | startswith("dynamic check:"))}
+                    ]
+                    | sort_by(.mirror_key)
+                    | group_by(.mirror_key)
+                    | map((map(select(.canon))) as $canon
+                          | (if ($canon | length) > 0 then $canon else . end)
+                          | sort_by(.ts) | last)
+                    | sort_by(.ts) | last | .json // empty' 2>/dev/null || true
+            )
+            if [ -n "$DYNAMIC_JSON" ]; then
+                VJSON=$(printf '%s' "$VJSON" | jq -c --argjson dynamic "$DYNAMIC_JSON" '.dynamic_check = $dynamic')
+            fi
+        fi
+        ;;
+esac
 
 root=$(printf '%s' "$SHOW" | jq -r '.[0].metadata["gc.root_bead_id"] // empty')
 base="${GC_DASHBOARD_BASE:-http://127.0.0.1:8372/city/workspace/runs}"
