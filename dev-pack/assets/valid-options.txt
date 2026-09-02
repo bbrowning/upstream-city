@@ -7,12 +7,12 @@
 #
 # KEEP IN SYNC on a gascity upgrade (source: gascity internal/worker/builtin/
 # profiles.go) AND whenever you add a custom `by_key` model choice in city.toml
-# (e.g. claude-opus-4-8) — otherwise it validates only when the API is up.
+# (e.g. claude-opus-5) — otherwise it validates only when the API is up.
 #
 # Format:  <provider> <key> <value> <value> ...     ('#' lines ignored)
 
 # --- claude: v1.4.0 builtin slugs + city.toml by_key custom ids ---------------
-claude model opus opus-4-7 sonnet sonnet-5 sonnet-4-6 haiku fable-5 claude-opus-4-8
+claude model opus opus-4-7 sonnet sonnet-5 sonnet-4-6 haiku fable-5 claude-opus-5
 claude effort low medium high xhigh max
 
 # --- codex: builtin slugs (effort caps at xhigh — no `max`) -------------------

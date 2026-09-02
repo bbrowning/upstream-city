@@ -28,7 +28,7 @@ the builtin enum (works on v1.4.0), making each id a first-class, selectable,
 **validated** model. Add one `choices` block per id you want to use; keep
 `dev-pack/assets/valid-options.txt` in sync for the offline validator.
 
-Currently added: `claude-opus-4-8` (Opus 4.8, pinned id). `"sonnet"` is the
+Currently added: `claude-opus-5` (Opus 5, pinned id). `"sonnet"` is the
 builtin slug (= claude-sonnet-5) and needs no entry.
 
 ## `[providers.codex]` — primary workflow provider
@@ -65,9 +65,9 @@ The supported semantic profiles are exactly:
 
 | profile | feature / solo / lane A | lane B | effort |
 |---|---|---|---|
-| `frontier-xhigh` | codex `gpt-5.6-sol` | claude `claude-opus-4-8` | xhigh |
-| `frontier-high` | codex `gpt-5.6-sol` | claude `claude-opus-4-8` | high |
-| `frontier-medium` | codex `gpt-5.6-sol` | claude `claude-opus-4-8` | medium |
+| `frontier-xhigh` | codex `gpt-5.6-sol` | claude `claude-opus-5` | xhigh |
+| `frontier-high` | codex `gpt-5.6-sol` | claude `claude-opus-5` | high |
+| `frontier-medium` | codex `gpt-5.6-sol` | claude `claude-opus-5` | medium |
 | `efficient-xhigh` | codex `gpt-5.6-luna` | codex `gpt-5.6-luna` | xhigh |
 | `efficient-medium` | codex `gpt-5.6-luna` | codex `gpt-5.6-luna` | medium |
 
@@ -150,7 +150,7 @@ check is surfaced as `needs_dynamic` for the human's `pr-review-dynamic` lane.
 ### Semantic hard-bug lanes
 
 Bug A/B use the same four semantic profiles and exact matrix as review A/B. A is
-the primary Codex role. Frontier B uses Claude Opus 4.8 as backup capacity; efficient
+the primary Codex role. Frontier B uses Claude Opus 5 as backup capacity; efficient
 B uses Codex Luna. Every leaf has an explicit patch and its own worktree. Generic
 `bug-worker-a` / `bug-worker-b` launch identities do not exist.
 

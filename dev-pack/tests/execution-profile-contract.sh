@@ -29,6 +29,13 @@ for name, profile in p['execution_profiles'].items():
     assert roles['review']['lane_a'] != roles['review']['lane_b']
 
 city = tomllib.loads((root / 'city.toml').read_text())
+claude = city['providers']['claude']
+model_schema = next(x for x in claude['options_schema'] if x['key'] == 'model')
+assert {
+    'value': 'claude-opus-5',
+    'label': 'Opus 5 (pinned id)',
+    'flag_args': ['--model', 'claude-opus-5'],
+} in model_schema['choices']
 fixed = {
     'pr-triage': ('codex', 'gpt-5.6-sol', 'medium'),
     'pr-review-synthesizer': ('codex', 'gpt-5.6-sol', 'medium'),
@@ -64,7 +71,7 @@ for rig in city['rigs']:
             assert patch['option_defaults']['effort'] == profile['reasoning_effort']
             lane_b = target.startswith('bug-worker-b-') or target.startswith('pr-reviewer-b-')
             if profile_name.startswith('frontier-') and lane_b:
-                assert (patch['provider'], patch['option_defaults']['model']) == ('claude', 'claude-opus-4-8')
+                assert (patch['provider'], patch['option_defaults']['model']) == ('claude', 'claude-opus-5')
             elif profile_name.startswith('frontier-'):
                 assert (patch['provider'], patch['option_defaults']['model']) == ('codex', 'gpt-5.6-sol')
             else:
@@ -217,7 +224,7 @@ option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
 [[rigs.patches]]
 agent = "bug-worker-b-frontier-xhigh"
 provider = "claude"
-option_defaults = { model = "claude-opus-4-8", effort = "xhigh" }
+option_defaults = { model = "claude-opus-5", effort = "xhigh" }
 [[rigs.patches]]
 agent = "feature-dev-frontier-xhigh"
 provider = "codex"
@@ -229,7 +236,7 @@ option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
 [[rigs.patches]]
 agent = "pr-reviewer-b-frontier-xhigh"
 provider = "claude"
-option_defaults = { model = "claude-opus-4-8", effort = "xhigh" }
+option_defaults = { model = "claude-opus-5", effort = "xhigh" }
 TOML
 sed '0,/effort = "xhigh"/s//effort = "medium"/' "$TMP/good-city.toml" >"$TMP/wrong-effort.toml"
 if python3 "$VALIDATE" --city "$TMP/wrong-effort.toml" --policy "$POLICY" --rig paude \
