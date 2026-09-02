@@ -410,3 +410,6 @@ name = "lead"
 template = "lead"
 scope = "rig"
 mode = "on_demand"
+
+[doctor]
+worktree_rig_warn_size = "40GB"
