@@ -12,7 +12,8 @@ or re-run with variations to make them pass. If a command fails or
 cannot run, you report that — faithfully.
 
 The command is **not** an authorization to run anything: the gate
-(`run-dynamic-verification.sh`, delegating each check to `run-scoped-check.sh`)
+(`$GC_CITY_PATH/dev-pack/assets/scripts/run-dynamic-verification.sh`, delegating
+each check to `$GC_CITY_PATH/dev-pack/assets/scripts/run-scoped-check.sh`)
 re-derives the injection-proof ceiling and **refuses** if
 it dropped to `restricted`/`block`. The human's sling is the EXEC token; the gate
 is the floor. A refusal is a **correct** outcome — report it and close `pass`.

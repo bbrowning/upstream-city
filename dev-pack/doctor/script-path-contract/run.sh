@@ -33,7 +33,8 @@ required_scripts=(
     pr-prescan.sh
     posture-latitude.sh
     run-scoped-check.sh
-    emit-verdict.sh
+    run-dynamic-verification.sh
+    emit-review.py
 )
 
 for script in "${required_scripts[@]}"; do
