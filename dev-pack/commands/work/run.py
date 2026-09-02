@@ -388,7 +388,8 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
         group = "recently-finished"
         reason = "the human-facing bead itself is closed"
         next_action = "none; reopen only if the human disposition changes"
-    elif github and github.get("available") and github.get("state") in {"CLOSED", "MERGED"}:
+    elif (github and github.get("available") and github.get("kind") == "pull_request" and
+          github.get("state") in {"CLOSED", "MERGED"}):
         group = "needs-you"
         reason = f"GitHub reports the PR {str(github.get('state')).lower()} while the human disposition remains open"
         next_action = "reconcile and record the human disposition; external closure never closes this bead"
@@ -475,13 +476,10 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
     item["archived_human_plans"] = archived_plans
     human_plan = evaluate_plan(metadata_json(bead, "gc.human_plan_json"), item)
     item["human_plan"] = human_plan
-    upstream_finished = bool(github and github.get("available") and github.get("state") in {"CLOSED", "MERGED"})
+    upstream_finished = bool(github and github.get("available") and github.get("kind") == "pull_request" and
+                             github.get("state") in {"CLOSED", "MERGED"})
     if upstream_finished and status != "closed":
-        matching = next((plan for plan in reversed(archived_plans + ([human_plan] if human_plan else []))
-                         if plan.get("then") in {"approve", "request_changes"}
-                         and plan.get("head_matches")), None)
-        suffix = f" --as {matching['then'].replace('_', '-')}" if matching else ""
-        command = f"gc dev-pack reconcile {rig}/{bead.get('id')}{suffix}"
+        command = f"gc dev-pack reconcile {rig}/{bead.get('id')}"
         item["upstream_completion"] = {"state": github.get("state"), "url": github.get("url"),
                                        "reconcile_command": command}
         item["group"] = "needs-you"

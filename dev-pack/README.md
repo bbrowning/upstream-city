@@ -243,8 +243,9 @@ newest authoritative verdict, including post-settlement re-synthesis, and remain
 read-only; it is a cleaned deterministic derivative, not a replacement for the full
 review, and `--action` makes a human disagreement explicit. After the human submits
 that review on GitHub, `reconcile` forces a live read-only observation and updates the
-source bead only if the SHA and observed review state match. It never posts a review
-or touches mail. Requested changes become `wait:author`; approvals close the source.
+source bead only if the SHA and observed review state match. A forced-live `MERGED` or
+`CLOSED` PR closes the source with completion metadata, without inferring a review action
+or requiring legacy exact-SHA evidence. It never posts or touches mail; requested changes become `wait:author`.
 
 Interactive `ask` remains session-only and is never harvested. When a discussion
 changes the real-world next step, `plan` explicitly stores only that human-authored

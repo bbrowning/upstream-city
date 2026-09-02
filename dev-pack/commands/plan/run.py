@@ -105,7 +105,8 @@ def main() -> int:
                 observed_action = existing.get("then") in {"approve", "request_changes"} and github.get("review_state") == expected
                 if github.get("state") in {"CLOSED", "MERGED"} or observed_action:
                     action = str(existing.get("then") or "").replace("_", "-")
-                    suffix = f" --as {action}" if action in {"approve", "request-changes"} else ""
+                    suffix = (f" --as {action}" if github.get("state") not in {"CLOSED", "MERGED"}
+                              and action in {"approve", "request-changes"} else "")
                     raise RuntimeError("GitHub already records the planned upstream outcome; reconcile it instead: "
                                        f"gc dev-pack reconcile {item['rig']}/{item['id']}{suffix}")
             plan = None

@@ -38,7 +38,9 @@ jq -n '
       source("50";"vllm-source-50"),
       source("51";"vllm-e5m8.2"), result("51";"vllm-old-51";"request_changes";"4b5d6bd800000000000000000000000000000000";"2026-09-01T00:03:00Z";{}),
       source("52";"vllm-source-52"), source("53";"vllm-source-53"),
-      source("54";"vllm-source-54"), source("55";"vllm-source-55")]
+      source("54";"vllm-source-54"), source("55";"vllm-source-55"),
+      source("56";"vllm-uh5n"), result("56";"vllm-5err";"approve";null;"2026-09-01T00:03:00Z";{}),
+      source("57";"vllm-source-57"), result("57";"vllm-final-57";"request_changes";null;"2026-09-01T00:03:00Z";{})]
 ' > "$TMP/vllm.json"
 
 cat > "$TMP/bin/gc" <<'PY'
@@ -107,7 +109,9 @@ cat > "$TMP/gh-states.json" <<'JSON'
  "52":{"head":"5252525252525252525252525252525252525252","review":"REVIEW_REQUIRED","checks":[{"conclusion":"SUCCESS"}]},
  "53":{"head":"5353535353535353535353535353535353535353","review":"REVIEW_REQUIRED","checks":[{"conclusion":"SUCCESS"}]},
  "54":{"head":"5454545454545454545454545454545454545454","review":"REVIEW_REQUIRED","checks":[{"state":"IN_PROGRESS"}]},
- "55":{"head":"5555555555555555555555555555555555555555","review":"REVIEW_REQUIRED","checks":[{"conclusion":"SUCCESS"}]}}
+ "55":{"head":"5555555555555555555555555555555555555555","review":"REVIEW_REQUIRED","checks":[{"conclusion":"SUCCESS"}]},
+ "56":{"head":"24a3b24415a1bbf9347283ebeb42c39596a73181","review":"UNKNOWN","state":"MERGED","mergedAt":"2026-09-01T00:06:00Z"},
+ "57":{"head":"5757575757575757575757575757575757575757","review":"CHANGES_REQUESTED","state":"CLOSED"}}
 JSON
 
 export GC_BIN="$TMP/bin/gc" GH_BIN="$TMP/bin/gh" GC_CITY_PATH="$TMP/city" HANDOFF_FIXTURE="$TMP"
@@ -154,6 +158,35 @@ grep -Fq 'head drift' "$TMP/vllm-source-44.err"
 grep -Fq 'lacks the exact reviewed SHA' "$TMP/vllm-source-45.err"
 grep -Fq 'live GitHub observation is required' "$TMP/vllm-source-46.err"
 grep -Fq 'perform the GitHub action first' "$TMP/vllm-source-47.err"
+
+# vllm/vllm-uh5n shape: a terminal live PR completes the source even though the
+# authoritative legacy review has no exact reviewed SHA and no human plan exists.
+terminal_show=$(DEV_PACK_WORK_NOW=2026-09-01T00:05:00Z "$ROOT/dev-pack/commands/work/run.sh" show vllm-uh5n --rig vllm --refresh --json)
+jq -e '.item.github.state == "MERGED" and .item.decision.result_bead == "vllm-5err" and
+  .item.decision.reviewed_head_sha == null and .item.human_plan == null and
+  .item.archived_human_plans == [] and
+  .item.upstream_completion.reconcile_command == "gc dev-pack reconcile vllm/vllm-uh5n"' <<< "$terminal_show" >/dev/null
+terminal=$($ROOT/dev-pack/commands/reconcile/run.sh vllm/vllm-uh5n --json)
+jq -e '.changed == true and .action == null and .reviewed_head_sha == null and
+  .github_review_state == null and .completion_state == "MERGED" and
+  .completion_head_sha == "24a3b24415a1bbf9347283ebeb42c39596a73181"' <<< "$terminal" >/dev/null
+jq -e '.[] | select(.id=="vllm-uh5n") | .status=="closed" and
+  .metadata["gc.upstream_completion_state"]=="MERGED" and
+  .metadata["gc.upstream_completion_sha"]=="24a3b24415a1bbf9347283ebeb42c39596a73181" and
+  .metadata["gc.upstream_review_action"]==null and .metadata["gc.upstream_review_sha"]==null and
+  (.notes|contains("without inferring a review action"))' "$TMP/vllm.json" >/dev/null
+terminal_before=$(grep -Ec 'bd (update|close) vllm-uh5n' "$TMP/gc.calls" || true)
+terminal_again=$($ROOT/dev-pack/commands/reconcile/run.sh vllm/vllm-uh5n --json)
+jq -e '.changed == false and (.message|startswith("already reconciled terminal"))' <<< "$terminal_again" >/dev/null
+terminal_after=$(grep -Ec 'bd (update|close) vllm-uh5n' "$TMP/gc.calls" || true)
+[ "$terminal_after" -eq "$terminal_before" ]
+
+# CLOSED without merge is terminal completion too, not a changes-requested action.
+closed=$($ROOT/dev-pack/commands/reconcile/run.sh vllm/vllm-source-57 --json)
+jq -e '.changed == true and .action == null and .completion_state == "CLOSED"' <<< "$closed" >/dev/null
+jq -e '.[] | select(.id=="vllm-source-57") | .status=="closed" and
+  .metadata["gc.upstream_completion_state"]=="CLOSED" and
+  .metadata["gc.upstream_review_action"]==null' "$TMP/vllm.json" >/dev/null
 
 jq '."42".review="CHANGES_REQUESTED"' "$TMP/gh-states.json" > "$TMP/gh-next.json"
 mv "$TMP/gh-next.json" "$TMP/gh-states.json"
@@ -254,13 +287,16 @@ jq '."51".checks=[{"conclusion":"FAILURE"}]' "$TMP/gh-states.json" > "$TMP/gh-ne
 mv "$TMP/gh-next.json" "$TMP/gh-states.json"
 merged=$(DEV_PACK_WORK_NOW=2026-09-01T00:07:00Z "$ROOT/dev-pack/commands/work/run.sh" show vllm-e5m8.2 --rig vllm --refresh 2>&1)
 grep -Fq 'UPSTREAM COMPLETION OBSERVED' <<< "$merged"
-grep -Fq 'gc dev-pack reconcile vllm/vllm-e5m8.2 --as approve' <<< "$merged"
+grep -Fq 'gc dev-pack reconcile vllm/vllm-e5m8.2' <<< "$merged"
+! grep -Fq 'gc dev-pack reconcile vllm/vllm-e5m8.2 --as' <<< "$merged"
 ! grep -Fq 'REVIEW REQUIRED' <<< "$merged"
 ! grep -Fq 'head 4b5d6bd8' <<< "$merged"
 incident=$("$ROOT/dev-pack/commands/reconcile/run.sh" vllm/vllm-e5m8.2 --json 2>&1)
-jq -e '.changed == true and .action == "approve" and .reviewed_head_sha == "f0176d2200000000000000000000000000000000"' <<< "$incident" >/dev/null
+jq -e '.changed == true and .action == null and .reviewed_head_sha == null and
+  .completion_state == "MERGED" and .completion_head_sha == "f0176d2200000000000000000000000000000000"' <<< "$incident" >/dev/null
 jq -e '.[] | select(.id=="vllm-e5m8.2") | .status=="closed" and
-  .metadata["gc.upstream_review_action"] == "approve" and
+  .metadata["gc.upstream_completion_state"] == "MERGED" and
+  .metadata["gc.upstream_review_action"] == null and
   .metadata["gc.human_plan_archive_json"] != null' "$TMP/vllm.json" >/dev/null
 incident_again=$("$ROOT/dev-pack/commands/reconcile/run.sh" vllm/vllm-e5m8.2 --json)
 jq -e '.changed == false and (.message|startswith("already reconciled"))' <<< "$incident_again" >/dev/null
@@ -284,7 +320,8 @@ jq '."53".state="MERGED" | ."53".mergedAt="2026-09-01T00:06:00Z"' "$TMP/gh-state
 if "$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-53 --cancel >/dev/null 2>"$TMP/cancel-merged.err"; then
   echo 'cancel after observed merge unexpectedly succeeded' >&2; exit 1
 fi
-grep -Fq 'gc dev-pack reconcile vllm/vllm-source-53 --as approve' "$TMP/cancel-merged.err"
+grep -Fq 'gc dev-pack reconcile vllm/vllm-source-53' "$TMP/cancel-merged.err"
+! grep -Fq -- '--as approve' "$TMP/cancel-merged.err"
 
 # Archived evidence still enforces the original condition, exact head, and state.
 "$ROOT/dev-pack/commands/plan/run.sh" vllm/vllm-source-54 --wait-for ci --then approve >/dev/null

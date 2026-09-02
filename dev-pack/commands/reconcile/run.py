@@ -54,28 +54,73 @@ def main() -> int:
         if not github.get("available") or github.get("freshness") != "live":
             raise RuntimeError("a live GitHub observation is required; refresh was unavailable or stale")
         current = github.get("current_head_sha")
-        planned_action = (plan or {}).get("then") if (plan or {}).get("then") in {"approve", "request_changes"} else None
-        if args.action:
-            action = args.action.replace("-", "_")
-        elif planned_action:
-            action = str(planned_action)
-        elif (archived := next((candidate for candidate in reversed(archived_plans)
-                               if candidate.get("then") in {"approve", "request_changes"}
-                               and candidate.get("head_matches") and candidate.get("state") == "ready"
-                               and github.get("review_state") == ("APPROVED" if candidate.get("then") == "approve" else "CHANGES_REQUESTED")), None)):
-            action = str(archived["then"])
-        elif decision:
-            action = str(decision["recommended_action"])
-        else:
-            raise RuntimeError("no actionable human plan or authoritative finished review is linked to this source bead")
         metadata = bead.get("metadata") or {}
-        if (current and metadata.get("gc.upstream_review_sha") == current and
+        terminal_state = (github.get("state") if github.get("kind") == "pull_request" and
+                          github.get("state") in {"CLOSED", "MERGED"} else None)
+        if terminal_state:
+            if args.action:
+                raise RuntimeError("--as records a review action and cannot be used for terminal PR completion")
+            recorded = (metadata.get("gc.upstream_completion_state") == terminal_state and
+                        metadata.get("gc.upstream_completion_sha") == current)
+            already_closed = bead.get("status") == "closed"
+            action = reviewed = expected = None
+            if recorded and already_closed:
+                changed = False
+                message = f"already reconciled terminal {terminal_state.lower()} completion"
+            elif args.dry_run:
+                changed = False
+                message = f"would reconcile terminal {terminal_state.lower()} completion"
+            else:
+                prefix = [gc, "--city", city]
+                scope = item["rig"]
+                if scope != "hq":
+                    prefix += ["--rig", scope]
+                if not recorded:
+                    head_text = f" at head {current}" if current else " (head unavailable)"
+                    note = (f"Observed live GitHub PR terminal state {terminal_state}{head_text}; "
+                            "recorded upstream completion without inferring a review action.")
+                    update = prefix + ["bd", "update", item["id"], "--append-notes", note,
+                                       "--set-metadata", f"gc.upstream_completion_state={terminal_state}",
+                                       "--unset-metadata", "gc.human_plan_json",
+                                       "--remove-label", "wait:ci", "--remove-label", "wait:author"]
+                    if current:
+                        update += ["--set-metadata", f"gc.upstream_completion_sha={current}"]
+                    else:
+                        update += ["--unset-metadata", "gc.upstream_completion_sha"]
+                    mutation = run(update)
+                    if mutation.returncode:
+                        raise RuntimeError(mutation.stderr.strip() or mutation.stdout.strip() or
+                                           "bead completion update failed")
+                if not already_closed:
+                    reason = f"Live GitHub PR terminal state {terminal_state} observed"
+                    mutation = run(prefix + ["bd", "close", item["id"], "--reason", reason])
+                    if mutation.returncode:
+                        raise RuntimeError(mutation.stderr.strip() or mutation.stdout.strip() or
+                                           "bead completion close failed")
+                changed = True
+                message = f"recorded terminal {terminal_state.lower()} completion"
+        else:
+            planned_action = (plan or {}).get("then") if (plan or {}).get("then") in {"approve", "request_changes"} else None
+            if args.action:
+                action = args.action.replace("-", "_")
+            elif planned_action:
+                action = str(planned_action)
+            elif (archived := next((candidate for candidate in reversed(archived_plans)
+                                   if candidate.get("then") in {"approve", "request_changes"}
+                                   and candidate.get("head_matches") and candidate.get("state") == "ready"
+                                   and github.get("review_state") == ("APPROVED" if candidate.get("then") == "approve" else "CHANGES_REQUESTED")), None)):
+                action = str(archived["then"])
+            elif decision:
+                action = str(decision["recommended_action"])
+            else:
+                raise RuntimeError("no actionable human plan or authoritative finished review is linked to this source bead")
+        if not terminal_state and (current and metadata.get("gc.upstream_review_sha") == current and
                 metadata.get("gc.upstream_review_action") == action):
             reviewed = current
             expected = "CHANGES_REQUESTED" if action == "request_changes" else "APPROVED"
             changed = False
             message = f"already reconciled {action.replace('_', '-')} on {reviewed[:8]}"
-        else:
+        elif not terminal_state:
             evidence_plan = plan
             if not evidence_plan:
                 evidence_plan = next((candidate for candidate in reversed(archived_plans)
@@ -144,6 +189,7 @@ def main() -> int:
         return 2
     result = {"schema_version": "dev-pack-reconcile.v1", "source": f"{item['rig']}/{item['id']}",
               "action": action, "reviewed_head_sha": reviewed, "github_review_state": expected,
+              "completion_state": terminal_state, "completion_head_sha": current if terminal_state else None,
               "changed": changed, "dry_run": args.dry_run, "message": message}
     if args.json:
         json.dump(result, sys.stdout, indent=2, sort_keys=True); print()
