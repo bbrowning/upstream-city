@@ -78,7 +78,7 @@ if [ "$REQUIRE_INTERNAL_PRODUCER" = true ]; then
     PRODUCER_BEAD=$(printf '%s' "$CHANGE" | jq -r '.producer.bead')
     GENERATOR=$(printf '%s' "$CHANGE" | jq -r '.provenance.generator // ""')
     case "$PRODUCER_WORKFLOW:$PRODUCER_INTENT" in
-        feature-dev:feature|hard-bug-finalize:hard_bug) ;;
+        feature-dev:feature|hard-bug-finalize:hard_bug|pr-adopt:pr_adopt) ;;
         *) die "artifact producer workflow is not eligible for internal execution: $PRODUCER_WORKFLOW/$PRODUCER_INTENT" ;;
     esac
     [ "$GENERATOR" = "dev-pack/emit-local-change.sh" ] \
@@ -118,7 +118,10 @@ if printf '%s' "$CHANGE" | jq -e '.commit_message_quality != null' >/dev/null; t
     [ -x "$VALIDATE_COMMITS" ] || die "commit-series validator not found/executable: $VALIDATE_COMMITS"
     QUALITY_TMP=$(mktemp)
     trap 'rm -f "$QUALITY_TMP"' EXIT
-    "$VALIDATE_COMMITS" --repo "$REPO" --base "$BASE_SHA" --head "$HEAD_SHA" --output "$QUALITY_TMP" \
+    VALIDATE_ARGS=(--repo "$REPO" --base "$BASE_SHA" --head "$HEAD_SHA" --output "$QUALITY_TMP")
+    INHERITED_HEAD=$(printf '%s' "$CHANGE" | jq -r '.provenance.adoption.original_head_sha // empty')
+    [ -z "$INHERITED_HEAD" ] || VALIDATE_ARGS+=(--inherited-head "$INHERITED_HEAD")
+    "$VALIDATE_COMMITS" "${VALIDATE_ARGS[@]}" \
         || die "commit message quality gate failed while resolving artifact"
     QUALITY=$(jq -ce . "$QUALITY_TMP") || die "commit message validator emitted invalid JSON"
     rm -f "$QUALITY_TMP"

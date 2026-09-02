@@ -41,6 +41,22 @@ default = ""
 default = ""
 [vars.coordinator_target]
 default = ""
+[vars.source_pr]
+default = ""
+[vars.source_head_sha]
+default = ""
+[vars.target_base_ref]
+default = ""
+[vars.worktree]
+default = ""
+[vars.strategy]
+default = ""
+[vars.task]
+default = ""
+[vars.human_disposition_bead]
+default = ""
+[vars.recommended_upstream_action]
+default = ""
 [vars.triage_target]
 default = "pr-triage"
 [vars.lane_a_target]
@@ -79,6 +95,9 @@ provenance, and emit pr-review.v1. Do not fetch Git refs; sandbox-governed read-
 web access follows the standard `FETCH` latitude. A `limited` ceiling may
 run one bounded multi-axis verification plan through run-dynamic-verification.sh only with the validated
 `--internal-artifact` authority; restricted/block remains execution-denied.
+Set `implementation_provenance` to exactly this canonical tuple and no other keys:
+`{"artifact_ref":"{{implementation_artifact_ref}}","artifact_id":"{{implementation_artifact_id}}","repository_id":"{{implementation_repository_id}}","branch":"{{implementation_branch}}","revision":{{implementation_revision}},"base_sha":"{{base_ref}}","head_sha":"{{head_ref}}"}`.
+Do not embed the full local-change object there.
 """
 metadata = { "gc.run_target" = "{{lane_a_target}}", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
 [steps.retry]
@@ -111,7 +130,13 @@ has_disputed_major=false, then invoke decide-change-lifecycle.sh with every exac
 named by this step (artifact/head/branch/revision/bound, revision formula/target/base,
 and hard-bug targets when present), `--feedback-bead <review-step-bead>`,
 `--synthesis-bead <review-step-bead>`, and
-`--review-n 1 --lane-a-target {{lane_a_target}}`. Emit the helper's stdout verbatim.
+`--review-n 1 --lane-a-target {{lane_a_target}}`. For pr_adopt also pass
+`--source-pr "{{source_pr}}" --source-head "{{source_head_sha}}"
+--target-base-ref "{{target_base_ref}}" --worktree "{{worktree}}"
+--strategy "{{strategy}}" --task "{{task}}"
+--human-disposition-bead "{{human_disposition_bead}}"
+--recommended-upstream-action "{{recommended_upstream_action}}"` unchanged.
+Never update or close that human disposition bead. Emit the helper's stdout verbatim.
 """
 metadata = { "gc.run_target" = "{{synthesis_target}}", "gc.output_json_schema" = "change-lifecycle-final.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
 [steps.retry]

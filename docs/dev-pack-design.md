@@ -68,6 +68,13 @@ Human PR materialization is intentionally separate:
 
 These PR-keyed worktrees are outside `.gc`, are never agent slots, and survive
 slot reuse and `gc stop --clean`. `materialize --remove` is the explicit cleanup
+boundary. PR adoption extends the durable-worktree idea with a write-capable but
+strictly local continuation: the controller pins both advertised PR head and target
+base, creates a new local branch plus a separate internal lifecycle bead, and records
+the human disposition bead only as provenance. Review approval may close the internal
+adoption bead but cannot close the human source. Publication remains an explicit
+choice among updating the original branch, asking the author to apply commits, or
+opening a superseding PR; none is performed by the pack.
 path. `ask` uses this same real worktree; its interactive rendezvous/session
 metadata does not make the worktree an agent-slot scratch tree.
 

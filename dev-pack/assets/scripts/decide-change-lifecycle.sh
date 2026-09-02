@@ -12,6 +12,8 @@ SYNTHESIS_BEAD="" SETTLEMENT_BEAD=""
 REVISION_FORMULA="" REVISION_TARGET="" BASE="" BRANCH_PREFIX=""
 IMPLEMENTER_TARGET="" COORDINATOR_TARGET="" REVIEW_N="2"
 LANE_A_TARGET="" LANE_B_TARGET=""
+SOURCE_PR="" SOURCE_HEAD="" TARGET_BASE_REF="" WORKTREE="" STRATEGY="" TASK=""
+HUMAN_DISPOSITION_BEAD="" RECOMMENDED_UPSTREAM_ACTION=""
 
 die() { printf '%s\n' "decide-change-lifecycle: $*" >&2; exit 2; }
 while [ $# -gt 0 ]; do
@@ -38,6 +40,14 @@ while [ $# -gt 0 ]; do
     --review-n) REVIEW_N="${2:?}"; shift 2 ;; --review-n=*) REVIEW_N="${1#*=}"; shift ;;
     --lane-a-target) LANE_A_TARGET="${2:?}"; shift 2 ;; --lane-a-target=*) LANE_A_TARGET="${1#*=}"; shift ;;
     --lane-b-target) LANE_B_TARGET="${2:?}"; shift 2 ;; --lane-b-target=*) LANE_B_TARGET="${1#*=}"; shift ;;
+    --source-pr) SOURCE_PR="${2:?}"; shift 2 ;; --source-pr=*) SOURCE_PR="${1#*=}"; shift ;;
+    --source-head) SOURCE_HEAD="${2:?}"; shift 2 ;; --source-head=*) SOURCE_HEAD="${1#*=}"; shift ;;
+    --target-base-ref) TARGET_BASE_REF="${2:?}"; shift 2 ;; --target-base-ref=*) TARGET_BASE_REF="${1#*=}"; shift ;;
+    --worktree) WORKTREE="${2:?}"; shift 2 ;; --worktree=*) WORKTREE="${1#*=}"; shift ;;
+    --strategy) STRATEGY="${2:?}"; shift 2 ;; --strategy=*) STRATEGY="${1#*=}"; shift ;;
+    --task) TASK="${2:?}"; shift 2 ;; --task=*) TASK="${1#*=}"; shift ;;
+    --human-disposition-bead) HUMAN_DISPOSITION_BEAD="${2:?}"; shift 2 ;; --human-disposition-bead=*) HUMAN_DISPOSITION_BEAD="${1#*=}"; shift ;;
+    --recommended-upstream-action) RECOMMENDED_UPSTREAM_ACTION="${2:?}"; shift 2 ;; --recommended-upstream-action=*) RECOMMENDED_UPSTREAM_ACTION="${1#*=}"; shift ;;
     -*) die "unknown option '$1'" ;; *) die "unexpected argument '$1'" ;;
   esac
 done
@@ -47,7 +57,7 @@ for pair in "rig:$RIG" "work-bead:$WORK_BEAD" "intent:$INTENT" "artifact-id:$ART
   "synthesis-file:$SYNTHESIS_FILE" "feedback-bead:$FEEDBACK_BEAD"; do
   [ -n "${pair#*:}" ] || die "--${pair%%:*} is required"
 done
-case "$INTENT" in feature|hard_bug) ;; *) die "--intent must be feature or hard_bug" ;; esac
+case "$INTENT" in feature|hard_bug|pr_adopt) ;; *) die "--intent must be feature, hard_bug, or pr_adopt" ;; esac
 case "$REVISION:$MAX_ITERATIONS" in *[!0-9:]*|:*|*:) die "revision bounds must be positive integers" ;; esac
 [ "$REVISION" -ge 1 ] && [ "$MAX_ITERATIONS" -ge 1 ] || die "revision bounds must be positive integers"
 [ -f "$SYNTHESIS_FILE" ] || die "synthesis file not found"
@@ -88,6 +98,18 @@ case "$verdict" in
       set -- "$REVISION_TARGET" "$REVISION_FORMULA" --formula
       if [ "$INTENT" = "feature" ]; then
         set -- "$@" --var "work_bead=$WORK_BEAD" --var "base=$BASE" --var fetch_base=false \
+          --var "implementer_target=$REVISION_TARGET"
+      elif [ "$INTENT" = "pr_adopt" ]; then
+        for pair in "source-pr:$SOURCE_PR" "source-head:$SOURCE_HEAD" "target-base-ref:$TARGET_BASE_REF" \
+          "worktree:$WORKTREE" "strategy:$STRATEGY" "task:$TASK" \
+          "human-disposition-bead:$HUMAN_DISPOSITION_BEAD" "recommended-upstream-action:$RECOMMENDED_UPSTREAM_ACTION"; do
+          [ -n "${pair#*:}" ] || die "pr_adopt revision requires --${pair%%:*}"
+        done
+        set -- "$@" --var "work_bead=$WORK_BEAD" --var "human_disposition_bead=$HUMAN_DISPOSITION_BEAD" \
+          --var "source_pr=$SOURCE_PR" --var "source_head_sha=$SOURCE_HEAD" \
+          --var "target_base_sha=$BASE" --var "target_base_ref=$TARGET_BASE_REF" \
+          --var "worktree=$WORKTREE" --var "branch=$BRANCH" --var "strategy=$STRATEGY" \
+          --var "task=$TASK" --var "recommended_upstream_action=$RECOMMENDED_UPSTREAM_ACTION" \
           --var "implementer_target=$REVISION_TARGET"
       else
         set -- "$@" --var "bug_bead=$WORK_BEAD" --var "base=$BASE" \

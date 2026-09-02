@@ -47,6 +47,22 @@ default = ""
 default = ""
 [vars.coordinator_target]
 default = ""
+[vars.source_pr]
+default = ""
+[vars.source_head_sha]
+default = ""
+[vars.target_base_ref]
+default = ""
+[vars.worktree]
+default = ""
+[vars.strategy]
+default = ""
+[vars.task]
+default = ""
+[vars.human_disposition_bead]
+default = ""
+[vars.recommended_upstream_action]
+default = ""
 [vars.triage_target]
 default = "pr-triage"
 [vars.lane_a_target]
@@ -90,8 +106,10 @@ Apply internal-producer latitude: a `limited` content ceiling
 may run one bounded multi-axis verification plan through run-dynamic-verification.sh with
 `--internal-artifact {{implementation_artifact_ref}} --min-ceiling limited`; restricted
 or block remains execution-denied.
-Preserve all values in implementation_provenance. Emit
-pr-review.v1 with skeptical findings and an independently reached verdict.
+Set `implementation_provenance` to exactly this canonical tuple and no other keys:
+`{"artifact_ref":"{{implementation_artifact_ref}}","artifact_id":"{{implementation_artifact_id}}","repository_id":"{{implementation_repository_id}}","branch":"{{implementation_branch}}","revision":{{implementation_revision}},"base_sha":"{{base_ref}}","head_sha":"{{head_ref}}"}`.
+Do not embed the full local-change object there. Emit pr-review.v1 with skeptical
+findings and an independently reached verdict.
 """
 metadata = { "gc.run_target" = "{{lane_a_target}}", "gc.review_quorum_lane" = "reviewer-a", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
 [steps.retry]
@@ -109,8 +127,9 @@ artifact/repository/branch/revision plus exact `{{base_ref}}...{{head_ref}}`. Re
 read-only without fetching Git refs, independently of lane A. Apply the same
 sandboxed `FETCH` policy and internal-producer
 limited-only execution latitude through run-dynamic-verification.sh; restricted/block stays
-denied. Preserve implementation_provenance and
-emit pr-review.v1.
+denied. Set `implementation_provenance` to exactly this canonical tuple and no other keys:
+`{"artifact_ref":"{{implementation_artifact_ref}}","artifact_id":"{{implementation_artifact_id}}","repository_id":"{{implementation_repository_id}}","branch":"{{implementation_branch}}","revision":{{implementation_revision}},"base_sha":"{{base_ref}}","head_sha":"{{head_ref}}"}`.
+Do not embed the full local-change object there. Emit pr-review.v1.
 """
 metadata = { "gc.run_target" = "{{lane_b_target}}", "gc.review_quorum_lane" = "reviewer-b", "gc.output_json_schema" = "pr-review.v1", "gc.output_json_required" = "true", "gc.change_lifecycle" = "{{work_bead}}" }
 [steps.retry]
@@ -174,6 +193,11 @@ run:
     --base {{implementation_base}} --branch-prefix "{{branch_prefix}}" \
     --implementer-target "{{implementer_target}}" \
     --coordinator-target "{{coordinator_target}}" --review-n 2 \
+    --source-pr "{{source_pr}}" --source-head "{{source_head_sha}}" \
+    --target-base-ref "{{target_base_ref}}" --worktree "{{worktree}}" \
+    --strategy "{{strategy}}" --task "{{task}}" \
+    --human-disposition-bead "{{human_disposition_bead}}" \
+    --recommended-upstream-action "{{recommended_upstream_action}}" \
     --lane-a-target {{lane_a_target}} --lane-b-target {{lane_b_target}}
 Emit its stdout verbatim as change-lifecycle-final.v1.
 
@@ -184,6 +208,9 @@ Approval means code review approval, not DCO readiness. If the target requires D
 state that the human publisher must review and extract the approved change without
 committing, then create the publication commit using their own configured identity and
 sign-off. Never describe an agent-authored commit as DCO-ready.
+
+For pr_adopt, pass every PR/source/base/worktree/strategy/task/disposition variable
+above unchanged, and never update or close `{{human_disposition_bead}}`.
 
 Request_changes: first record disposition=request_changes and the synthesis/settle
 feedback bead. If revision {{implementation_revision}} is below the bound, sling

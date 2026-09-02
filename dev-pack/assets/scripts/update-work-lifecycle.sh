@@ -27,7 +27,7 @@ done
 
 [ -n "$BEAD" ] && [ -n "$INTENT" ] && [ -n "$CHECKPOINT" ] && [ -n "$DISPOSITION" ] \
     || die "--bead, --intent, --checkpoint, and --disposition are required"
-case "$INTENT" in feature|hard_bug) ;; *) die "--intent must be feature or hard_bug" ;; esac
+case "$INTENT" in feature|hard_bug|pr_adopt) ;; *) die "--intent must be feature, hard_bug, or pr_adopt" ;; esac
 case "$DISPOSITION" in implementing|awaiting_review|settling|request_changes|blocked|escalated|approved) ;;
     *) die "invalid --disposition '$DISPOSITION'" ;;
 esac
@@ -66,11 +66,11 @@ lifecycle=$(jq -cn --arg schema work-lifecycle.v1 --arg intent "$INTENT" \
       head_sha:(if $head=="" then null else $head end),branch:(if $branch=="" then null else $branch end),
       feedback_bead:(if $feedback=="" then null else $feedback end),reason:$reason,updated_at:$updated}')
 
-"${gc_cmd[@]}" bd update "$BEAD" --status in_progress --set-metadata "gc.lifecycle_json=$lifecycle"
+"${gc_cmd[@]}" bd update "$BEAD" --status in_progress --set-metadata "gc.lifecycle_json=$lifecycle" >/dev/null
 stored=$("${gc_cmd[@]}" bd show "$BEAD" --json) || die "could not verify lifecycle state for $BEAD"
 stored_lifecycle=$(printf '%s' "$stored" | jq -r '(if type == "array" then .[0] else . end).metadata["gc.lifecycle_json"] // empty')
 [ "$(printf '%s' "$stored_lifecycle" | jq -S -c .)" = "$(printf '%s' "$lifecycle" | jq -S -c .)" ] \
     || die "stored lifecycle state does not match checkpoint for $BEAD"
 
 [ "$DISPOSITION" = "approved" ] || exit 0
-"${gc_cmd[@]}" bd close "$BEAD" --reason "lifecycle approved: $REASON ($BRANCH @ $HEAD_SHA)"
+"${gc_cmd[@]}" bd close "$BEAD" --reason "lifecycle approved: $REASON ($BRANCH @ $HEAD_SHA)" >/dev/null

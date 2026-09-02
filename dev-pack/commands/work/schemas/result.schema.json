@@ -48,7 +48,9 @@
           "additionalProperties": false
         },
         "active_workflow_children": {"type": "array", "items": {"type": ["string", "null"]}},
+        "superseded_active_workflow_children": {"type": "array", "items": {"type": ["string", "null"]}},
         "local_artifact": {"type": ["object", "null"]},
+        "adoption_handoff": {"type": ["object", "null"]},
         "github": {"type": ["object", "null"]},
         "decision": {"type": ["object", "null"]},
         "human_plan": {"type": ["object", "null"]}

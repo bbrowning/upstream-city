@@ -29,6 +29,10 @@ for name in ('hard-bug-round.toml','hard-bug-round-solo.toml'):
     f = tomllib.loads((root/'dev-pack/formulas'/name).read_text())
     assert f['vars']['review_n']['default'] == '2'
     assert 'review_lane_a_target' in f['steps'][-1]['description']
+for name in ('change-lifecycle.toml','change-lifecycle-solo.toml'):
+    text = (root/'dev-pack/formulas'/name).read_text()
+    assert 'exactly this canonical tuple and no other keys' in text
+    assert 'Do not embed the full local-change object there' in text
 PY
 
 feature_dry=$(GC_BIN=gc "$ROOT/dev-pack/commands/feature/run.sh" paude-feature \
@@ -99,8 +103,8 @@ case "${1-} ${2-}" in
         *) shift ;;
       esac
     done
-    mv "$next" "$MOCK_GC_STATE" ;;
-  "bd close") jq '.status="closed"' "$MOCK_GC_STATE" >"$MOCK_GC_STATE.next"; mv "$MOCK_GC_STATE.next" "$MOCK_GC_STATE" ;;
+    mv "$next" "$MOCK_GC_STATE"; printf '%s\n' 'mock gc update success' ;;
+  "bd close") jq '.status="closed"' "$MOCK_GC_STATE" >"$MOCK_GC_STATE.next"; mv "$MOCK_GC_STATE.next" "$MOCK_GC_STATE"; printf '%s\n' 'mock gc close success' ;;
   "mail send") : ;;
   sling*) : ;;
   *) printf 'unexpected gc call: %s\n' "$*" >&2; exit 99 ;;

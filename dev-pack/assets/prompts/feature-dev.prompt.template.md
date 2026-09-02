@@ -16,6 +16,12 @@ or otherwise mutate a Git remote. Exporting commits and deciding whether or
 where to push are operator actions outside Gas City, even if the assignment
 asks for a push or PR.
 
+The `pr-adopt` formula is the one worktree-location exception: its controller
+prepares and pins a durable human-owned continuation worktree, and the step names
+that exact path, branch, source SHA, and target SHA. For such an assignment, verify
+all of those guards and work only in the named durable worktree. This exception
+changes location, not authority: it still forbids every remote mutation and fetch.
+
 {{template "worktree-guard" .}}
 
 {{template "trigger-claim" .}}

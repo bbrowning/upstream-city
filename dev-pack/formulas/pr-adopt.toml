@@ -1,0 +1,144 @@
+description = """
+Local-only continuation of an exact upstream PR head onto a freshly fetched exact target tip.
+The writer operates in a durable human-owned worktree, preserves contributor
+provenance, emits an immutable artifact, and enters the shared bounded review
+lifecycle. No step pushes, updates a fork, or publishes a replacement PR.
+"""
+formula = "pr-adopt"
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[vars]
+[vars.work_bead]
+required = true
+[vars.human_disposition_bead]
+required = true
+[vars.source_pr]
+required = true
+[vars.source_head_sha]
+required = true
+[vars.target_base_sha]
+required = true
+[vars.target_base_ref]
+required = true
+[vars.worktree]
+required = true
+[vars.branch]
+required = true
+[vars.strategy]
+default = "merge"
+[vars.task]
+default = "Resolve conflicts and preserve the contributor's intended change."
+[vars.recommended_upstream_action]
+default = "undecided"
+[vars.revision]
+default = "1"
+[vars.previous_artifact_id]
+default = ""
+[vars.feedback_bead]
+default = ""
+[vars.producing_verdict]
+default = ""
+[vars.review_n]
+default = "2"
+[vars.max_review_iterations]
+default = "3"
+[vars.implementer_target]
+default = "feature-dev-frontier-high"
+[vars.review_lane_a_target]
+default = "pr-reviewer-a-frontier-high"
+[vars.review_lane_b_target]
+default = "pr-reviewer-b-frontier-high"
+
+[[steps]]
+id = "implement"
+title = "Continue pinned PR {{source_pr}} on durable branch {{branch}}"
+description = """
+This is a PR-adoption assignment, not a fresh feature branch. Claim the trigger,
+then work only in the already-created durable worktree `{{worktree}}`. It is the
+explicit adoption exception to the normal feature slot-worktree rule.
+
+Fail hard unless all of these guards hold before editing:
+
+- the current branch is exactly `{{branch}}`;
+- `git config gc.prAdopt.sourceHead` is `{{source_head_sha}}`;
+- `git config gc.prAdopt.targetBase` is `{{target_base_sha}}`;
+- both pinned commits exist locally; contact no remote;
+- on revision 1, either (a) HEAD is the source SHA and the tree is clean for a
+  fresh integration, (b) a merge/rebase of the exact pinned target is visibly in
+  progress and must be resumed, or (c) the exact target is already an ancestor of
+  a clean continuation HEAD from an earlier cancelled attempt. Preserve and report
+  unrecognized dirty state rather than resetting it. On later revisions, read `{{work_bead}}`'s
+  `gc.lifecycle_json`, require its artifact id to equal `{{previous_artifact_id}}`,
+  require HEAD to equal that record's exact head SHA, and resume only the scoped
+  review changes.
+
+For revision 1, integrate the exact target base using `{{strategy}}`. Merge means
+`git merge --no-ff {{target_base_sha}}`; rebase means rebase the contributor series
+onto `{{target_base_sha}}` while preserving original commit authors. Resolve every
+conflict deliberately. Never squash contributor commits merely for convenience,
+never rewrite author identity, and never add a bot/model `Signed-off-by`. Then do
+the scoped follow-up assignment: {{task}}
+
+Run relevant tests and commit all intended resolution/follow-up changes in coherent
+commits. A conflict-only refresh is valid. Preserve original authorship where Git
+permits it and record the original contributor commits even when rebase changes
+their SHAs. Never push, fetch, open/modify a PR, or access the contributor fork.
+
+Create a verification JSON array and a `pr-adoption-provenance.v1` JSON file with:
+source_pr, human_disposition_bead=`{{human_disposition_bead}}`, original_head_sha,
+target_base_sha/ref, strategy, continuation_branch, resulting_head_sha,
+original_commits (SHA/author/email/subject from the source-only series),
+resulting_commits, recommended_upstream_action=`{{recommended_upstream_action}}`,
+and an explicit `remote_mutation:false`. The recommendation is advisory only and
+must be exactly undecided, update-original, request-author-apply, or supersede.
+
+Emit the immutable artifact with:
+
+  emit-local-change.sh --repo {{worktree}} --rig {{.Rig}} --workflow pr-adopt \
+    --bead {{work_bead}} --intent pr_adopt --base {{target_base_sha}} \
+    --branch {{branch}} --revision {{revision}} --verification-file <checks.json> \
+    --adoption-file <provenance.json> --output <artifact.json>
+
+For revision >1 also pass the exact previous-artifact, feedback-bead, and verdict
+variables. Mark only the internal adoption bead awaiting review:
+
+  update-work-lifecycle.sh --rig {{.Rig}} --bead {{work_bead}} --intent pr_adopt \
+    --checkpoint implementation --disposition awaiting_review --iteration {{revision}} \
+    --artifact-id <artifact_id> --head-sha <head_sha> --branch {{branch}}
+
+Never update or close `{{human_disposition_bead}}`. Embed the complete artifact in
+a `pr-adopt.v1` result with branch, head_sha, source_head_sha, target_base_sha,
+strategy, summary, tests, authorship, recommended_upstream_action, worktree_state,
+failure_class/reason, and local_change. Close this step atomically with emit-json.sh.
+"""
+metadata = { "gc.run_target" = "{{implementer_target}}", "gc.output_json_schema" = "pr-adopt.v1", "gc.output_json_required" = "true" }
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"
+
+[[steps]]
+id = "review-handoff"
+title = "Review the immutable PR continuation"
+needs = ["implement"]
+description = """
+Read the implement step's pr-adopt.v1 output and pass that implementation bead to:
+
+  sling-change-lifecycle.sh --rig {{.Rig}} --work-bead {{work_bead}} \
+    --intent pr_adopt --artifact <implement-step-bead> --n {{review_n}} \
+    --max-iterations {{max_review_iterations}} --revision-formula pr-adopt \
+    --revision-target {{implementer_target}} --base {{target_base_sha}} \
+    --source-pr {{source_pr}} --source-head {{source_head_sha}} \
+    --target-base-ref {{target_base_ref}} --worktree {{worktree}} --strategy {{strategy}} \
+    --task "{{task}}" --human-disposition-bead {{human_disposition_bead}} \
+    --recommended-upstream-action {{recommended_upstream_action}} \
+    --lane-a-target {{review_lane_a_target}} --lane-b-target {{review_lane_b_target}}
+
+Emit change-lifecycle-handoff.v1. Never close the human disposition bead and never
+mutate a remote. Review approval closes only `{{work_bead}}`.
+"""
+metadata = { "gc.run_target" = "pr-review-synthesizer", "gc.output_json_schema" = "change-lifecycle-handoff.v1", "gc.output_json_required" = "true" }
+[steps.retry]
+max_attempts = 2
+on_exhausted = "hard_fail"

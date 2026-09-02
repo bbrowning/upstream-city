@@ -95,6 +95,8 @@
 #     review <PR>       start a PR review (--n 1 single reviewer, --n 2 quorum).
 #     bug <bead>        start a bug run (--n 1 solo, --n 2 two-opinion; resolves rig).
 #     feature <bead>    start a feature implementation.
+#     adopt <PR|bead>   pin an upstream PR + target base, continue it on a durable
+#                       local branch, and run bounded immutable review/revise.
 #     materialize <PR>  check a PR out into a DURABLE, human-owned worktree (outside
 #                       .gc/, never reaped) so a person can read/diff/run it.
 #     settle <PR|bead>  resolve a DIVERGED quorum by evidence: a verify-mandated arbiter
@@ -173,4 +175,4 @@
 [pack]
 name = "dev-pack"
 schema = 2
-description = "One engineering-workflow pack, three lanes over a shared spine: posture-gated standalone PR/local-ref review, bug diagnosis and feature implementation front ends, and one bounded immutable-artifact review → settle → revise/approve lifecycle (default N=2) shared by feature and hard-bug work. Write lanes are local-only and worktree-isolated; review lanes share one persona corpus via $GC_PERSONAS."
+description = "One engineering-workflow pack over a shared spine: posture-gated PR/local-ref review, bug and feature implementation, and pinned upstream-PR continuation, with one bounded immutable-artifact review → settle → revise/approve lifecycle (default N=2). Write lanes are local-only; PR adoption uses a durable human-owned worktree and never mutates a remote."

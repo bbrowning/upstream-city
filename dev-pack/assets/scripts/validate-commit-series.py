@@ -214,6 +214,7 @@ def main() -> None:
     parser.add_argument("--repo", type=Path, default=Path("."))
     parser.add_argument("--base", required=True)
     parser.add_argument("--head", required=True)
+    parser.add_argument("--inherited-head", help="source PR tip whose author/subject commits are preserved provenance")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     try:
@@ -227,13 +228,28 @@ def main() -> None:
         fail("commit range is empty")
     policy = policy_for(args.repo, head, changed)
     agent_identity = configured_agent_identity(args.repo)
+    inherited_keys: set[tuple[str, str, str]] = set()
+    if args.inherited_head:
+        try:
+            inherited_head = git(args.repo, "rev-parse", "--verify", f"{args.inherited_head}^{{commit}}").strip()
+            fork = git(args.repo, "merge-base", base, inherited_head).strip()
+            inherited_shas = git(args.repo, "rev-list", "--reverse", f"{fork}..{inherited_head}").splitlines()
+            for inherited_sha in inherited_shas:
+                fields = git(args.repo, "show", "-s", "--format=%an%x00%ae", inherited_sha).rstrip("\n").split("\0")
+                message = git(args.repo, "show", "-s", "--format=%B", inherited_sha).rstrip("\n")
+                inherited_keys.add((fields[0], fields[1], hashlib.sha256(message.encode()).hexdigest()))
+        except subprocess.CalledProcessError as exc:
+            fail(exc.stderr.strip() or "could not resolve inherited source range")
     commits = []
     violations = []
     for sha in shas:
         raw = git(args.repo, "show", "-s", "--format=%B", sha)
         evidence, errors = validate_message(raw, policy, agent_identity)
-        commits.append({"sha": sha, **evidence})
-        violations.extend({"sha": sha, "rule": error} for error in errors)
+        fields = git(args.repo, "show", "-s", "--format=%an%x00%ae", sha).rstrip("\n").split("\0")
+        inherited = (fields[0], fields[1], evidence["message_sha256"]) in inherited_keys
+        commits.append({"sha": sha, "inherited": inherited, **evidence, "valid": inherited or evidence["valid"]})
+        if not inherited:
+            violations.extend({"sha": sha, "rule": error} for error in errors)
     report = {
         "schema": "commit-series-quality.v1",
         "base_sha": base,

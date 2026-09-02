@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -116,6 +117,8 @@ def is_internal(bead: dict[str, Any]) -> bool:
     metadata = bead.get("metadata", {})
     if bead.get("issue_type") in INTERNAL_TYPES:
         return True
+    if "internal" in bead_labels:
+        return True
     if any(any(label.startswith(prefix) for prefix in INTERNAL_LABEL_PREFIXES)
            for label in bead_labels):
         return True
@@ -197,6 +200,111 @@ def local_artifact(lifecycle: dict[str, Any] | None, rig_path: str) -> dict[str,
         "matches_recorded_head": bool(actual and actual == expected),
     })
     return result
+
+
+def child_time(bead: dict[str, Any]) -> dt.datetime:
+    return (parse_time(bead.get("closed_at") or bead.get("updated_at") or bead.get("created_at"))
+            or dt.datetime.min.replace(tzinfo=dt.timezone.utc))
+
+
+def adoption_handoff(children: list[dict[str, Any]], rig_path: str) -> dict[str, Any] | None:
+    """Select the newest approved local PR continuation linked to a human source."""
+    candidates: list[tuple[dt.datetime, dict[str, Any], dict[str, Any], dict[str, Any]]] = []
+    for child in children:
+        metadata = child.get("metadata", {})
+        lifecycle = metadata_json(child, "gc.lifecycle_json")
+        adoption = metadata_json(child, "gc.pr_adoption_json")
+        if (metadata.get("gc.workflow") != "pr-adopt.v1" or
+                not lifecycle or lifecycle.get("intent_kind") != "pr_adopt" or
+                lifecycle.get("disposition") != "approved" or
+                not adoption or adoption.get("schema") != "pr-adoption-input.v1"):
+            continue
+        candidates.append((child_time(child), child, lifecycle, adoption))
+    if not candidates:
+        return None
+    completed, child, lifecycle, adoption = max(candidates, key=lambda value: value[0])
+    invalidation = metadata_json(child, "gc.pr_adoption_invalidation_json")
+    invalidated = bool(invalidation and invalidation.get("status") in {"invalidated", "superseded"})
+    branch = str(lifecycle.get("branch") or adoption.get("branch") or "")
+    head = str(lifecycle.get("head_sha") or "")
+    source_head = str(adoption.get("source_head_sha") or "")
+    target = adoption.get("target") if isinstance(adoption.get("target"), dict) else {}
+    contributor = adoption.get("contributor") if isinstance(adoption.get("contributor"), dict) else {}
+    source_pr = adoption.get("source_pr")
+    source_url = str(adoption.get("source_url") or "")
+    worktree = str(adoption.get("worktree") or "")
+    outcome = str(adoption.get("recommended_upstream_action") or
+                  child.get("metadata", {}).get("gc.recommended_upstream_action") or "undecided")
+    if outcome not in {"undecided", "update-original", "request-author-apply", "supersede"}:
+        outcome = "undecided"
+    upstream_match = re.search(r"github\.com/([^/]+/[^/]+)/pull/[0-9]+", source_url)
+    upstream_repo = upstream_match.group(1) if upstream_match else ""
+    contributor_repo = str(contributor.get("repository") or "")
+    contributor_branch = str(contributor.get("branch") or "")
+    inspect_command = (f"git -C {shlex.quote(worktree)} log --oneline "
+                       f"{shlex.quote(str(target.get('sha') or ''))}..{shlex.quote(head)}")
+    github_head_command = (f"gh pr view {source_pr} --repo {shlex.quote(upstream_repo)} "
+                           "--json headRefOid --jq .headRefOid" if source_pr and upstream_repo else None)
+    update_command = None
+    if contributor_repo and contributor_branch and branch:
+        update_command = (f"git -C {shlex.quote(worktree)} push "
+                          f"{shlex.quote('https://github.com/' + contributor_repo + '.git')} "
+                          f"{shlex.quote(branch + ':refs/heads/' + contributor_branch)}")
+    request_message = (
+        f"I prepared and reviewed a local continuation of PR #{source_pr}: original head "
+        f"{source_head}, target base {target.get('sha') or ''}, approved result {head}. "
+        f"Please merge/rebase the target branch and apply the equivalent conflict resolution or "
+        f"follow-up commits. I have not pushed to your branch."
+    )
+    supersede_push = (f"git -C {shlex.quote(worktree)} push YOUR_FORK_REMOTE "
+                      f"{shlex.quote(branch)}" if branch else None)
+    supersede_pr = (f"gh pr create --repo {shlex.quote(upstream_repo)} --base "
+                    f"{shlex.quote(str(target.get('ref') or 'main'))} --head "
+                    f"YOUR_GITHUB_LOGIN:{shlex.quote(branch)} --title 'EDIT TITLE' "
+                    "--body 'EDIT BODY: credit and link original PR'"
+                    if upstream_repo and branch else None)
+    return {
+        "schema": "pr-adoption-handoff.v1",
+        "work_bead": child.get("id"),
+        "completed_at": completed.isoformat().replace("+00:00", "Z"),
+        "source_pr": source_pr,
+        "source_url": source_url or None,
+        "original_author": adoption.get("original_author"),
+        "contributor": contributor,
+        "source_head_sha": source_head,
+        "target_base_ref": target.get("ref"),
+        "target_base_sha": target.get("sha"),
+        "strategy": adoption.get("strategy"),
+        "branch": branch,
+        "head_sha": head,
+        "artifact_id": lifecycle.get("artifact_id"),
+        "revision": lifecycle.get("iteration"),
+        "worktree": worktree,
+        "recommended_upstream_action": outcome,
+        "local_artifact": local_artifact(lifecycle, rig_path),
+        "publication_status": "invalidated" if invalidated else "eligible-for-human-decision",
+        "invalidation": invalidation if invalidated else None,
+        "choices": {} if invalidated else {
+            "update-original": {
+                "meaning": "Update the contributor's existing PR branch with this approved continuation, preserving the original PR, discussion, and attribution.",
+                "use_when": "You have permission to push that branch, the author consents or project policy permits it, and GitHub still reports the pinned original head.",
+                "verify_current_head": github_head_command,
+                "command": update_command,
+            },
+            "request-author-apply": {
+                "meaning": "Keep branch ownership with the contributor and ask them to reproduce or apply the reviewed merge/conflict resolution and any follow-up commits.",
+                "use_when": "You cannot or should not push to the contributor fork, or want the author to retain control of their branch history.",
+                "message": request_message,
+            },
+            "supersede": {
+                "meaning": "Publish the approved continuation from a maintainer-owned fork as a new PR, explicitly crediting and linking the original PR.",
+                "use_when": "The original branch cannot be updated promptly and project policy supports a replacement PR. Coordinate closure of the original separately.",
+                "push_command": supersede_push,
+                "pr_command": supersede_pr,
+            },
+        },
+        "inspect_command": inspect_command,
+    }
 
 
 def rig_arg(rig: str) -> str:
@@ -362,6 +470,9 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
     lifecycle = metadata_json(bead, "gc.lifecycle_json")
     schema = output_schema(bead, output)
     artifact = local_artifact(lifecycle, rig_path)
+    adoption = adoption_handoff(children, rig_path)
+    if adoption and adoption.get("local_artifact"):
+        artifact = adoption["local_artifact"]
     child_outputs = [child for child in children if metadata_json(child, "gc.output_json")]
     final_output_children = [
         child for child in child_outputs
@@ -373,7 +484,13 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
     ]
     latest_final = max(final_times, default=None)
     final_after_human_update = bool(latest_final and latest_final > changed)
-    active_children = [child for child in children if child.get("status") in {"open", "in_progress", "blocked"}]
+    all_active_children = [child for child in children if child.get("status") in {"open", "in_progress", "blocked"}]
+    adoption_completed = parse_time((adoption or {}).get("completed_at"))
+    superseded_active_children = [
+        child for child in all_active_children
+        if adoption_completed and child_time(child) <= adoption_completed
+    ]
+    active_children = [child for child in all_active_children if child not in superseded_active_children]
 
     reason: str
     next_action: str
@@ -393,6 +510,30 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
         group = "needs-you"
         reason = f"GitHub reports the PR {str(github.get('state')).lower()} while the human disposition remains open"
         next_action = "reconcile and record the human disposition; external closure never closes this bead"
+    elif adoption and active_children:
+        group = "in-flight"
+        reason = f"{len(active_children)} workflow child(ren) started after the approved local continuation"
+        next_action = "monitor the newer workflow before choosing how to publish the continuation"
+    elif adoption and adoption.get("publication_status") == "invalidated":
+        group = "needs-you"
+        reason = "the prior approved local PR continuation was explicitly invalidated"
+        next_action = "rerun adoption against a freshly fetched target tip; do not publish the invalidated artifact"
+    elif adoption:
+        current_head = str((github or {}).get("current_head_sha") or "")
+        source_head = str(adoption.get("source_head_sha") or "")
+        outcome = str(adoption.get("recommended_upstream_action") or "undecided")
+        group = "needs-you"
+        if current_head and source_head and current_head != source_head:
+            reason = (f"GitHub head {current_head[:8]} moved after the approved local continuation "
+                      f"from {source_head[:8]}")
+            next_action = "review or re-adopt the new upstream head before publishing the local continuation"
+        else:
+            reason = (f"local PR continuation approved at {str(adoption.get('head_sha') or '')[:8]} "
+                      f"while upstream remains at {source_head[:8]}")
+            if outcome == "undecided":
+                next_action = "choose update-original, request-author-apply, or supersede; work show explains each safe human path"
+            else:
+                next_action = f"review and carry out the recommended human-only outcome: {outcome}"
     elif github and github.get("available") and github.get("changed_since_review") is True:
         group = "needs-you"
         reason = "the current exact GitHub head differs from the exact reviewed head"
@@ -467,7 +608,9 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
         "authoritative_output": authoritative_pointer(rig, bead, schema),
         "retrieval": retrieval_paths(rig, bead, children),
         "active_workflow_children": [child.get("id") for child in active_children],
+        "superseded_active_workflow_children": [child.get("id") for child in superseded_active_children],
         "local_artifact": artifact,
+        "adoption_handoff": adoption,
         "github": github,
     }
     decision = build_decision(item, children)
@@ -741,6 +884,55 @@ def render_upstream_completion(completion: dict[str, Any]) -> None:
     print(completion["reconcile_command"])
 
 
+def render_adoption_handoff(handoff: dict[str, Any], github: dict[str, Any] | None) -> None:
+    if handoff.get("publication_status") == "invalidated":
+        print("\nINVALIDATED LOCAL PR CONTINUATION — DO NOT PUBLISH")
+        print(f"Artifact: {handoff.get('artifact_id')}")
+        print(f"Result: {handoff.get('head_sha')}")
+        invalidation = handoff.get("invalidation") or {}
+        print(f"Reason: {invalidation.get('reason') or 'explicitly invalidated'}")
+        replacement = invalidation.get("superseded_by")
+        if replacement:
+            print(f"Superseded by: {replacement}")
+        print(f"\nLocal inspection only:\n{handoff['inspect_command']}")
+        return
+    print("\nAPPROVED LOCAL PR CONTINUATION")
+    print(f"Original PR head: {handoff.get('source_head_sha')}")
+    print(f"Pinned target base: {handoff.get('target_base_sha')} ({handoff.get('target_base_ref')})")
+    print(f"Approved result: {handoff.get('head_sha')}")
+    print(f"Local branch: {handoff.get('branch')}")
+    print(f"Durable worktree: {handoff.get('worktree')}")
+    print(f"Artifact: {handoff.get('artifact_id')}")
+    if github and github.get("available"):
+        print(f"Current GitHub head: {github.get('current_head_sha') or 'unknown'}")
+        print(f"Current GitHub CI: {github.get('ci_state') or 'unknown'}")
+    print(f"\nInspect the reviewed continuation:\n{handoff['inspect_command']}")
+    print("\nNothing below has been pushed or published. Choose one human-controlled outcome:")
+    choices = handoff["choices"]
+    update = choices["update-original"]
+    print("\n1. UPDATE ORIGINAL")
+    print(update["meaning"])
+    print(f"Use when: {update['use_when']}")
+    if update.get("verify_current_head"):
+        print(f"Verify the PR has not moved:\n{update['verify_current_head']}")
+    if update.get("command"):
+        print(f"Then, only after confirming permission/consent, push manually:\n{update['command']}")
+    request = choices["request-author-apply"]
+    print("\n2. REQUEST AUTHOR APPLY")
+    print(request["meaning"])
+    print(f"Use when: {request['use_when']}")
+    print(f"Suggested message:\n{request['message']}")
+    supersede = choices["supersede"]
+    print("\n3. SUPERSEDE")
+    print(supersede["meaning"])
+    print(f"Use when: {supersede['use_when']}")
+    if supersede.get("push_command"):
+        print(f"Push to a maintainer-controlled fork (replace the remote name):\n{supersede['push_command']}")
+    if supersede.get("pr_command"):
+        print(f"Then open the replacement PR after editing title/body and preserving contributor credit:\n{supersede['pr_command']}")
+    print(f"\nRecorded recommendation: {handoff.get('recommended_upstream_action')}")
+
+
 def main() -> int:
     args = parser().parse_args()
     if args.watch:
@@ -928,6 +1120,8 @@ def main() -> int:
                 render_upstream_completion(item["upstream_completion"])
             elif item.get("status") == "closed":
                 pass
+            elif item.get("adoption_handoff"):
+                render_adoption_handoff(item["adoption_handoff"], item.get("github"))
             elif item.get("human_plan"):
                 render_human_plan(item["human_plan"], item.get("decision"))
             elif item.get("decision"):

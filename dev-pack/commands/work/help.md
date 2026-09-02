@@ -59,6 +59,26 @@ outcome, pinned to a live exact head; interactive `ask` sessions remain ephemera
 are never harvested. `work show` displays the plan condition, current CI/head state,
 context note, and exact clear/replace commands.
 
+When a `pr-adopt` workflow approves a local continuation, its human source bead stays
+open and moves to NEEDS YOU. `work show` identifies the pinned original head, target
+base, approved result, branch, worktree, and artifact, then explains three publication
+choices:
+
+- `update-original` updates the contributor's existing PR branch, preserving its PR,
+  discussion, and attribution. Use it only when you have permission, the author
+  consents or project policy permits the push, and the live PR head still equals the
+  pinned original head.
+- `request-author-apply` leaves the contributor in control of their branch and asks
+  them to reproduce or apply the reviewed conflict resolution and follow-up commits.
+- `supersede` pushes the approved continuation to a maintainer-controlled fork and
+  opens a replacement PR that credits and links the original. Coordinate closure of
+  the original PR separately.
+
+These are human-only outcomes: adoption never pushes a remote branch, opens or closes
+a PR, or selects an outcome automatically. The displayed commands are inspectable
+examples; replace their clearly marked edit tokens and re-check the live PR head before
+running them.
+
 `audit` is the read-only shadow gate: it correlates routine-review refs from the
 human mailbox and durable (including normally hidden) outputs to exactly one
 human-facing source and its attention row. It reports nonzero status while any
