@@ -46,8 +46,8 @@ with the <rig>/bug-worker-* lane targets filled in.
   --fast, --solo      lower-cost N=1 full bounded workflow
   --report-only       N=2 diagnosis report; do not converge or implement
   --n N               custom diagnosis opinion count / fan-out: 1 or 2
-  --execution PROFILE leaf-agent capacity: frontier-xhigh (default),
-                      frontier-medium, efficient-xhigh, or efficient-medium
+  --execution PROFILE leaf-agent capacity: frontier-high (default),
+                      frontier-xhigh, frontier-medium, efficient-xhigh, or efficient-medium
   --loop              explicitly drive the full convergence loop (already on for quality/fast)
   --max-rounds N      per-phase iteration cap (default 3)
   --base-ref REF      baseline ref the lanes read against (default origin/main)

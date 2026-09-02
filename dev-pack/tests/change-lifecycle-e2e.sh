@@ -116,9 +116,9 @@ export MOCK_GC_STATE="$TMP/state.json" MOCK_REPO="$TMP/repo"
   --revision-formula feature-dev --revision-target fixture/feature-dev-frontier-xhigh --base "$BASE_SHA"
 grep -q 'change-lifecycle --formula' "$TMP/gc.log" || fail 'feature did not enter N=2 lifecycle'
 grep -q "head_ref=$FEATURE_HEAD" "$TMP/gc.log" || fail 'feature lifecycle did not pin exact head SHA'
-grep -q 'lane_a_target=fixture/pr-reviewer-a-frontier-xhigh' "$TMP/gc.log" \
+grep -q 'lane_a_target=fixture/pr-reviewer-a-frontier-high' "$TMP/gc.log" \
   || fail 'feature helper default lost semantic review A'
-grep -q 'lane_b_target=fixture/pr-reviewer-b-frontier-xhigh' "$TMP/gc.log" \
+grep -q 'lane_b_target=fixture/pr-reviewer-b-frontier-high' "$TMP/gc.log" \
   || fail 'feature helper default lost semantic review B'
 grep -q 'triage_target=fixture/pr-triage' "$TMP/gc.log" || fail 'feature helper lost fixed triage'
 grep -q 'synthesis_target=fixture/pr-review-synthesizer' "$TMP/gc.log" || fail 'feature helper lost fixed synthesis'
@@ -130,9 +130,9 @@ grep -q 'synthesis_target=fixture/pr-review-synthesizer' "$TMP/gc.log" || fail '
   --implementer-target fixture/bug-worker-a-frontier-xhigh \
   --coordinator-target fixture/bug-coordinator
 grep -q "head_ref=$BUG_HEAD" "$TMP/gc.log" || fail 'hard-bug lifecycle did not pin exact head SHA'
-grep -q 'lane_a_target=fixture/pr-reviewer-a-frontier-xhigh' "$TMP/gc.log" \
+grep -q 'lane_a_target=fixture/pr-reviewer-a-frontier-high' "$TMP/gc.log" \
   || fail 'hard-bug helper default lost semantic review A'
-grep -q 'lane_b_target=fixture/pr-reviewer-b-frontier-xhigh' "$TMP/gc.log" \
+grep -q 'lane_b_target=fixture/pr-reviewer-b-frontier-high' "$TMP/gc.log" \
   || fail 'hard-bug helper default lost semantic review B'
 
 # Feature request_changes creates revision 2 with explicit lineage and leaves parent open.

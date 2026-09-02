@@ -60,14 +60,14 @@ default = "pr-triage"
 description = "Durable identity for reviewer lane A (survives slot churn)."
 default = "reviewer-a"
 [vars.lane_a_target]
-description = "Semantic reviewer lane A target. Defaults to the frontier-xhigh role; explicit installed-target overrides remain supported."
-default = "pr-reviewer-a-frontier-xhigh"
+description = "Semantic reviewer lane A target. Defaults to the frontier-high role; explicit installed-target overrides remain supported."
+default = "pr-reviewer-a-frontier-high"
 [vars.lane_b_id]
 description = "Durable identity for reviewer lane B."
 default = "reviewer-b"
 [vars.lane_b_target]
-description = "Semantic reviewer lane B target. Defaults to the frontier-xhigh backup role; explicit installed-target overrides remain supported."
-default = "pr-reviewer-b-frontier-xhigh"
+description = "Semantic reviewer lane B target. Defaults to the frontier-high backup role; explicit installed-target overrides remain supported."
+default = "pr-reviewer-b-frontier-high"
 [vars.synthesis_target]
 description = "Agent that synthesizes the lane verdicts into the combined quorum verdict."
 default = "pr-review-synthesizer"

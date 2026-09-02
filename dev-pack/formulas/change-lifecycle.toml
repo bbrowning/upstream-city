@@ -50,9 +50,9 @@ default = ""
 [vars.triage_target]
 default = "pr-triage"
 [vars.lane_a_target]
-default = "pr-reviewer-a-frontier-xhigh"
+default = "pr-reviewer-a-frontier-high"
 [vars.lane_b_target]
-default = "pr-reviewer-b-frontier-xhigh"
+default = "pr-reviewer-b-frontier-high"
 [vars.synthesis_target]
 default = "pr-review-synthesizer"
 [vars.arbiter_target]

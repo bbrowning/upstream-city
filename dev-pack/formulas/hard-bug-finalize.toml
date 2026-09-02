@@ -72,11 +72,11 @@ default = "3"
 
 [vars.review_lane_a_target]
 description = "Reviewer profile target for shared lifecycle lane A."
-default = "pr-reviewer-a-frontier-xhigh"
+default = "pr-reviewer-a-frontier-high"
 
 [vars.review_lane_b_target]
 description = "Reviewer profile target for shared lifecycle lane B."
-default = "pr-reviewer-b-frontier-xhigh"
+default = "pr-reviewer-b-frontier-high"
 
 [[steps]]
 id = "implement"

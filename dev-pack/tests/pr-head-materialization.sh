@@ -84,7 +84,7 @@ if [[ "$args" == *" rig list --json "* ]]; then
   jq -cn --arg path "${GC_TEST_REPO:?}" '{rigs:[{name:"vllm",path:$path}]}'
 elif [[ "$args" == *" agent list "* ]]; then
   printf '%s\n' vllm/pr-review-synthesizer vllm/pr-triage \
-    vllm/pr-reviewer-a-frontier-xhigh vllm/pr-reviewer-b-frontier-xhigh vllm/pr-arbiter
+    vllm/pr-reviewer-a-frontier-high vllm/pr-reviewer-b-frontier-high vllm/pr-arbiter
 elif [[ "$args" == *" bd list "* ]]; then
   printf '%s\n' '[]'
 elif [[ "$args" == *" bd create "* ]]; then

@@ -54,8 +54,8 @@ artifact and remains local until the human explicitly chooses to publish it.
 
 Quality is the default. `--fast` and `--solo` are explicit N=1 opt-downs.
 Workflow shape and execution capacity are separate controls. Feature, bug, and review
-all accept `--execution frontier-xhigh|frontier-medium|efficient-xhigh|efficient-medium`.
-The default is `frontier-xhigh`. The city binds those semantic leaf roles to concrete
+all accept `--execution frontier-xhigh|frontier-high|frontier-medium|efficient-xhigh|efficient-medium`.
+The default is `frontier-high`. The city binds those semantic leaf roles to concrete
 providers, models, and effort; the workflow does not claim that per-run model metadata
 changes a launched process. Explicit implementer/lane targets take precedence over the
 selected role set and remain an explicit installed-target escape hatch.
@@ -67,10 +67,10 @@ gc dev-pack bug vllm-456 --n 2 --execution efficient-medium --dry-run
 gc dev-pack review 53174 --rig vllm --n 2 --execution efficient-medium --dry-run
 ```
 
-Use the strongest role set for real work while keeping the same topology:
+Use the default frontier role set for real work while keeping the same topology:
 
 ```sh
-gc dev-pack feature vllm-123 --execution frontier-xhigh
+gc dev-pack feature vllm-123 --execution frontier-high
 ```
 
 | Workflow | Quality default | Explicit alternatives | Bound |
@@ -95,7 +95,7 @@ Ask `<rig>/lead` to implement the feature, or dispatch an existing rig bead:
 gc dev-pack feature vllm-123
 gc dev-pack feature vllm-123 --fast
 gc dev-pack feature vllm-123 --review-n 2 \
-  --review-lanes vllm/pr-reviewer-a-frontier-xhigh,vllm/pr-reviewer-b-frontier-xhigh
+  --review-lanes vllm/pr-reviewer-a-frontier-high,vllm/pr-reviewer-b-frontier-high
 gc dev-pack feature vllm-123 --dry-run
 ```
 
@@ -139,7 +139,7 @@ gc dev-pack review vllm#53174 --fast
 gc dev-pack review paude/vllm-123 --rig vllm --base origin/main
 gc dev-pack review --artifact /path/to/local-change.json --rig vllm
 gc dev-pack review <implementation-step-bead> --rig vllm
-gc dev-pack review 53174 --rig vllm --lanes a-frontier-xhigh,b-frontier-xhigh
+gc dev-pack review 53174 --rig vllm --lanes a-frontier-high,b-frontier-high
 gc dev-pack review 53174 --rig vllm --dry-run
 ```
 

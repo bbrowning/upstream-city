@@ -96,6 +96,35 @@ option_defaults = { model = "claude-opus-4-8", effort = "xhigh" }
 env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude/paude-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
 
 [[rigs.patches]]
+agent = "feature-dev-frontier-high"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "high" }
+
+[[rigs.patches]]
+agent = "bug-worker-a-frontier-high"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "high" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas" }
+
+[[rigs.patches]]
+agent = "bug-worker-b-frontier-high"
+provider = "claude"
+option_defaults = { model = "claude-opus-4-8", effort = "high" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/paude/personas" }
+
+[[rigs.patches]]
+agent = "pr-reviewer-a-frontier-high"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "high" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude/paude-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
+
+[[rigs.patches]]
+agent = "pr-reviewer-b-frontier-high"
+provider = "claude"
+option_defaults = { model = "claude-opus-4-8", effort = "high" }
+env = { UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude/paude-testenv.sh", GC_PERSONAS = "/pvc/workspace/tools/paude/personas", GC_PERSONAS_REQUIRED = "true" }
+
+[[rigs.patches]]
 agent = "feature-dev-frontier-medium"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
@@ -257,6 +286,35 @@ env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", UV_CACHE_DIR = "/pvc
 agent = "pr-reviewer-b-frontier-xhigh"
 provider = "claude"
 option_defaults = { model = "claude-opus-4-8", effort = "xhigh" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
+
+[[rigs.patches]]
+agent = "feature-dev-frontier-high"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "high" }
+
+[[rigs.patches]]
+agent = "bug-worker-a-frontier-high"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "high" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
+
+[[rigs.patches]]
+agent = "bug-worker-b-frontier-high"
+provider = "claude"
+option_defaults = { model = "claude-opus-4-8", effort = "high" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
+
+[[rigs.patches]]
+agent = "pr-reviewer-a-frontier-high"
+provider = "codex"
+option_defaults = { model = "gpt-5.6-sol", effort = "high" }
+env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
+
+[[rigs.patches]]
+agent = "pr-reviewer-b-frontier-high"
+provider = "claude"
+option_defaults = { model = "claude-opus-4-8", effort = "high" }
 env = { GC_PERSONAS = "/pvc/workspace/tools/vllm/personas", UV_CACHE_DIR = "/pvc/workspace/.uv-cache", GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/vllm/vllm-testenv.sh", GC_PR_TRUSTED_AUTHORS = "/pvc/workspace/tools/vllm/trusted-authors.txt" }
 
 [[rigs.patches]]

@@ -13,12 +13,12 @@ import json, sys, tomllib
 from pathlib import Path
 root, policy_path = Path(sys.argv[1]), Path(sys.argv[2])
 p = json.loads(policy_path.read_text())
-expected = {'frontier-xhigh', 'frontier-medium', 'efficient-xhigh', 'efficient-medium'}
+expected = {'frontier-xhigh', 'frontier-high', 'frontier-medium', 'efficient-xhigh', 'efficient-medium'}
 assert set(p['execution_profiles']) == expected
-assert p['defaults']['execution_profile'] == 'frontier-xhigh'
+assert p['defaults']['execution_profile'] == 'frontier-high'
 for name, profile in p['execution_profiles'].items():
     assert profile['semantics']
-    assert profile['reasoning_effort'] in {'medium', 'xhigh'}
+    assert profile['reasoning_effort'] in {'medium', 'high', 'xhigh'}
     assert name.endswith('-' + profile['reasoning_effort'])
     roles = profile['roles']
     assert set(roles) == {'feature', 'bug', 'review'}
@@ -46,11 +46,11 @@ for rig in city['rigs']:
         t for profile in p['execution_profiles'].values()
         for group in profile['roles'].values() for t in group.values()
     }
-    assert len(semantic_targets) == 20
+    assert len(semantic_targets) == 25
     assert set(patches) == set(fixed) | semantic_targets, (
         rig['name'], sorted(set(patches) - set(fixed) - semantic_targets),
         sorted((set(fixed) | semantic_targets) - set(patches)))
-    assert len(patches) == 27, (rig['name'], len(patches))
+    assert len(patches) == 32, (rig['name'], len(patches))
     for agent, expected_binding in fixed.items():
         patch = patches[agent]
         actual = (patch['provider'], patch['option_defaults']['model'], patch['option_defaults']['effort'])
@@ -84,7 +84,7 @@ PY
   || fail 'legacy concrete/generic execution wiring remains'
 
 for rig in paude vllm; do
-  for profile in frontier-xhigh frontier-medium efficient-xhigh efficient-medium; do
+  for profile in frontier-xhigh frontier-high frontier-medium efficient-xhigh efficient-medium; do
     python3 "$VALIDATE" --city "$ROOT" --policy "$POLICY" --rig "$rig" --profile "$profile" >/dev/null
   done
 done

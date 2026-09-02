@@ -16,8 +16,8 @@ Workflow presets:
 
 Options:
   --rig NAME                rig (default: infer from bead prefix)
-  --execution PROFILE       frontier-xhigh (default), frontier-medium,
-                            efficient-xhigh, or efficient-medium
+  --execution PROFILE       frontier-high (default), frontier-xhigh,
+                            frontier-medium, efficient-xhigh, or efficient-medium
   --implementer-target T    explicit installed-target override for implementation
   --base REF                branch point (default: origin/main)
   --offline                 do not fetch the selected base; record freshness unverified
@@ -32,7 +32,7 @@ Options:
 
 Examples:
   gc dev-pack feature vllm-123
-  gc dev-pack feature vllm-123 --execution frontier-xhigh
+  gc dev-pack feature vllm-123 --execution frontier-high
   gc dev-pack feature vllm-123 --fast --execution efficient-medium
-  gc dev-pack feature vllm-123 --review-n 2 --review-lanes vllm/pr-reviewer-a-frontier-xhigh,vllm/pr-reviewer-b-frontier-xhigh
+  gc dev-pack feature vllm-123 --review-n 2 --review-lanes vllm/pr-reviewer-a-frontier-high,vllm/pr-reviewer-b-frontier-high
   gc dev-pack feature vllm-123 --dry-run

@@ -61,17 +61,17 @@ description = "Shared lifecycle artifact revision cap."
 default = "3"
 [vars.review_lane_a_target]
 description = "Shared lifecycle reviewer profile A."
-default = "pr-reviewer-a-frontier-xhigh"
+default = "pr-reviewer-a-frontier-high"
 [vars.review_lane_b_target]
 description = "Shared lifecycle reviewer profile B."
-default = "pr-reviewer-b-frontier-xhigh"
+default = "pr-reviewer-b-frontier-high"
 
 [vars.lane_a_id]
 description = "Durable identity for the sole lane (survives slot churn)."
 default = "bug-lane-a"
 [vars.lane_a_target]
 description = "Semantic sole-lane target. Bare names resolve within the rig; a deliberate custom override may be rig-qualified (for example, vllm/bug-worker-a-frontier-medium)."
-default = "bug-worker-a-frontier-xhigh"
+default = "bug-worker-a-frontier-high"
 [vars.coordinator_target]
 description = "Agent target for the synthesis (reconcile) step."
 default = "bug-coordinator"

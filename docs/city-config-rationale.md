@@ -56,8 +56,8 @@ provider. Routing remains identity-based and provider-neutral.
 
 ## Execution binding layout
 
-Each attached rig has the same 27 intentional patches: seven fixed
-orchestration/support roles plus 20 semantic execution leaves. There are no
+Each attached rig has the same 32 intentional patches: seven fixed
+orchestration/support roles plus 25 semantic execution leaves. There are no
 generic compatibility leaves and no concrete model-expert agents. Direct formulas
 use the same semantic frontier defaults as pack commands.
 
@@ -66,6 +66,7 @@ The supported semantic profiles are exactly:
 | profile | feature / solo / lane A | lane B | effort |
 |---|---|---|---|
 | `frontier-xhigh` | codex `gpt-5.6-sol` | claude `claude-opus-4-8` | xhigh |
+| `frontier-high` | codex `gpt-5.6-sol` | claude `claude-opus-4-8` | high |
 | `frontier-medium` | codex `gpt-5.6-sol` | claude `claude-opus-4-8` | medium |
 | `efficient-xhigh` | codex `gpt-5.6-luna` | codex `gpt-5.6-luna` | xhigh |
 | `efficient-medium` | codex `gpt-5.6-luna` | codex `gpt-5.6-luna` | medium |
@@ -103,7 +104,7 @@ All `[[rigs.patches]]` attach to the vllm rig. Common env sets referenced below:
 | `pr-chat` | **codex** gpt-5.6-sol / high | TEST-VENV (no trusted-authors) | `gc dev-pack ask <PR>` with no question: live attached per-PR chat; MAY run tests on request. |
 | `bug-coordinator` | **codex** gpt-5.6-sol / high | none | Fixed convergence coordinator; preserves semantic targets across re-slings. |
 
-The 20 semantic leaves use the exact profile matrix above. vLLM bug/review
+The 25 semantic leaves use the exact profile matrix above. vLLM bug/review
 leaves receive TEST-VENV/persona/trust environment as appropriate; Paude receives
 its own persona paths. Model/provider/effort are otherwise identical across rigs.
 
@@ -117,10 +118,11 @@ model — was the decisive factor.** See the per-lane breakdown in
 
 ### Semantic review lanes
 
-The `pr-reviewer-{a,b}-{frontier,efficient}-{xhigh,medium}` agents are distinct
+The `pr-reviewer-{a,b}-frontier-{xhigh,high,medium}` and
+`pr-reviewer-{a,b}-efficient-{xhigh,medium}` agents are distinct
 single-slot semantic roles that share the synthesizer's review method. Their exact
 provider/model/effort comes from each rig patch, not formula metadata. Direct formulas
-default to frontier-xhigh A/B, and `--execution` selects another complete role set.
+default to frontier-high A/B, and `--execution` selects another complete role set.
 `--lanes` is reserved for deliberate installed semantic/custom target overrides.
 
 Quorum notify contract: these lanes must **not** mail the human — a quorum
@@ -129,8 +131,8 @@ enforces this by skipping notify for any bead stamped `gc.review_quorum_lane`
 (which lane beads are), so no notify env is needed, and a profile used SOLO
 (N=1, not quorum-stamped) still notifies once.
 
-The default solo lane is semantic A frontier-xhigh. The default quorum is semantic
-A/B frontier-xhigh. Claude appears only in frontier B; efficient A/B both use Codex
+The default solo lane is semantic A frontier-high. The default quorum is semantic
+A/B frontier-high. Claude appears only in frontier B; efficient A/B both use Codex
 Luna while retaining distinct identities and worktrees.
 
 ### `pr-arbiter` (settle round)

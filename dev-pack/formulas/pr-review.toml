@@ -64,8 +64,8 @@ description = "Agent that runs the triage/posture step. Bare name resolves withi
 default = "pr-triage"
 
 [vars.review_target]
-description = "Semantic solo-review target. Defaults to the frontier-xhigh lane-A role; explicit target overrides remain supported."
-default = "pr-reviewer-a-frontier-xhigh"
+description = "Semantic solo-review target. Defaults to the frontier-high lane-A role; explicit target overrides remain supported."
+default = "pr-reviewer-a-frontier-high"
 
 [[steps]]
 id = "triage"

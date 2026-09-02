@@ -47,6 +47,7 @@ corpus = sys.argv[2]
 roles = {
     "pr-review-synthesizer", "pr-arbiter",
     "pr-reviewer-a-frontier-xhigh", "pr-reviewer-b-frontier-xhigh",
+    "pr-reviewer-a-frontier-high", "pr-reviewer-b-frontier-high",
     "pr-reviewer-a-frontier-medium", "pr-reviewer-b-frontier-medium",
     "pr-reviewer-a-efficient-xhigh", "pr-reviewer-b-efficient-xhigh",
     "pr-reviewer-a-efficient-medium", "pr-reviewer-b-efficient-medium",

@@ -39,8 +39,8 @@ feature-dev formula to the selected semantic implementation target.
   --offline      do not fetch the selected remote base; mark freshness unverified
   --quality      N=2 bounded review/revise lifecycle (default)
   --fast, --solo lower-cost N=1 lifecycle; still local-only and approval-gated
-  --execution PROFILE  leaf-agent capacity: frontier-xhigh (default),
-                       frontier-medium, efficient-xhigh, or efficient-medium
+  --execution PROFILE  leaf-agent capacity: frontier-high (default),
+                       frontier-xhigh, frontier-medium, efficient-xhigh, or efficient-medium
   --implementer-target T  explicit installed-target override for implementation
   --revision N   artifact revision number (default: 1)
   --previous-artifact ID  required with revision N>1

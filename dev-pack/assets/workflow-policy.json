@@ -6,7 +6,7 @@
     "max_review_iterations": 3,
     "local_only": true,
     "completion_checkpoint": "approved",
-    "execution_profile": "frontier-xhigh",
+    "execution_profile": "frontier-high",
     "dynamic_verification": {
       "max_checks": 3,
       "max_coverage_axes": 2,
@@ -39,6 +39,15 @@
         "feature": { "implementer": "feature-dev-frontier-xhigh" },
         "bug": { "lane_a": "bug-worker-a-frontier-xhigh", "lane_b": "bug-worker-b-frontier-xhigh" },
         "review": { "solo": "pr-reviewer-a-frontier-xhigh", "lane_a": "pr-reviewer-a-frontier-xhigh", "lane_b": "pr-reviewer-b-frontier-xhigh" }
+      }
+    },
+    "frontier-high": {
+      "reasoning_effort": "high",
+      "semantics": "Best available model class in the city with a high reasoning budget.",
+      "roles": {
+        "feature": { "implementer": "feature-dev-frontier-high" },
+        "bug": { "lane_a": "bug-worker-a-frontier-high", "lane_b": "bug-worker-b-frontier-high" },
+        "review": { "solo": "pr-reviewer-a-frontier-high", "lane_a": "pr-reviewer-a-frontier-high", "lane_b": "pr-reviewer-b-frontier-high" }
       }
     },
     "frontier-medium": {

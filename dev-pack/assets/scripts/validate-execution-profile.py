@@ -46,7 +46,7 @@ if not targets:
     fail(f"profile '{args.profile}' has no role targets")
 
 expected_effort = profile.get("reasoning_effort")
-if expected_effort not in {"medium", "xhigh"}:
+if expected_effort not in {"medium", "high", "xhigh"}:
     fail(f"profile '{args.profile}' has no valid reasoning_effort contract")
 if not args.profile.endswith(f"-{expected_effort}"):
     fail(f"profile '{args.profile}' contradicts reasoning_effort '{expected_effort}'")

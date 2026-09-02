@@ -19,8 +19,8 @@ Workflow presets:
 Options:
   --rig NAME                rig (default: infer from bead prefix)
   --n N                     diagnosis opinions: 1 or 2 (default: 2)
-  --execution PROFILE       frontier-xhigh (default), frontier-medium,
-                            efficient-xhigh, or efficient-medium
+  --execution PROFILE       frontier-high (default), frontier-xhigh,
+                            frontier-medium, efficient-xhigh, or efficient-medium
   --loop                    explicitly enable full convergence
   --max-rounds N            convergence cap per phase (default: 3)
   --base-ref REF            diagnosis/implementation baseline (default: origin/main)

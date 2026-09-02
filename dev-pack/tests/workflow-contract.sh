@@ -67,7 +67,7 @@ args=" \$* "
 if [[ "\$args" == *" rig list --json "* ]]; then
   jq -cn --arg path "$ROOT" '{rigs:[{name:"paude",path:\$path}]}'
 elif [[ "\$args" == *" agent list "* ]]; then
-  printf '%s\n' paude/pr-review-synthesizer paude/pr-reviewer-a-frontier-xhigh paude/pr-reviewer-b-frontier-xhigh
+  printf '%s\n' paude/pr-review-synthesizer paude/pr-reviewer-a-frontier-high paude/pr-reviewer-b-frontier-high
 else
   exit 99
 fi

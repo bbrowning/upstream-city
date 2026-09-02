@@ -54,16 +54,16 @@ description = "Maximum implementation/artifact revisions before human escalation
 default = "3"
 
 [vars.implementer_target]
-description = "Semantic feature leaf selected by the execution profile; defaults to the frontier-xhigh role and is preserved for every revision."
-default = "feature-dev-frontier-xhigh"
+description = "Semantic feature leaf selected by the execution profile; defaults to the frontier-high role and is preserved for every revision."
+default = "feature-dev-frontier-high"
 
 [vars.review_lane_a_target]
 description = "Reviewer profile target for lifecycle lane A."
-default = "pr-reviewer-a-frontier-xhigh"
+default = "pr-reviewer-a-frontier-high"
 
 [vars.review_lane_b_target]
 description = "Reviewer profile target for lifecycle lane B (unused at N=1)."
-default = "pr-reviewer-b-frontier-xhigh"
+default = "pr-reviewer-b-frontier-high"
 
 [[steps]]
 id = "implement"

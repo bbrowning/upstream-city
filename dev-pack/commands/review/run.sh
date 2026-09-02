@@ -50,14 +50,14 @@ Sling the review formula (N=1 -> pr-review, N=2 -> pr-review-quorum) to <rig>/pr
   --report-only    keep an N=2 quorum report-only; do not auto-settle disputes
   --n N            custom opinion count / fan-out: 1 or 2.
                    Cross-checked against --lanes when both are given.
-  --execution PROFILE  leaf-agent capacity: frontier-xhigh (default),
-                       frontier-medium, efficient-xhigh, or efficient-medium
+  --execution PROFILE  leaf-agent capacity: frontier-high (default),
+                       frontier-xhigh, frontier-medium, efficient-xhigh, or efficient-medium
   --lanes A[,B]    installed semantic/custom reviewer target(s); the count IS N (1 or 2). Each
                    name resolves to an agent: '<name>' or the short 'pr-reviewer-<name>'.
                    These explicit targets override --execution. Unknown names
                    fail loudly (with the available list).
                      examples:
-                     --lanes a-frontier-xhigh,b-frontier-xhigh
+                     --lanes a-frontier-high,b-frontier-high
                      --lanes a-efficient-medium
                    (no --lanes: targets come from the selected execution role set.)
   --dry-run        validate + print the gc sling command without running it

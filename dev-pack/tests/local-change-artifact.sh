@@ -66,7 +66,7 @@ while [ $# -gt 0 ]; do
 done
 case "${1:-} ${2:-}" in
   "rig list") jq -cn --arg path "$MOCK_REPO" '{rigs:[{name:"paude",path:$path}]}' ;;
-  "agent list") printf '%s\n' paude/pr-reviewer-a-frontier-xhigh paude/pr-reviewer-b-frontier-xhigh paude/pr-review-synthesizer ;;
+  "agent list") printf '%s\n' paude/pr-reviewer-a-frontier-high paude/pr-reviewer-b-frontier-high paude/pr-review-synthesizer ;;
   "bd show")
     if [ "${3:-}" = fixture-1 ]; then
       jq -cn --rawfile artifact "$MOCK_ARTIFACT" '

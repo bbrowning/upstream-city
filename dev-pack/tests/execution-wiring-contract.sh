@@ -14,39 +14,39 @@ root = Path(sys.argv[1])
 formulas = root / "dev-pack/formulas"
 expected = {
     "feature-dev.toml": {
-        "implementer_target": "feature-dev-frontier-xhigh",
-        "review_lane_a_target": "pr-reviewer-a-frontier-xhigh",
-        "review_lane_b_target": "pr-reviewer-b-frontier-xhigh",
+        "implementer_target": "feature-dev-frontier-high",
+        "review_lane_a_target": "pr-reviewer-a-frontier-high",
+        "review_lane_b_target": "pr-reviewer-b-frontier-high",
     },
     "hard-bug-round.toml": {
         "lane_a_id": "bug-lane-a",
         "lane_b_id": "bug-lane-b",
-        "lane_a_target": "bug-worker-a-frontier-xhigh",
-        "lane_b_target": "bug-worker-b-frontier-xhigh",
-        "review_lane_a_target": "pr-reviewer-a-frontier-xhigh",
-        "review_lane_b_target": "pr-reviewer-b-frontier-xhigh",
+        "lane_a_target": "bug-worker-a-frontier-high",
+        "lane_b_target": "bug-worker-b-frontier-high",
+        "review_lane_a_target": "pr-reviewer-a-frontier-high",
+        "review_lane_b_target": "pr-reviewer-b-frontier-high",
     },
     "hard-bug-round-solo.toml": {
         "lane_a_id": "bug-lane-a",
-        "lane_a_target": "bug-worker-a-frontier-xhigh",
-        "review_lane_a_target": "pr-reviewer-a-frontier-xhigh",
-        "review_lane_b_target": "pr-reviewer-b-frontier-xhigh",
+        "lane_a_target": "bug-worker-a-frontier-high",
+        "review_lane_a_target": "pr-reviewer-a-frontier-high",
+        "review_lane_b_target": "pr-reviewer-b-frontier-high",
     },
     "hard-bug-finalize.toml": {
-        "review_lane_a_target": "pr-reviewer-a-frontier-xhigh",
-        "review_lane_b_target": "pr-reviewer-b-frontier-xhigh",
+        "review_lane_a_target": "pr-reviewer-a-frontier-high",
+        "review_lane_b_target": "pr-reviewer-b-frontier-high",
     },
     "change-lifecycle.toml": {
-        "lane_a_target": "pr-reviewer-a-frontier-xhigh",
-        "lane_b_target": "pr-reviewer-b-frontier-xhigh",
+        "lane_a_target": "pr-reviewer-a-frontier-high",
+        "lane_b_target": "pr-reviewer-b-frontier-high",
     },
     "change-lifecycle-solo.toml": {
-        "lane_a_target": "pr-reviewer-a-frontier-xhigh",
+        "lane_a_target": "pr-reviewer-a-frontier-high",
     },
-    "pr-review.toml": {"review_target": "pr-reviewer-a-frontier-xhigh"},
+    "pr-review.toml": {"review_target": "pr-reviewer-a-frontier-high"},
     "pr-review-quorum.toml": {
-        "lane_a_target": "pr-reviewer-a-frontier-xhigh",
-        "lane_b_target": "pr-reviewer-b-frontier-xhigh",
+        "lane_a_target": "pr-reviewer-a-frontier-high",
+        "lane_b_target": "pr-reviewer-b-frontier-high",
     },
     "pr-review-settle.toml": {
         "arbiter_target": "pr-arbiter",
@@ -98,7 +98,7 @@ for rig in paude vllm; do
   jq -e '
     (.vars // .formula.vars) as $vars |
     ($vars | map(select(.name == "implementer_target"))[0].default ==
-      "feature-dev-frontier-xhigh") and
+      "feature-dev-frontier-high") and
     ([.steps[]? // .formula.steps[]?
       | .metadata["gc.run_target"]?] | any(. == "{{implementer_target}}"))' \
     "$TMP/$rig-feature-dev.json" >/dev/null ||
@@ -106,9 +106,9 @@ for rig in paude vllm; do
   jq -e '
     (.vars // .formula.vars) as $vars |
     ($vars | map(select(.name == "lane_a_target"))[0].default ==
-      "pr-reviewer-a-frontier-xhigh") and
+      "pr-reviewer-a-frontier-high") and
     ($vars | map(select(.name == "lane_b_target"))[0].default ==
-      "pr-reviewer-b-frontier-xhigh")' \
+      "pr-reviewer-b-frontier-high")' \
     "$TMP/$rig-pr-review-quorum.json" >/dev/null ||
     fail "$rig installed quorum defaults are not semantic frontier"
 
@@ -117,41 +117,41 @@ import json, pathlib, sys
 
 tmp, rig = pathlib.Path(sys.argv[1]), sys.argv[2]
 expected = {
-    "feature-dev": ({"implementer_target": "feature-dev-frontier-xhigh",
-                     "review_lane_a_target": "pr-reviewer-a-frontier-xhigh",
-                     "review_lane_b_target": "pr-reviewer-b-frontier-xhigh"},
+    "feature-dev": ({"implementer_target": "feature-dev-frontier-high",
+                     "review_lane_a_target": "pr-reviewer-a-frontier-high",
+                     "review_lane_b_target": "pr-reviewer-b-frontier-high"},
                     {"{{implementer_target}}", "pr-review-synthesizer"}),
-    "hard-bug-round": ({"lane_a_target": "bug-worker-a-frontier-xhigh",
-                        "lane_b_target": "bug-worker-b-frontier-xhigh",
+    "hard-bug-round": ({"lane_a_target": "bug-worker-a-frontier-high",
+                        "lane_b_target": "bug-worker-b-frontier-high",
                         "coordinator_target": "bug-coordinator",
-                        "review_lane_a_target": "pr-reviewer-a-frontier-xhigh",
-                        "review_lane_b_target": "pr-reviewer-b-frontier-xhigh"},
+                        "review_lane_a_target": "pr-reviewer-a-frontier-high",
+                        "review_lane_b_target": "pr-reviewer-b-frontier-high"},
                        {"{{lane_a_target}}", "{{lane_b_target}}", "{{coordinator_target}}"}),
-    "hard-bug-round-solo": ({"lane_a_target": "bug-worker-a-frontier-xhigh",
+    "hard-bug-round-solo": ({"lane_a_target": "bug-worker-a-frontier-high",
                              "coordinator_target": "bug-coordinator",
-                             "review_lane_a_target": "pr-reviewer-a-frontier-xhigh",
-                             "review_lane_b_target": "pr-reviewer-b-frontier-xhigh"},
+                             "review_lane_a_target": "pr-reviewer-a-frontier-high",
+                             "review_lane_b_target": "pr-reviewer-b-frontier-high"},
                             {"{{lane_a_target}}", "{{coordinator_target}}"}),
-    "hard-bug-finalize": ({"review_lane_a_target": "pr-reviewer-a-frontier-xhigh",
-                           "review_lane_b_target": "pr-reviewer-b-frontier-xhigh",
+    "hard-bug-finalize": ({"review_lane_a_target": "pr-reviewer-a-frontier-high",
+                           "review_lane_b_target": "pr-reviewer-b-frontier-high",
                            "coordinator_target": "bug-coordinator"},
                           {"{{implementer_target}}", "pr-review-synthesizer"}),
-    "change-lifecycle": ({"lane_a_target": "pr-reviewer-a-frontier-xhigh",
-                          "lane_b_target": "pr-reviewer-b-frontier-xhigh",
+    "change-lifecycle": ({"lane_a_target": "pr-reviewer-a-frontier-high",
+                          "lane_b_target": "pr-reviewer-b-frontier-high",
                           "triage_target": "pr-triage",
                           "synthesis_target": "pr-review-synthesizer",
                           "arbiter_target": "pr-arbiter"},
                          {"{{triage_target}}", "{{lane_a_target}}", "{{lane_b_target}}",
                           "{{synthesis_target}}", "{{arbiter_target}}"}),
-    "change-lifecycle-solo": ({"lane_a_target": "pr-reviewer-a-frontier-xhigh",
+    "change-lifecycle-solo": ({"lane_a_target": "pr-reviewer-a-frontier-high",
                                "triage_target": "pr-triage",
                                "synthesis_target": "pr-review-synthesizer"},
                               {"{{triage_target}}", "{{lane_a_target}}", "{{synthesis_target}}"}),
-    "pr-review": ({"review_target": "pr-reviewer-a-frontier-xhigh",
+    "pr-review": ({"review_target": "pr-reviewer-a-frontier-high",
                    "triage_target": "pr-triage"},
                   {"{{triage_target}}", "{{review_target}}"}),
-    "pr-review-quorum": ({"lane_a_target": "pr-reviewer-a-frontier-xhigh",
-                          "lane_b_target": "pr-reviewer-b-frontier-xhigh",
+    "pr-review-quorum": ({"lane_a_target": "pr-reviewer-a-frontier-high",
+                          "lane_b_target": "pr-reviewer-b-frontier-high",
                           "triage_target": "pr-triage",
                           "synthesis_target": "pr-review-synthesizer"},
                          {"{{triage_target}}", "{{lane_a_target}}", "{{lane_b_target}}",

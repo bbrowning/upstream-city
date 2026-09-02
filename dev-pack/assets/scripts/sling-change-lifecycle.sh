@@ -41,8 +41,8 @@ case "$INTENT" in feature|hard_bug) ;; *) die "--intent must be feature or hard_
 case "$N" in 1) FORMULA=change-lifecycle-solo ;; 2) FORMULA=change-lifecycle ;; *) die "--n must be 1 or 2" ;; esac
 case "$MAX_ITERATIONS" in ''|*[!0-9]*) die "--max-iterations must be a positive integer" ;; esac
 [ "$MAX_ITERATIONS" -ge 1 ] || die "--max-iterations must be a positive integer"
-[ -n "$LANE_A_TARGET" ] || LANE_A_TARGET="$RIG/pr-reviewer-a-frontier-xhigh"
-[ -n "$LANE_B_TARGET" ] || LANE_B_TARGET="$RIG/pr-reviewer-b-frontier-xhigh"
+[ -n "$LANE_A_TARGET" ] || LANE_A_TARGET="$RIG/pr-reviewer-a-frontier-high"
+[ -n "$LANE_B_TARGET" ] || LANE_B_TARGET="$RIG/pr-reviewer-b-frontier-high"
 [ -n "$ARBITER_TARGET" ] || ARBITER_TARGET="$RIG/pr-arbiter"
 
 RIGS_JSON=$("$GC" --city "$CITY" rig list --json) || die "could not list rigs"

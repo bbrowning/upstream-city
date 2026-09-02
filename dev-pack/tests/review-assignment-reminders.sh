@@ -53,12 +53,12 @@ assert_route(
     ("pr-review.v1", "pr-review-quorum.v1", "pr-review-settle.v1"),
 )
 assert_route(
-    "pr-review-quorum", "review-lane-a", "pr-reviewer-a-frontier-xhigh",
+    "pr-review-quorum", "review-lane-a", "pr-reviewer-a-frontier-high",
     "pr-review.v1", ("review lane assignment", "pr-review.v1"),
     ("pr-review-quorum.v1", "pr-review-settle.v1"),
 )
 assert_route(
-    "pr-review-quorum", "review-lane-b", "pr-reviewer-b-frontier-xhigh",
+    "pr-review-quorum", "review-lane-b", "pr-reviewer-b-frontier-high",
     "pr-review.v1", ("review lane assignment", "pr-review.v1"),
     ("pr-review-quorum.v1", "pr-review-settle.v1"),
 )
@@ -80,7 +80,7 @@ assert_route(
 
 # A solo review routes to a reviewer role, never to the synthesis role.
 assert_route(
-    "pr-review", "review", "pr-reviewer-a-frontier-xhigh", "pr-review.v1",
+    "pr-review", "review", "pr-reviewer-a-frontier-high", "pr-review.v1",
     ("review lane assignment", "pr-review.v1"), ("pr-review-quorum.v1",),
 )
 PY
