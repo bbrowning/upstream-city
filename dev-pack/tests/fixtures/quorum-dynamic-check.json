@@ -1,0 +1,40 @@
+{
+  "schema": "pr-review-quorum.v1",
+  "head_ref": "908fe4cbd3409d7bf82f3733b8e860fd1f496d52",
+  "verdict": "approve_with_nits",
+  "posture": "limited",
+  "effective_posture": "limited",
+  "summary": "Quorum check fixture.",
+  "findings_count": 0,
+  "findings": [],
+  "lanes": [
+    {"lane_id":"reviewer-a","model":"frontier-high","verdict":"approve"},
+    {"lane_id":"reviewer-b","model":"frontier-high","verdict":"approve_with_nits"}
+  ],
+  "dynamic_request": null,
+  "dynamic_check": [
+    {
+      "lane_id": "reviewer-a",
+      "result": {
+        "schema": "dynamic-verification.v1",
+        "outcome": "skipped",
+        "checks": [
+          {"axis":"endpoint-parsing-canonicalization","purpose":"coverage","outcome":"skipped"},
+          {"axis":"endpoint-proxy-policy","purpose":"coverage","outcome":"skipped"}
+        ]
+      }
+    },
+    {
+      "lane_id": "reviewer-b",
+      "result": {
+        "schema": "dynamic-verification.v1",
+        "outcome": "could_not_verify",
+        "checks": [
+          {"axis":"endpoint-authority-parsing","purpose":"coverage","outcome":"could_not_verify"},
+          {"axis":"proxy-port-gate-exception","purpose":"coverage","outcome":"could_not_verify"}
+        ]
+      }
+    }
+  ],
+  "read_only_enforcement": {"clean":true,"mutations_delta":[]}
+}

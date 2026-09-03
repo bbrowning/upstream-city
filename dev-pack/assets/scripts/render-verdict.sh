@@ -66,6 +66,37 @@ def nn: . != null and . != "";
 def sevrank: (. // "") as $s | {"blocker":0,"major":1,"minor":2,"nit":3}[$s] // 9;
 def shortmodel: sub("^.*/";"") | sub("^pr-reviewer-";"") | sub("-(xhigh|high|medium|low)$";"");
 def shortverdict: sub("approve_with_nits";"approve-w/nits") | sub("request_changes";"request-changes");
+def check_count: ((.checks // .axes // []) | if type == "array" then length else 0 end);
+def render_dynamic_check:
+  if type == "array" then
+    if length == 0 then null
+    else "Dynamic verification: "
+         + (map((.lane_id // "?") as $lane | (.result // {}) as $result
+                | "\($lane) \($result.outcome // "?")"
+                  + (if ($result | check_count) > 0 then " (\($result | check_count) checks)" else "" end)
+                  + (if $result.rc != null then " (rc=\($result.rc))" else "" end))
+            | join(" · "))
+    end
+  elif type == "object" then
+    "Dynamic verification: \(.outcome // "?")"
+    + (if check_count > 0 then " (\(check_count) checks)" else "" end)
+    + (if .rc != null then " (rc=\(.rc))" else "" end)
+  else "Dynamic verification: \(. // "?")"
+  end;
+def has_dynamic_request:
+  if type == "array" then any(.[]; (check_count > 0) or ((.command // "") | nn))
+  elif type == "object" then (check_count > 0) or ((.command // "") | nn)
+  else false
+  end;
+def render_quorum_request($head):
+  ["", "Suggested bounded dynamic verification plans (need your approval):"]
+  + (map(. as $lane
+        | (($lane.checks // $lane.axes // []) | if type == "array" then . else [] end) as $checks
+        | {checks: $checks} as $plan
+        | ["  lane \($lane.lane_id // "?") · \($checks | length) \(if ($checks | length) == 1 then "check" else "checks" end)",
+           "    \($plan | tojson)",
+           "    approve: gc sling \(if ($rig|length) > 0 then $rig else "<rig>" end)/pr-runner pr-review-dynamic --formula --var head_ref=\($head) --var plan_json='\($plan | tojson)'"])
+     | add);
 def render_f:
   .n as $n | .f as $f |
   ["  \($n). [\($f.severity // "?")] \($f.title // "(untitled)")"]
@@ -178,13 +209,9 @@ elif (.verdict != null) then
                 + (if ($nits|length) > 0 then ["", "NITS"] + ($nits | map(render_f) | add) else [] end)
              end)
           + (if (.dynamic_check == null) and (.dynamic_request != null) and
-                 (((.dynamic_request.command // "")|nn) or ((.dynamic_request.checks // [])|length > 0))
+                 (.dynamic_request | has_dynamic_request)
              then ["", "suggested dynamic verification available (see --full)"] else [] end)
-          + ( ( if (.dynamic_check != null)
-                then "Dynamic verification: \(.dynamic_check.outcome // "?")"
-                     + (if ((.dynamic_check.checks // [])|length) > 0 then " (\(.dynamic_check.checks|length) checks)" else "" end)
-                     + (if (.dynamic_check.rc != null) then " (rc=\(.dynamic_check.rc))" else "" end)
-                else null end ) as $dcline
+          + ( ( if (.dynamic_check != null) then (.dynamic_check | render_dynamic_check) else null end ) as $dcline
               | ( (.read_only_enforcement // {}) as $roe
                   | if ($roe.clean == false) then "read-only: MUTATIONS DETECTED: \(($roe.mutations_delta // []) | join(", "))"
                     elif ($roe.clean == true) then "read-only: clean"
@@ -213,7 +240,10 @@ elif (.verdict != null) then
                       + (if ($f.suggested_fix|nn) then ["     fix: \($f.suggested_fix)"] else [] end)
                     ) | add )
              end)
-          + (if (.dynamic_check == null) and (.dynamic_request != null) and ((.dynamic_request.checks // [])|length > 0)
+          + (if (.dynamic_check == null) and ((.dynamic_request | type) == "array") and
+                 (.dynamic_request | has_dynamic_request)
+             then (.dynamic_request | render_quorum_request($head))
+             elif (.dynamic_check == null) and (.dynamic_request != null) and ((.dynamic_request.checks // [])|length > 0)
              then ["", "Suggested dynamic verification plan (needs your approval):",
                    "  \(.dynamic_request | tojson)",
                    "  approve: gc sling \(if ($rig|length) > 0 then $rig else "<rig>" end)/pr-runner pr-review-dynamic --formula --var head_ref=\($head) --var plan_json='\(.dynamic_request | tojson)'"]
@@ -222,11 +252,7 @@ elif (.verdict != null) then
                    "  \(.dynamic_request.command)",
                    "  approve: gc sling \(if ($rig|length) > 0 then $rig else "<rig>" end)/pr-runner pr-review-dynamic --formula --var head_ref=\($head) --var command='\(.dynamic_request.command)'"]
              else [] end)
-          + ( ( if (.dynamic_check != null)
-                then "Dynamic verification: \(.dynamic_check.outcome // "?")"
-                     + (if ((.dynamic_check.checks // [])|length) > 0 then " (\(.dynamic_check.checks|length) checks)" else "" end)
-                     + (if (.dynamic_check.rc != null) then " (rc=\(.dynamic_check.rc))" else "" end)
-                else null end ) as $dcline
+          + ( ( if (.dynamic_check != null) then (.dynamic_check | render_dynamic_check) else null end ) as $dcline
               | ( (.read_only_enforcement // {}) as $roe
                   | if ($roe.clean == false) then "read-only: MUTATIONS DETECTED: \(($roe.mutations_delta // []) | join(", "))"
                     elif ($roe.clean == true) then "read-only: clean"

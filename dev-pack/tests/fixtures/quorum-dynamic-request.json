@@ -1,0 +1,28 @@
+{
+  "schema": "pr-review-quorum.v1",
+  "head_ref": "123",
+  "verdict": "approve",
+  "posture": "limited",
+  "effective_posture": "limited",
+  "summary": "Quorum request fixture.",
+  "findings_count": 0,
+  "findings": [],
+  "lanes": [],
+  "dynamic_check": null,
+  "dynamic_request": [
+    {
+      "lane_id": "reviewer-a",
+      "checks": [
+        {"axis":"parser","purpose":"coverage","command":["go","test","./internal/filter"]},
+        {"axis":"proxy","purpose":"coverage","command":["go","test","./internal/proxy"]}
+      ]
+    },
+    {
+      "lane_id": "reviewer-b",
+      "axes": [
+        {"axis":"integration","purpose":"coverage","command":["python","-m","pytest","tests/test_proxy.py","-q"]}
+      ],
+      "blocked_reason": "No prepared environment was available."
+    }
+  ]
+}
