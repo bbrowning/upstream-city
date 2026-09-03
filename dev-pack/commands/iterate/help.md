@@ -9,6 +9,8 @@ gc dev-pack iterate <bead> --file <path|->
 infers the intent and rig, resolves the exact approved artifact, records the human
 feedback on a separate durable bead, reopens the work at a legal lifecycle
 checkpoint, and launches the next local implementation and bounded review pass.
+The bead may be either the original work bead or a review-result bead that records
+an explicit `gc.change_lifecycle` link back to it.
 
 Feedback may be supplied as one quoted argument, with `--file` (`-` reads stdin),
 or on stdin. With no input on a terminal, `$VISUAL`, `$EDITOR`, or `vi` opens.

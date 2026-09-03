@@ -131,6 +131,24 @@ def lifecycle_from(bead: dict[str, Any]) -> dict[str, Any]:
     return lifecycle
 
 
+def resolve_work(gc: str, city: str, rig: str, requested_bead: str) -> str:
+    """Resolve a work bead, accepting a lifecycle review child as a convenience."""
+    prefix = gc_prefix(gc, city, rig)
+    requested = one(checked(prefix + ["bd", "show", requested_bead, "--json"],
+                            f"work bead {requested_bead!r} was not found in rig {rig!r}"))
+    lifecycle = decode((requested.get("metadata") or {}).get("gc.lifecycle_json"))
+    if isinstance(lifecycle, dict) and lifecycle.get("schema") == "work-lifecycle.v1":
+        return requested_bead
+
+    work_bead = str((requested.get("metadata") or {}).get("gc.change_lifecycle") or "")
+    if not work_bead:
+        raise IterateError("work bead has no valid dev-pack lifecycle checkpoint")
+    work = one(checked(prefix + ["bd", "show", work_bead, "--json"],
+                       f"review bead {requested_bead!r} refers to missing work bead {work_bead!r}"))
+    lifecycle_from(work)
+    return work_bead
+
+
 def artifact_candidates(items: list[dict[str, Any]], work_bead: str,
                         lifecycle: dict[str, Any]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
     found: list[tuple[dict[str, Any], dict[str, Any]]] = []
@@ -236,7 +254,7 @@ def parser() -> argparse.ArgumentParser:
         prog="gc dev-pack iterate",
         description="Continue an approved, closed feature or hard bug from explicit human feedback.",
     )
-    value.add_argument("bead", help="approved feature/bug bead, optionally qualified as RIG/BEAD")
+    value.add_argument("bead", help="approved feature/bug or linked review-result bead, optionally RIG/BEAD")
     value.add_argument("feedback", nargs="?", help="quoted human feedback; use --file for multiline input")
     value.add_argument("--rig", help="rig (default: infer from bead prefix)")
     value.add_argument("--file", metavar="PATH", help="read feedback from PATH; use - for stdin")
@@ -258,11 +276,12 @@ def main() -> int:
         if budget < 1:
             raise IterateError("--max-review-iterations must be a positive integer")
         known_rigs = rigs(gc, city)
-        bead_id, rig = parse_target(args.bead, args.rig, known_rigs)
+        requested_bead, rig = parse_target(args.bead, args.rig, known_rigs)
         rig_data = next((item for item in known_rigs if item.get("name") == rig), None)
         if not rig_data:
             raise IterateError(f"unknown rig {rig!r}")
         repo = str(rig_data["path"])
+        bead_id = resolve_work(gc, city, rig, requested_bead)
         lock_root = Path(os.environ.get("GC_CITY_RUNTIME_DIR") or Path(city) / ".gc" / "runtime")
         lock_dir = lock_root / "dev-pack" / "iteration-locks"
         lock_dir.mkdir(parents=True, exist_ok=True)
@@ -270,6 +289,8 @@ def main() -> int:
         with (lock_dir / f"{safe}.lock").open("w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             prefix = gc_prefix(gc, city, rig)
+            # Re-read the canonical work bead under its lock. The initial read is
+            # used only to normalize a review-result bead to this stable target.
             work = one(checked(prefix + ["bd", "show", bead_id, "--json"],
                                f"work bead {bead_id!r} was not found in rig {rig!r}"))
             metadata = work.get("metadata") or {}

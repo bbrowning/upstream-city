@@ -162,6 +162,13 @@ fixture feature feature-dev paude/fixture-work fixture/feature-dev-frontier-high
 dry=$($ITERATE fixture-work 'Preview this change.' --dry-run)
 grep -Fq 'DRY RUN' <<<"$dry" || fail 'dry-run receipt missing'
 jq -e '.items|length==2 and .[0].status=="closed"' "$MOCK_STATE" >/dev/null || fail 'dry-run mutated ledger'
+review_result=$(jq -cn '{id:"fixture-review-result",status:"closed",metadata:{
+  "gc.change_lifecycle":"fixture-work","gc.output_json_schema":"pr-review-quorum.v1"}}')
+jq --argjson review_result "$review_result" '.items += [$review_result]' "$MOCK_STATE" \
+  >"$MOCK_STATE.next"; mv "$MOCK_STATE.next" "$MOCK_STATE"
+review_dry=$($ITERATE fixture-review-result 'Preview from the review result.' --dry-run)
+grep -Fq 'would iterate fixture/fixture-work' <<<"$review_dry" \
+  || fail 'review-result bead did not resolve to its lifecycle work bead'
 piped=$(printf '%s' 'Piped preview.' | $ITERATE fixture-work --dry-run)
 grep -Fq 'DRY RUN' <<<"$piped" || fail 'implicit piped feedback was not accepted'
 if $ITERATE fixture-work 'Preview this change.' --max-review-iterations 0 --dry-run >/dev/null 2>"$TMP/zero.err"; then

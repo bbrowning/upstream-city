@@ -112,7 +112,9 @@ gc dev-pack iterate vllm-123  # opens $VISUAL/$EDITOR/vi
 
 `iterate` infers the intent, predecessor artifact, revision, branch, and implementation
 target. It records a separate feedback bead, legally reopens the parent, and starts a
-fresh bounded review pass without fetching, rebasing, or mutating a remote.
+fresh bounded review pass without fetching, rebasing, or mutating a remote. The bead
+argument may also be a review-result bead with an explicit lifecycle back-reference;
+`iterate` resolves it to the original work bead.
 
 ## Hard-bug work
 
