@@ -33,6 +33,55 @@ RIG_ROOT="${1:?usage: worktree-setup.sh <rig-root> <target-dir> <agent-base>}"
 WT="${2:?missing target worktree dir}"
 AGENT="${3:?missing agent base name}"
 
+# Claude Code keeps workspace trust per exact working-directory path in the
+# user's state file.  Pool workers run unattended, so a newly-created worktree
+# cannot answer Claude's interactive trust prompt and will otherwise crash-loop
+# before the session becomes ready.  Trust only Gas City-managed worktrees for
+# this city; never bless an arbitrary path supplied as WT.
+trust_managed_worktree_for_claude() {
+    [ -n "${GC_CITY_PATH:-}" ] || return 0
+    command -v jq >/dev/null 2>&1 || {
+        echo "worktree-setup: jq is required to register Claude workspace trust" >&2
+        return 1
+    }
+    command -v flock >/dev/null 2>&1 || {
+        echo "worktree-setup: flock is required to register Claude workspace trust" >&2
+        return 1
+    }
+
+    CITY_ROOT_ABS=$(cd "$GC_CITY_PATH" 2>/dev/null && pwd -P || echo "$GC_CITY_PATH")
+    case "$WT_ABS" in
+        "$CITY_ROOT_ABS"/.gc/worktrees/*) ;;
+        *)
+            echo "worktree-setup: refusing to trust non-managed Claude path: $WT_ABS" >&2
+            return 1
+            ;;
+    esac
+
+    CLAUDE_STATE="${HOME:?HOME is required}/.claude.json"
+    CLAUDE_LOCK="$CLAUDE_STATE.gascity.lock"
+    (
+        umask 077
+        flock -x 9
+        CLAUDE_TMP=$(mktemp "$CLAUDE_STATE.gascity.XXXXXX")
+        trap 'rm -f "$CLAUDE_TMP"' EXIT HUP INT TERM
+        if [ -s "$CLAUDE_STATE" ]; then
+            jq --arg project "$WT_ABS" '
+                .projects = ((.projects // {}) |
+                    .[$project] = ((.[$project] // {}) +
+                        {"hasTrustDialogAccepted": true}))
+            ' "$CLAUDE_STATE" > "$CLAUDE_TMP"
+        else
+            jq -n --arg project "$WT_ABS" '
+                {"projects": {($project): {"hasTrustDialogAccepted": true}}}
+            ' > "$CLAUDE_TMP"
+        fi
+        chmod 600 "$CLAUDE_TMP"
+        mv "$CLAUDE_TMP" "$CLAUDE_STATE"
+        trap - EXIT HUP INT TERM
+    ) 9>"$CLAUDE_LOCK"
+}
+
 # --- Safety guard: never operate on the rig root itself. --------------------
 # The rig root is a shared working checkout that also hosts the rig's .beads DB;
 # nobody should ever *work* in it. If work_dir is missing/misconfigured it
@@ -46,6 +95,10 @@ if [ "$WT_ABS" = "$RIG_ROOT_ABS" ]; then
     echo "worktree-setup: work_dir is missing or misconfigured for agent '$AGENT'." >&2
     exit 1
 fi
+
+# This must precede the reuse fast-path: a worktree may already exist from a
+# failed Claude launch that stopped at the trust dialog.
+trust_managed_worktree_for_claude
 
 # --- Idempotent: reuse an existing worktree, never clobber in-flight work. ---
 # gascity preserves worktrees across restarts on purpose (crash recovery). If the
