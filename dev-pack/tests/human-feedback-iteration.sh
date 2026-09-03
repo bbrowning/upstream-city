@@ -134,7 +134,7 @@ jq -e '.items[] | select(.id=="fixture-feedback") | .status=="closed" and
   || fail 'durable human feedback record is incomplete'
 for expected in 'feature-dev --formula' 'revision=2' 'previous_artifact_id=artifact-r1' \
   'feedback_bead=fixture-feedback' 'producing_verdict=request_changes' \
-  'max_review_iterations=4' '--scope-ref fixture-feedback'; do
+  'max_review_iterations=4' '--scope-kind rig' '--scope-ref fixture-feedback'; do
   grep -Fq -- "$expected" "$MOCK_LOG" || fail "feature sling lost $expected"
 done
 again=$($ITERATE fixture-work 'Only update the requested documentation.')

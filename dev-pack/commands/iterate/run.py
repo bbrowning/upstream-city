@@ -438,7 +438,7 @@ def main() -> int:
                        "--var", "review_n=2", "--var", f"max_review_iterations={absolute_max}",
                        "--var", f"review_lane_a_target={lane_a}", "--var", f"review_lane_b_target={lane_b}",
                        "--title", f"human feedback revision {revision}: {bead_id}",
-                       "--scope-kind", "human-feedback", "--scope-ref", feedback_bead, "--json"]
+                       "--scope-kind", "rig", "--scope-ref", feedback_bead, "--json"]
             result = run(gc_prefix(gc, city, rig) + ["sling"] + common)
             if result.returncode:
                 detail = result.stderr.strip() or result.stdout.strip() or "workflow dispatch failed"
