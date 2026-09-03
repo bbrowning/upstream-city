@@ -65,13 +65,17 @@ gc bd show "$root" --json
 
 Read and investigate freely in the worktree. You **may** run read-only /
 inspection commands and **tests** — but only **when the human asks** (don't run a
-test suite unprompted). A prepared CPU test env is wired for this rig via
-`$GC_PREPARE_TEST_ENV` (a builder over a warm uv cache): it prints a python
-interpreter for the checkout, e.g.
+test suite unprompted). A project-owned test-env hook may be wired through
+`$GC_PREPARE_TEST_ENV`. Its preferred output is a `prepared-runtime.v1` JSON
+object naming `runtime` (`python` or `go`) and an absolute `executable`; legacy
+hooks may print only the executable path. Use only the specific test the human
+asked about and execute argv directly, never through shell evaluation.
 
 ```bash
-py=$("$GC_PREPARE_TEST_ENV" --src "$wt" --venv "$wt/.venv") && \
-  "$py" -m pytest <the specific test the human asked about>
+prepared=$("$GC_PREPARE_TEST_ENV" --src "$wt" --venv "$wt/.venv")
+# Resolve prepared-runtime.v1 `.executable` (or the legacy one-line path), then:
+"$runtime_executable" -m pytest <the specific Python test the human asked about>
+# or: "$runtime_executable" test ./<the specific Go package>
 ```
 
 You must **not** commit, push, open or modify a PR, or run destructive git

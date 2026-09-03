@@ -4,7 +4,7 @@
 # This is the ONE place code from a PR is allowed to execute, and the gate is
 # deterministic (no LLM): it re-derives the injection-proof ceiling with
 # pr-prescan.sh and refuses to run anything the ceiling does not permit, checks
-# the command is in a safe prepared-env form, resolves a prepared interpreter,
+# the command is in a safe prepared-env form, resolves a typed prepared runtime,
 # runs the command with a timeout + output cap, and reports a structured result.
 # A prompt-injected reviewer/runner CANNOT widen what runs — it can only pick the
 # command; this script re-checks the floor every time.
@@ -13,15 +13,16 @@
 #       [--timeout SECS] [--output-cap BYTES] [--expect-head-sha SHA] \
 #       [--allow-path-prefix PREFIX] [--prescan PATH]
 #       [--internal-artifact <file|bead>] -- python -m pytest <nodeid> ...
+#       [--internal-artifact <file|bead>] -- go test ./path/to/package
 #
 # Runs in the caller's own worktree, which MUST be checked out at the PR head (the
 # reviewer/runner fetches + `git checkout --detach` first). This gate VERIFIES that
 # rather than trusting it — GATE 2 skips if an in-scope target file is absent (the
 # tell-tale of a tree still at base) and GATE 4 skips on a head-sha mismatch — so a
 # check accidentally aimed at the base tree is skipped, never mis-reported as a fail.
-# It resolves the interpreter from $GC_PR_TEST_VENV (the prepared venv — for vLLM,
-# built by tools/vllm/vllm-testenv.sh and wired via the rig's [[rigs.patches]] env);
-# this script is PROJECT-AGNOSTIC and never mentions vLLM.
+# It resolves the runtime from $GC_PR_TEST_VENV (legacy Python) or the project-owned
+# $GC_PREPARE_TEST_ENV hook. The hook may print a legacy executable path or a typed
+# prepared-runtime.v1 JSON object. This script remains project-agnostic.
 #
 # NETWORK: the run is NOT network-isolated — egress is governed externally (the
 # paude-proxy). Tests may attempt network; the caller (agent) classifies a
@@ -48,6 +49,7 @@ HEAD="" ; BASE="origin/main" ; MIN_CEILING="" ; TIMEOUT=600 ; CAP=65536
 EXPECT_SHA="" ; ALLOW_PREFIX="tests/" ; PRESCAN="$HERE/pr-prescan.sh"
 INTERNAL_ARTIFACT="" ; AUTHORITY="external"
 RESOLVE_LOCAL="$HERE/resolve-local-change.sh"
+RUNTIME_TYPE=""
 declare -a CMD=()
 
 die() { printf '%s\n' "run-scoped-check: $*" >&2; exit 2; }
@@ -117,11 +119,13 @@ emit() {
         --arg command "${CMD[*]}" \
         --arg head "$HEAD" --arg base "$BASE" --arg min_ceiling "$MIN_CEILING" \
         --arg authority "$AUTHORITY" \
+        --arg runtime_type "$RUNTIME_TYPE" \
         --argjson timeout_s "$TIMEOUT" \
         --argjson extra "$extra" \
         '{schema:$schema, outcome:$outcome, command:$command, head_ref:$head,
           base_ref:$base, min_ceiling:$min_ceiling, timeout_s:$timeout_s,
           ran:false, rc:null, ceiling:null, env_used:null, env_source:null,
+          runtime_type:(if $runtime_type == "" then null else $runtime_type end),
           reason_if_skipped:"", duration_s:null, output_tail:"", head_sha:null,
           git_clean_before:null, git_clean_after:null, mutations_delta:[],
           network_hint:false, execution_authority:$authority,
@@ -129,12 +133,14 @@ emit() {
     exit 0
 }
 
-# --- GATE 1: command form (prepared-env pytest, no shell metachars) -----------
-# argv is executed directly (no shell), but we still reject metacharacters and
-# non-prepared interpreters defensively. The command must use prepared Python.
+# --- GATE 1: command form (approved runtime grammars, no shell metachars) -----
+# argv is executed directly (no shell), but metacharacters and arbitrary tools
+# are still rejected defensively. The first token names a logical runtime only;
+# it is replaced with the operator-prepared executable below.
 case "${CMD[0]}" in
-    python|python3) ;;
-    *) emit skipped reason_if_skipped "command-not-in-prepared-env-form: must start with 'python' (got '${CMD[0]}')" ;;
+    python|python3) RUNTIME_TYPE="python" ;;
+    go) RUNTIME_TYPE="go" ;;
+    *) emit skipped reason_if_skipped "command-not-in-prepared-env-form: must start with 'python', 'python3', or 'go' (got '${CMD[0]}')" ;;
 esac
 for tok in "${CMD[@]}"; do
     case "$tok" in
@@ -143,29 +149,73 @@ for tok in "${CMD[@]}"; do
     esac
 done
 
+# Go is deliberately not an arbitrary tool front-end. Admit only `go test`, a
+# small flag allowlist, and one or more repo-relative package paths. In
+# particular, dangerous command-controlled hooks such as -exec/-toolexec and
+# non-test subcommands never reach the prepared Go executable.
+if [ "$RUNTIME_TYPE" = "go" ]; then
+    [ "${CMD[1]-}" = "test" ] \
+        || emit skipped runtime_type "$RUNTIME_TYPE" reason_if_skipped "command-not-in-prepared-env-form: Go commands must use 'go test'"
+    GO_PACKAGE_COUNT=0
+    for ((i=2; i<${#CMD[@]}; i++)); do
+        tok="${CMD[$i]}"
+        case "$tok" in
+            -v|-short|-failfast|-count=1) ;;
+            -*) emit skipped runtime_type "$RUNTIME_TYPE" reason_if_skipped "command-not-in-prepared-env-form: unsupported Go test flag '$tok'" ;;
+            ./*) GO_PACKAGE_COUNT=$((GO_PACKAGE_COUNT + 1)) ;;
+            *) emit skipped runtime_type "$RUNTIME_TYPE" reason_if_skipped "command-not-in-prepared-env-form: Go test targets must be repo-relative './...' packages (got '$tok')" ;;
+        esac
+    done
+    [ "$GO_PACKAGE_COUNT" -gt 0 ] \
+        || emit skipped runtime_type "$RUNTIME_TYPE" reason_if_skipped "command-not-in-prepared-env-form: Go test requires a repo-relative package target"
+fi
+
 # --- GATE 2: path scope + target presence -------------------------------------
-# Consider tokens that look like test targets (contain '/', '::', or end in .py).
+# Python considers tokens that look like test targets (contain '/', '::', or end
+# in .py). Go considers every admitted repo-relative package operand.
 # Each in-scope target must (a) sit under the allowed prefix AND (b) actually exist
 # in this worktree. (b) is a deterministic "the tree is at the PR head" check: a
 # reviewer that never checked out the head (tree still at base) is missing the PR's
 # NEW test file — skip honestly with "checkout the PR head" instead of letting pytest
 # exit rc=4 (file not found) and mislabeling it a test `fail` in the classifier below.
 if [ -n "$ALLOW_PREFIX" ]; then
+    scope="${ALLOW_PREFIX#./}"
+    scope="${scope%/}"
+    case "$scope" in
+        ""|.|/*|..|../*|*/../*|*/..) emit skipped runtime_type "$RUNTIME_TYPE" reason_if_skipped "invalid-path-scope: '$ALLOW_PREFIX' must name a repo-relative subdirectory" ;;
+    esac
     found_target=0
-    for tok in "${CMD[@]}"; do
-        case "$tok" in
-            -*) continue ;;                                    # a flag, not a target
-            */*|*::*|*.py)
-                found_target=1
-                case "$tok" in
-                    "$ALLOW_PREFIX"*) ;;                       # in scope
-                    *) emit skipped reason_if_skipped "out-of-scope: target '$tok' is not under '$ALLOW_PREFIX'" ;;
-                esac
-                path="${tok%%::*}"                             # strip a pytest ::nodeid suffix
-                [ -e "$path" ] || emit skipped reason_if_skipped "target-absent — '$path' is not in this worktree; checkout the PR head first (fetch + git checkout --detach <head>)"
-                ;;
-        esac
-    done
+    if [ "$RUNTIME_TYPE" = "go" ]; then
+        for ((i=2; i<${#CMD[@]}; i++)); do
+            tok="${CMD[$i]}"
+            case "$tok" in -*) continue ;; esac
+            target="${tok#./}"
+            path="${target%/...}"
+            case "$path" in ""|.|..|../*|*/../*|*/..) emit skipped runtime_type "$RUNTIME_TYPE" reason_if_skipped "out-of-scope: invalid Go package target '$tok'" ;; esac
+            found_target=1
+            case "$path" in
+                "$scope"|"$scope"/*) ;;
+                *) emit skipped runtime_type "$RUNTIME_TYPE" reason_if_skipped "out-of-scope: target '$tok' is not under '$ALLOW_PREFIX'" ;;
+            esac
+            [ -d "$path" ] || emit skipped runtime_type "$RUNTIME_TYPE" reason_if_skipped "target-absent — '$path' is not in this worktree; checkout the PR head first (fetch + git checkout --detach <head>)"
+        done
+    else
+        for tok in "${CMD[@]}"; do
+            case "$tok" in
+                -*) continue ;;
+                */*|*::*|*.py)
+                    found_target=1
+                    path="${tok%%::*}"
+                    normalized="${path#./}"
+                    case "$normalized" in
+                        "$scope"|"$scope"/*) ;;
+                        *) emit skipped runtime_type "$RUNTIME_TYPE" reason_if_skipped "out-of-scope: target '$tok' is not under '$ALLOW_PREFIX'" ;;
+                    esac
+                    [ -e "$path" ] || emit skipped runtime_type "$RUNTIME_TYPE" reason_if_skipped "target-absent — '$path' is not in this worktree; checkout the PR head first (fetch + git checkout --detach <head>)"
+                    ;;
+            esac
+        done
+    fi
     [ "$found_target" -eq 1 ] || emit skipped reason_if_skipped "out-of-scope: no test target under '$ALLOW_PREFIX' found in command"
 fi
 
@@ -197,32 +247,54 @@ else
     fi
 fi
 
-# --- Resolve a prepared interpreter (PROJECT-AGNOSTIC) ------------------------
-# Order: an explicit prepared venv ($GC_PR_TEST_VENV) -> a worktree-local .venv ->
-# an operator-configured project hook ($GC_PREPARE_TEST_ENV) that BUILDS one lazily
-# (for vLLM: //tools/vllm/vllm-testenv.sh). The hook is operator-set (a rig patch),
-# never PR-controlled, and runs only when a check actually needs to execute.
-PY=""
+# --- Resolve a typed prepared runtime (PROJECT-AGNOSTIC) ----------------------
+# Legacy Python venvs remain supported. The operator-owned hook may emit either
+# one executable path (legacy; type inferred from the admitted command) or:
+#   {"schema":"prepared-runtime.v1","runtime":"python|go","executable":"/abs/path"}
+# The hook is never PR-controlled and runs only when a check needs to execute.
+RUNTIME_EXEC=""
 ENV_SOURCE=""
-if [ -n "${GC_PR_TEST_VENV:-}" ] && [ -x "${GC_PR_TEST_VENV}/bin/python" ]; then
-    PY="${GC_PR_TEST_VENV}/bin/python"; ENV_SOURCE="GC_PR_TEST_VENV"
-elif [ -x "./.venv/bin/python" ]; then
-    PY="$(pwd)/.venv/bin/python"; ENV_SOURCE="worktree-venv"
+PREPARED_OUTPUT=""
+if [ "$RUNTIME_TYPE" = "python" ] && [ -n "${GC_PR_TEST_VENV:-}" ] && [ -x "${GC_PR_TEST_VENV}/bin/python" ]; then
+    RUNTIME_EXEC="${GC_PR_TEST_VENV}/bin/python"; ENV_SOURCE="GC_PR_TEST_VENV"
+elif [ "$RUNTIME_TYPE" = "python" ] && [ -x "./.venv/bin/python" ]; then
+    RUNTIME_EXEC="$(pwd)/.venv/bin/python"; ENV_SOURCE="worktree-venv"
 elif [ -n "${GC_PREPARE_TEST_ENV:-}" ] && [ -x "${GC_PREPARE_TEST_ENV}" ]; then
-    if BUILT=$("${GC_PREPARE_TEST_ENV}" --src "$(pwd)" --venv "$(pwd)/.venv" 2>/dev/null) && [ -x "$BUILT" ]; then
-        PY="$BUILT"; ENV_SOURCE="prepare-hook"
+    if PREPARED_OUTPUT=$("${GC_PREPARE_TEST_ENV}" --src "$(pwd)" --venv "$(pwd)/.venv" 2>/dev/null); then
+        if printf '%s' "$PREPARED_OUTPUT" | jq -e 'type == "object"' >/dev/null 2>&1; then
+            if printf '%s' "$PREPARED_OUTPUT" | jq -e '
+                .schema == "prepared-runtime.v1" and
+                (.runtime == "python" or .runtime == "go") and
+                (.executable | type == "string" and length > 0)
+              ' >/dev/null 2>&1; then
+                PREPARED_TYPE=$(printf '%s' "$PREPARED_OUTPUT" | jq -r '.runtime')
+                RUNTIME_EXEC=$(printf '%s' "$PREPARED_OUTPUT" | jq -r '.executable')
+                [ "$PREPARED_TYPE" = "$RUNTIME_TYPE" ] || RUNTIME_EXEC=""
+            fi
+        elif [ "$(printf '%s\n' "$PREPARED_OUTPUT" | wc -l)" -eq 1 ]; then
+            RUNTIME_EXEC="$PREPARED_OUTPUT"
+        fi
+        [ -z "$RUNTIME_EXEC" ] || ENV_SOURCE="prepare-hook"
     fi
 fi
-if [ -z "$PY" ] || ! "$PY" -c 'import sys' >/dev/null 2>&1; then
+case "$RUNTIME_EXEC" in /*) ;; *) RUNTIME_EXEC="" ;; esac
+HEALTHY=false
+if [ -n "$RUNTIME_EXEC" ] && [ -x "$RUNTIME_EXEC" ]; then
+    case "$RUNTIME_TYPE" in
+        python) "$RUNTIME_EXEC" -c 'import sys' >/dev/null 2>&1 && HEALTHY=true ;;
+        go) "$RUNTIME_EXEC" version 2>/dev/null | grep -q '^go version go' && HEALTHY=true ;;
+    esac
+fi
+if [ "$HEALTHY" != true ]; then
     emit could_not_verify ceiling "$CEILING" head_sha "$CUR_SHA" \
-        reason_if_skipped "no-runnable-env: set GC_PR_TEST_VENV to a prepared venv, or GC_PREPARE_TEST_ENV to a builder (see tools/vllm/vllm-testenv.sh)"
+        runtime_type "$RUNTIME_TYPE" reason_if_skipped "no-runnable-env: configure GC_PREPARE_TEST_ENV to return a matching prepared-runtime.v1 object (legacy Python venv/path output is also supported)"
 fi
 
 # --- git-clean baseline ------------------------------------------------------
 BEFORE=$(git status --porcelain=v1 2>/dev/null || true)
 
-# --- Run (interpreter substituted for CMD[0]; network governed externally) ---
-declare -a RUN=("$PY" "${CMD[@]:1}")
+# --- Run (prepared executable substituted; network governed externally) -------
+declare -a RUN=("$RUNTIME_EXEC" "${CMD[@]:1}")
 START=$(date +%s 2>/dev/null || echo 0)
 set +e
 OUTPUT=$(timeout --signal=KILL "${TIMEOUT}s" "${RUN[@]}" 2>&1)
@@ -241,7 +313,7 @@ DELTA_JSON=$(printf '%s' "$DELTA" | jq -R -s -c 'split("\n") | map(select(length
 
 # --- classify (PRELIMINARY — caller makes the final call) --------------------
 NET_HINT=false
-if printf '%s' "$OUTPUT_TAIL" | grep -qiE 'OSError|ConnectionError|Max retries|ProxyError|SSLError|Temporary failure in name resolution|Failed to establish|Could not reach|HTTPSConnectionPool|urlopen error|CERTIFICATE_VERIFY'; then
+if printf '%s' "$OUTPUT_TAIL" | grep -qiE 'OSError|ConnectionError|Max retries|ProxyError|SSLError|Temporary failure in name resolution|Failed to establish|Could not reach|HTTPSConnectionPool|urlopen error|CERTIFICATE_VERIFY|dial tcp|no such host|TLS handshake timeout'; then
     NET_HINT=true
 fi
 case "$RC" in
@@ -256,7 +328,8 @@ jq -n \
     --arg command "${CMD[*]}" \
     --arg head "$HEAD" --arg base "$BASE" --arg min_ceiling "$MIN_CEILING" \
     --arg ceiling "$CEILING" \
-    --arg env_used "$PY" --arg env_source "$ENV_SOURCE" \
+    --arg env_used "$RUNTIME_EXEC" --arg env_source "$ENV_SOURCE" \
+    --arg runtime_type "$RUNTIME_TYPE" \
     --arg authority "$AUTHORITY" \
     --arg head_sha "$CUR_SHA" \
     --arg output_tail "$OUTPUT_TAIL" \
@@ -270,7 +343,8 @@ jq -n \
     --argjson net_hint "$NET_HINT" \
     '{schema:$schema, outcome:$outcome, command:$command, head_ref:$head,
       base_ref:$base, min_ceiling:$min_ceiling, ceiling:$ceiling, ran:$ran,
-      rc:$rc, env_used:$env_used, env_source:$env_source, reason_if_skipped:"",
+      rc:$rc, env_used:$env_used, env_source:$env_source,
+      runtime_type:$runtime_type, reason_if_skipped:"",
       timeout_s:$timeout_s, duration_s:$duration_s, output_tail:$output_tail,
       head_sha:$head_sha, git_clean_before:$clean_before, git_clean_after:$clean_after,
       mutations_delta:$delta, network_hint:$net_hint, failure_class:"none",

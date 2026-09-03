@@ -150,7 +150,8 @@
 #                                         refuses to run in the rig root (loud fail).
 #
 # Project-agnostic: nothing here mentions vLLM. The per-rig knowledge corpus
-# ($GC_PERSONAS) and the prepared test venv ($GC_PREPARE_TEST_ENV / $GC_PR_TEST_VENV)
+# ($GC_PERSONAS) and prepared test runtime ($GC_PREPARE_TEST_ENV; legacy Python
+# $GC_PR_TEST_VENV)
 # live OUTSIDE the pack, wired to the rig via [[rigs.patches]] env; the pack only
 # CONSUMES them.
 #

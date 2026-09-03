@@ -10,7 +10,7 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 git init -q -b main "$TMP/repo"
 git -C "$TMP/repo" config user.name Test
 git -C "$TMP/repo" config user.email test@example.invalid
-mkdir -p "$TMP/repo/tests" "$TMP/venv/bin"
+mkdir -p "$TMP/repo/tests" "$TMP/repo/internal/filter" "$TMP/venv/bin" "$TMP/bin"
 cat >"$TMP/repo/tests/test_axes.py" <<'PY'
 import pathlib
 import sys
@@ -25,10 +25,38 @@ elif mode == "dirty":
 elif mode == "network":
     raise OSError("Temporary failure in name resolution")
 PY
+cat >"$TMP/repo/internal/filter/filter_test.go" <<'GO'
+package filter
+
+// The mock prepared Go runtime below verifies this package-scoped argv without
+// requiring a host Go installation.
+GO
 git -C "$TMP/repo" add tests/test_axes.py
+git -C "$TMP/repo" add internal/filter/filter_test.go
 git -C "$TMP/repo" commit -qm base
 HEAD_SHA=$(git -C "$TMP/repo" rev-parse HEAD)
 ln -s "$(command -v python3)" "$TMP/venv/bin/python"
+cat >"$TMP/bin/go" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1-}" in
+  version) printf 'go version go1.23.12 linux/amd64\n' ;;
+  test)
+    shift
+    [ "$*" = "./internal/filter -count=1" ] || exit 2
+    printf 'ok example.invalid/internal/filter\n'
+    ;;
+  *) exit 2 ;;
+esac
+EOF
+chmod +x "$TMP/bin/go"
+cat >"$TMP/prepare-go" <<'EOF'
+#!/usr/bin/env bash
+jq -cn --arg executable "$MOCK_GO" \
+  '{schema:"prepared-runtime.v1",runtime:"go",executable:$executable}'
+EOF
+chmod +x "$TMP/prepare-go"
+export MOCK_GO="$TMP/bin/go"
 cat >"$TMP/prescan" <<'EOF'
 #!/usr/bin/env bash
 jq -cn '{ceiling_posture:"trusted"}'
@@ -37,9 +65,12 @@ chmod +x "$TMP/prescan"
 
 run_plan() {
   local plan=$1
+  local prefix=${2:-tests/}
   (cd "$TMP/repo" && GC_CITY_PATH="$ROOT" GC_RIG=vllm GC_PR_TEST_VENV="$TMP/venv" \
+    GC_PREPARE_TEST_ENV="$TMP/prepare-go" \
     "$GATE" --head "$HEAD_SHA" --base "$HEAD_SHA" --min-ceiling trusted \
-      --expect-head-sha "$HEAD_SHA" --prescan "$TMP/prescan" --plan-json "$plan")
+      --expect-head-sha "$HEAD_SHA" --allow-path-prefix "$prefix" \
+      --prescan "$TMP/prescan" --plan-json "$plan")
 }
 
 # Regression fixture: one passing test does not cover a second changed behavior.
@@ -70,6 +101,67 @@ jq -e '.outcome == "pass" and .ran_checks == 3 and
   || fail "bounded decisive follow-up did not run"
 [ "$(jq -r '.checks[0].timeout_s' <<<"$result")" = 200 ] \
   || fail "aggregate time was not divided across checks"
+
+# A typed Go runtime uses a Go health check and substitutes only the prepared
+# executable into a narrowly scoped `go test` argv.
+go_plan=$(jq -cn '{checks:[
+  {axis:"filter-package",purpose:"coverage",command:["go","test","./internal/filter","-count=1"]}
+]}')
+result=$(run_plan "$go_plan" internal/filter)
+jq -e --arg executable "$TMP/bin/go" '.outcome == "pass" and .ran_checks == 1 and
+  .checks[0].runtime_type == "go" and .checks[0].env_source == "prepare-hook" and
+  .checks[0].env_used == $executable and .checks[0].command == "go test ./internal/filter -count=1"' \
+  <<<"$result" >/dev/null || fail "typed prepared Go runtime did not execute"
+
+# Existing project hooks that print only an executable path remain compatible;
+# their runtime type is inferred from the already-admitted command family.
+cat >"$TMP/prepare-go-legacy" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$MOCK_GO"
+EOF
+chmod +x "$TMP/prepare-go-legacy"
+legacy_go=$(cd "$TMP/repo" && GC_CITY_PATH="$ROOT" GC_RIG=vllm \
+  GC_PREPARE_TEST_ENV="$TMP/prepare-go-legacy" \
+  "$GATE" --head "$HEAD_SHA" --base "$HEAD_SHA" --min-ceiling trusted \
+    --expect-head-sha "$HEAD_SHA" --allow-path-prefix internal/filter \
+    --prescan "$TMP/prescan" --plan-json "$go_plan")
+jq -e '.outcome == "pass" and .checks[0].runtime_type == "go"' <<<"$legacy_go" >/dev/null \
+  || fail "legacy prepared executable output stopped working for Go"
+
+# Go admission remains fail-closed: no arbitrary subcommands/flags, broad package
+# wildcard, absolute/import-path targets, or package paths outside the approved scope.
+for command in \
+  '["go","env"]' \
+  '["go","test","./internal/filter","-exec=/tmp/runner"]' \
+  '["go","test","./..."]' \
+  '["go","test","example.invalid/internal/filter"]'
+do
+  rejected=$(run_plan "$(jq -cn --argjson command "$command" \
+    '{checks:[{axis:"go-grammar",purpose:"coverage",command:$command}]}')" internal/filter)
+  jq -e '.checks[0].outcome == "skipped" and .checks[0].ran == false' \
+    <<<"$rejected" >/dev/null || fail "unsafe Go command was accepted: $command"
+done
+go_out_scope=$(run_plan "$go_plan" internal/other)
+jq -e '.checks[0].outcome == "skipped" and
+  (.checks[0].reason_if_skipped | contains("out-of-scope"))' <<<"$go_out_scope" >/dev/null \
+  || fail "Go package scope was weakened"
+
+# A typed runtime must match the admitted command family. A valid executable of
+# the wrong type is not probed with the other language's health-check arguments.
+cat >"$TMP/prepare-wrong-type" <<'EOF'
+#!/usr/bin/env bash
+jq -cn --arg executable "$MOCK_GO" \
+  '{schema:"prepared-runtime.v1",runtime:"python",executable:$executable}'
+EOF
+chmod +x "$TMP/prepare-wrong-type"
+wrong_type=$(cd "$TMP/repo" && GC_CITY_PATH="$ROOT" GC_RIG=vllm \
+  GC_PREPARE_TEST_ENV="$TMP/prepare-wrong-type" \
+  "$GATE" --head "$HEAD_SHA" --base "$HEAD_SHA" --min-ceiling trusted \
+    --expect-head-sha "$HEAD_SHA" --allow-path-prefix internal/filter \
+    --prescan "$TMP/prescan" --plan-json "$go_plan")
+jq -e '.checks[0].outcome == "could_not_verify" and
+  .checks[0].runtime_type == "go" and .checks[0].ran == false' <<<"$wrong_type" >/dev/null \
+  || fail "mismatched typed runtime was accepted"
 
 # Bounds and axis semantics are deterministic, not reviewer discretion.
 for invalid in \

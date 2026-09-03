@@ -153,9 +153,13 @@ passes cleanly; it closes a statically identified keystone rather than retrying.
 
 For every plan entry, `run-scoped-check.sh` independently re-derives posture and,
 for internal execution, revalidates the producer ledger binding and exact immutable range. It rejects
-restricted/block content regardless of producer, accepts prepared-environment Python
-test commands, rejects shell metacharacters and out-of-scope targets, verifies the
-expected head, bounds time and output, and records git status before and after.
+restricted/block content regardless of producer, accepts prepared-runtime Python
+checks and a narrow `go test` grammar, rejects shell metacharacters and out-of-scope
+targets, verifies the expected head, bounds time and output, and records git status
+before and after. The operator-owned preparation hook may return typed
+`prepared-runtime.v1` JSON (`runtime` plus absolute `executable`); legacy one-line
+paths and Python venvs remain compatible. Runtime health is type-specific (`import
+sys` for Python, `go version` for Go), and the result records `runtime_type`.
 Network and environment limitations produce `could_not_verify`. Each command is
 exact-head pinned and path/command allowlisted, uses the prepared environment,
 inherits the city egress boundary, and records cleanliness; a mutation stops the

@@ -13,8 +13,9 @@ delegates each command to the deterministic run-scoped-check.sh gate and refuses
 if the ceiling dropped); `limited`/`restricted`/
 `block` run nothing. A `limited` PR instead surfaces a scoped `dynamic_request` a
 human can approve out-of-band via the companion `pr-review-dynamic` formula (routed
-to the `runner` agent). Execution needs a prepared interpreter in
-`$GC_PR_TEST_VENV`; absent that, the check honestly reports `could_not_verify`.
+to the `runner` agent). Execution needs a matching runtime from the project-owned
+`$GC_PREPARE_TEST_ENV` hook (legacy Python `$GC_PR_TEST_VENV` remains supported);
+absent that, the check honestly reports `could_not_verify`.
 
 Both steps are routed by `gc.run_target` (overridable per run), so the standard
 `gc sling <rig>/pr-review-synthesizer pr-review --formula --var head_ref=N` is the direct

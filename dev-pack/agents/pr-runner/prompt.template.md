@@ -30,8 +30,9 @@ If `pwd` is the rig root, stop: emit a `blocked`-style result with
 1. `gc prime` — orient after `$DEV_PACK_STEP_BEAD` is safely bound.
 2. `gc mail check` — any instructions?
 3. Read your assignment bead. It carries the vars you need: `head_ref` (the PR
-   number N or ref), `base_ref`, the approved `plan_json` (or legacy `command`), an optional `reason`
-   (provenance), and an optional `expect_head_sha` (a force-push guard).
+   number N or ref), `base_ref`, the approved `plan_json` (or legacy `command`),
+   `allow_path_prefix`, an optional `reason` (provenance), and an optional
+   `expect_head_sha` (a force-push guard).
 
 ## Run the approved plan
 
@@ -47,6 +48,7 @@ If `pwd` is the rig root, stop: emit a `blocked`-style result with
    ```bash
    bash "$GC_CITY_PATH/dev-pack/assets/scripts/run-dynamic-verification.sh" \
      --head <head_ref> --base <base_ref> --min-ceiling limited \
+     --allow-path-prefix <allow_path_prefix> \
      [--expect-head-sha <expect_head_sha>] \
      --plan-json '<the approved plan>'
    ```
@@ -70,7 +72,7 @@ If `pwd` is the rig root, stop: emit a `blocked`-style result with
 Assemble a `pr-review-dynamic.v1` object from the gate's result plus your context
 (`head_ref`, `base_ref`, `plan`, compatibility `command`, `approved_reason` from the `reason` var,
 `authorized_by="human-sling"`, and the gate's `ceiling`, `outcome`, `rc`,
-`env_used`, `output_tail`, `duration_s`, `git_clean_before`/`after`,
+`runtime_type`, `env_used`, `output_tail`, `duration_s`, `git_clean_before`/`after`,
 `mutations_delta`, `reason_if_skipped`) plus `schema:"pr-review-dynamic.v1"`.
 Submit it as literal JSON stdin and **finish with one command** — `emit-review.py` writes it to
 `gc.output_json` (a metadata MERGE), closes the bead, **and notifies** the human,

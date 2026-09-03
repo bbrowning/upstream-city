@@ -302,8 +302,8 @@ the gate independently validates its allowlisted workflow, producer lifecycle be
 and exact immutable range. External `limited` input still requires an explicit
 human-approved `pr-review-dynamic` dispatch; restricted and blocked inputs run
 nothing regardless of provenance. Every planned check rechecks posture, authority,
-command shape, test path, expected SHA, timeout, output cap, and worktree cleanliness;
-the follow-up runs only after clean passing coverage.
+runtime-specific command shape, test/package path scope, expected SHA, timeout,
+output cap, and worktree cleanliness; the follow-up runs only after clean passing coverage.
 Environment or network failures are reported as `could_not_verify`, not as code
 failures.
 

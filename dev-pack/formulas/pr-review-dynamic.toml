@@ -7,6 +7,7 @@ human APPROVES it by slinging this formula with the exact axis plan:
   gc sling <rig>/pr-runner pr-review-dynamic --formula \\
     --var head_ref=<N> --var base_ref=origin/main \\
     --var plan_json='{"checks":[{"axis":"behavior-x","purpose":"coverage","command":["python","-m","pytest","tests/path/to/test_x.py::test_y","-q"]}]}' \\
+    --var allow_path_prefix=tests/ \\
     --var reason='approved from PR <N> review verdict' \\
     --title 'dynamic check PR <N>' --json
 
@@ -52,6 +53,10 @@ default = ""
 description = "Optional: the head sha the reviewer saw. If set, the gate refuses when HEAD has moved (force-push guard)."
 default = ""
 
+[vars.allow_path_prefix]
+description = "Repo-relative subtree containing every approved test target (for example tests/ or internal/filter)."
+default = "tests/"
+
 [vars.runner_target]
 description = "Agent that runs the approved check. Bare name resolves within the rig; override to a rig-qualified name (e.g. vllm/pr-runner) if bare resolution fails."
 default = "pr-runner"
@@ -76,7 +81,12 @@ method for detail:
 3. Run the approved plan through the gate — it enforces at most two distinct
    coverage axes plus one final follow-up, 600 seconds, and 64 KiB total, and each
    delegated check re-derives the ceiling and every existing safety control:
-   `bash "$GC_CITY_PATH/dev-pack/assets/scripts/run-dynamic-verification.sh" --head {{head_ref}} --base {{base_ref}} --min-ceiling limited --plan-json '<exact plan_json>'`.
+   `bash "$GC_CITY_PATH/dev-pack/assets/scripts/run-dynamic-verification.sh" --head {{head_ref}} --base {{base_ref}} --min-ceiling limited --allow-path-prefix {{allow_path_prefix}} --plan-json '<exact plan_json>'`.
+   Commands use logical prepared-runtime argv: existing Python checks start with
+   `python`/`python3`; Go checks are restricted to `go test` with repo-relative
+   package targets under `{{allow_path_prefix}}` (for example
+   `["go","test","./internal/filter","-count=1"]`). The gate substitutes the
+   operator-prepared executable and never evaluates a shell command.
    If `plan_json` is empty but `command` is not, parse that approved prepared-env
    command without shell evaluation into one `coverage` check named
    `human-approved`; do not add or improve commands.

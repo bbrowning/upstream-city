@@ -192,8 +192,9 @@ position), `head_ref`/`base_ref`, and an optional `crux_question` hint.
    - `needs_dynamic` — static reading gets you most of the way but runtime evidence would
      **fully** close it. Give the decisive scoped check (or bounded axis plan when the
      dispute spans two independent behaviors) in `needs_dynamic`
-     (`command` in prepared-env `python -m pytest <node-id> -q` form, `why`,
-     `what_it_checks`). A blocked egress / limited posture is why you didn't run it — an
+     (`command` in an admitted prepared-runtime form such as `python -m pytest
+     <node-id> -q` or scoped `go test ./package`, `why`, `what_it_checks`). A
+     blocked egress / limited posture is why you didn't run it — an
      honest outcome, not a failure.
    - `genuinely_ambiguous` — the evidence does not decide it; say what would.
 5. **Emit `pr-review-settle.v1`** as literal JSON stdin, then finish with the SAME
@@ -308,12 +309,16 @@ eval "$(bash "$GC_CITY_PATH/dev-pack/assets/scripts/posture-latitude.sh" "$effec
      `followup` check that would decide it. Do not use the follow-up to retry or merely
      broaden a passing test. If more than two axes changed, cover the highest-risk two
      dynamically and name the statically assessed remainder in `evidence`.
-  4. Each command uses **prepared-env argv form**, normally
-     `["python","-m","pytest","<repo-relative-node-id>","-q"]`. NEVER name a
-     venv or absolute interpreter. Pipe one literal plan to the gate, pinning the head:
+  4. Each command uses **prepared-runtime argv form**: Python/pytest is normally
+     `["python","-m","pytest","<repo-relative-node-id>","-q"]`; Go is
+     `["go","test","./<repo-relative-package>"]` with only the gate's small
+     safe flag allowlist. NEVER name a venv, toolchain, or absolute executable.
+     Choose one repo-relative `--allow-path-prefix` containing every target. Pipe
+     one literal plan to the gate, pinning the head:
      ```bash
      bash "$GC_CITY_PATH/dev-pack/assets/scripts/run-dynamic-verification.sh" \
        --head <head_ref> --base <base_ref> --min-ceiling <trusted-or-limited> \
+       --allow-path-prefix <repo-relative-test-subtree> \
        --expect-head-sha "$head_sha" <<'JSON'
      {"checks":[
        {"axis":"changed-behavior-a","purpose":"coverage","command":["python","-m","pytest","tests/test_a.py::test_case","-q"]},

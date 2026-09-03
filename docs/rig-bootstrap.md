@@ -137,8 +137,15 @@ env = { GC_PERSONAS = "/city/tools/example/personas", GC_PR_TRUSTED_AUTHORS = "/
 - `GC_PR_TRUSTED_AUTHORS` is an optional tracked, one-login-per-line allowlist.
   It affects identity posture only; content-based restrictions still win.
 - `GC_PREPARE_TEST_ENV` is an optional executable that lazily prepares a test
-  environment and prints its Python interpreter. Without a runnable environment,
-  dynamic checks return `could_not_verify` and the review still completes.
+  runtime. It receives `--src <worktree> --venv <worktree>/.venv` and should print
+  one JSON object such as
+  `{"schema":"prepared-runtime.v1","runtime":"go","executable":"/opt/go/bin/go"}`
+  (supported runtime values are `python` and `go`). For compatibility, an
+  existing hook may still print one absolute executable path; the gate infers
+  its type from the admitted command. Legacy Python venv discovery through
+  `GC_PR_TEST_VENV` also remains supported. The gate uses `import sys` for Python
+  health and `go version` for Go health, and returns `could_not_verify` when the
+  requested type has no matching healthy runtime.
 - `UV_CACHE_DIR` should be on the same filesystem as worktrees when the builder
   can benefit from reflinks. Test-environment builders remain project-owned; for
   example, vLLM uses `tools/vllm/vllm-testenv.sh` rather than pack code.
@@ -147,8 +154,11 @@ env = { GC_PERSONAS = "/city/tools/example/personas", GC_PR_TRUSTED_AUTHORS = "/
 
 Because trusted posture permits narrowly bounded unattended test execution, keep
 the author allowlist tracked and review its history. `dev-pack` still rechecks the
-fresh posture, command shape, path, expected head SHA, timeout, and worktree state
-at execution time. See [`docs/dev-pack-design.md`](dev-pack-design.md) for the
+fresh posture, runtime-specific command grammar, repo-relative path scope,
+expected head SHA, timeout/output budget, egress hints, and worktree state at
+execution time. Go execution is limited to `go test` with repo-relative package
+targets and a small flag allowlist; it is not a general Go or shell command
+runner. See [`docs/dev-pack-design.md`](dev-pack-design.md) for the
 durable architecture and safety boundaries.
 
 ## Hard rule

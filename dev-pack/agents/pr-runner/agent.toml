@@ -9,10 +9,9 @@
 # `restricted`/`block`. The human sling is the EXEC token; the script is the floor.
 #
 # Rig-scoped, single slot, on-demand: a session spins up when a `pr-review-dynamic`
-# step is routed to it and idles out afterward. Execution needs a prepared
-# interpreter in $GC_PR_TEST_VENV (for vLLM, built by //tools/vllm/vllm-testenv.sh
-# and wired via this rig's [[rigs.patches]] env); absent that it reports
-# could_not_verify.
+# step is routed to it and idles out afterward. Execution needs a matching
+# runtime from $GC_PREPARE_TEST_ENV (or legacy Python $GC_PR_TEST_VENV); absent
+# that it reports could_not_verify.
 #
 # Division of labor:
 #   - prompt.template.md          → the runner's standing METHOD.
