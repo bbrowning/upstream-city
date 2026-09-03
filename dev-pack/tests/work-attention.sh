@@ -50,6 +50,10 @@ cat >"$TMP/hq.json" <<'JSON'
  {"id":"wo-hidden-step","title":"retry implementation","status":"in_progress","priority":1,"issue_type":"task","owner":"human@example.com","parent":"wo-flight","created_at":"2026-08-31T00:00:00Z","updated_at":"2026-08-31T22:45:00Z","labels":["gc:step"]},
  {"id":"wo-message","title":"workflow result","status":"open","priority":1,"issue_type":"message","owner":"human@example.com","created_at":"2026-08-31T00:00:00Z","updated_at":"2026-08-31T22:45:00Z","labels":[]}
  ,{"id":"wo-opted-out","title":"Acknowledged human work","status":"open","priority":1,"issue_type":"feature","owner":"human@example.com","created_at":"2026-08-31T00:00:00Z","updated_at":"2026-08-31T22:45:00Z","labels":["attention=false"]}
+ ,{"id":"wo-iterate-prepared","title":"Prepared human revision","status":"in_progress","priority":1,"issue_type":"feature","owner":"human@example.com","created_at":"2026-08-31T22:40:00Z","updated_at":"2026-08-31T22:50:00Z","metadata":{"gc.lifecycle_json":"{\"schema\":\"work-lifecycle.v1\",\"intent_kind\":\"feature\",\"checkpoint\":\"human_feedback\",\"disposition\":\"implementing\",\"iteration\":2}","gc.human_iteration_json":"{\"schema\":\"dev-pack-human-iteration.v1\",\"state\":\"prepared\",\"revision\":2,\"feedback_bead\":\"wo-feedback-prepared\"}"},"labels":[]}
+ ,{"id":"wo-iterate-running","title":"Running human revision","status":"in_progress","priority":1,"issue_type":"feature","owner":"human@example.com","created_at":"2026-08-31T22:40:00Z","updated_at":"2026-08-31T22:50:00Z","metadata":{"gc.lifecycle_json":"{\"schema\":\"work-lifecycle.v1\",\"intent_kind\":\"feature\",\"checkpoint\":\"review\",\"disposition\":\"request_changes\",\"iteration\":2}","gc.human_iteration_json":"{\"schema\":\"dev-pack-human-iteration.v1\",\"state\":\"launched\",\"revision\":2,\"feedback_bead\":\"wo-feedback-running\",\"workflow_bead\":\"wo-iteration-root\"}"},"labels":[]}
+ ,{"id":"wo-iteration-root","title":"human feedback revision 2","status":"in_progress","priority":2,"issue_type":"task","owner":"automation","created_at":"2026-08-31T22:51:00Z","updated_at":"2026-08-31T22:52:00Z","metadata":{"gc.formula_name":"feature-dev","gc.var.work_bead":"wo-iterate-running","gc.var.feedback_bead":"wo-feedback-running","gc.var.revision":"2"},"labels":["internal"]}
+ ,{"id":"wo-iteration-review","title":"review human revision 2","status":"in_progress","priority":2,"issue_type":"task","owner":"automation","created_at":"2026-08-31T22:53:00Z","updated_at":"2026-08-31T22:54:00Z","metadata":{"gc.change_lifecycle":"wo-iterate-running"},"labels":["internal"]}
 ]
 JSON
 
@@ -79,8 +83,10 @@ jq -e '
   ([.groups[] | select(.key == "needs-you") | .items[].id] | index("vllm-needs") != null) and
   ([.groups[] | select(.key == "needs-you") | .items[].id] | index("vllm-recheck") != null) and
   ([.groups[] | select(.key == "needs-you") | .items[].id] | index("wo-local-approved") != null) and
+  ([.groups[] | select(.key == "needs-you") | .items[].id] | index("wo-iterate-prepared") != null) and
   ([.groups[] | select(.key == "needs-you") | .items[].id] | index("vllm-adopt-source") != null) and
   ([.groups[] | select(.key == "in-flight") | .items[].id] | index("wo-flight") != null) and
+  ([.groups[] | select(.key == "in-flight") | .items[].id] | index("wo-iterate-running") != null) and
   ([.groups[] | select(.key == "waiting") | .items[].id] | index("wo-wait") != null) and
   ([.groups[] | select(.key == "waiting") | .items[].id] | index("vllm-review") != null) and
   ([.groups[] | select(.key == "stale-unclear") | .items[].id] | index("wo-unclear") != null) and
@@ -92,6 +98,24 @@ jq -e '
   ([.groups[].items[].id] | index("wo-opted-out") == null) and
   ([.groups[].items[].id] | index("vllm-adopt-result") == null)
 ' <<<"$json" >/dev/null
+
+prepared=$(DEV_PACK_WORK_NOW="$NOW" "$ROOT/dev-pack/commands/work/run.sh" show \
+  wo-iterate-prepared --citywide --no-network --json)
+jq -e '
+  .item.group == "needs-you" and
+  (.item.reason | contains("prepared but no workflow is active")) and
+  .item.next_action == "resume safely with gc dev-pack iterate wo-iterate-prepared" and
+  .item.human_iteration.state == "prepared" and .item.active_workflow_children == []
+' <<<"$prepared" >/dev/null
+
+running=$(DEV_PACK_WORK_NOW="$NOW" "$ROOT/dev-pack/commands/work/run.sh" show \
+  wo-iterate-running --citywide --no-network --json)
+jq -e '
+  .item.group == "in-flight" and
+  (.item.reason | contains("2 active workflow child")) and
+  .item.human_iteration.state == "launched" and
+  (.item.active_workflow_children | sort) == ["wo-iteration-review","wo-iteration-root"]
+' <<<"$running" >/dev/null
 
 local_approved=$(DEV_PACK_WORK_NOW="$NOW" "$ROOT/dev-pack/commands/work/run.sh" show \
   wo-local-approved --citywide --no-network --json)

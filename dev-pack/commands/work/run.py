@@ -185,8 +185,10 @@ def workflow_children(bead: dict[str, Any], all_beads: list[dict[str, Any]]) -> 
             ((lifecycle_artifact and str(local_change.get("artifact_id") or "") == lifecycle_artifact) or
              (isinstance(producer, dict) and str(producer.get("bead") or "") == str(bead_id)))
         )
+        workflow_work = str(metadata.get("gc.var.work_bead") or metadata.get("gc.var.bug_bead") or "")
         if (child.get("parent") == bead_id or metadata.get("gc.root_bead_id") == bead_id or
                 metadata.get("gc.human_source_bead") == bead_id or
+                metadata.get("gc.change_lifecycle") == bead_id or workflow_work == bead_id or
                 same_external_review or same_local_artifact):
             found.append(child)
     return found
@@ -561,6 +563,7 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
     age_seconds = max(0, int((now - changed).total_seconds()))
     output = metadata_json(bead, "gc.output_json")
     lifecycle = metadata_json(bead, "gc.lifecycle_json")
+    human_iteration = metadata_json(bead, "gc.human_iteration_json")
     schema = output_schema(bead, output)
     artifact = local_artifact(lifecycle, rig_path, children)
     adoption = adoption_handoff(children, rig_path)
@@ -639,6 +642,17 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
                 next_action = "choose update-original, request-author-apply, or supersede; work show explains each safe human path"
             else:
                 next_action = f"review and carry out the recommended human-only outcome: {outcome}"
+    elif (human_iteration and human_iteration.get("state") == "prepared" and
+          not active_children):
+        revision = human_iteration.get("revision")
+        group = "needs-you"
+        reason = f"human feedback revision {revision} is prepared but no workflow is active"
+        next_action = f"resume safely with gc dev-pack iterate {bead.get('id')}"
+    elif (human_iteration and human_iteration.get("state") in {"prepared", "launched"} and
+          active_children):
+        group = "in-flight"
+        reason = f"{len(active_children)} active workflow child(ren) belong to the human feedback iteration"
+        next_action = "monitor the active implementation/review workflow; its final approval will return this item to NEEDS YOU"
     elif github and github.get("available") and github.get("changed_since_review") is True:
         group = "needs-you"
         reason = "the current exact GitHub head differs from the exact reviewed head"
@@ -716,6 +730,7 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
         "superseded_active_workflow_children": [child.get("id") for child in superseded_active_children],
         "local_artifact": artifact,
         "local_handoff": local_handoff,
+        "human_iteration": human_iteration,
         "adoption_handoff": adoption,
         "github": github,
     }
