@@ -62,6 +62,12 @@ fi
 echo "==> bd init (embedded, stealth)"
 in_rig bd init --non-interactive --stealth -p "$PREFIX"
 
+# gc installs provider hooks into the rig during adoption when the city's
+# workspace.install_agent_hooks includes that provider. These are local city
+# integration files, not upstream project content, so keep them out of the
+# tracked checkout just like beads' own stealth-mode files.
+printf '\n# Gas City provider hooks (rig-local)\n.codex/\n' >> "$RIG_DIR/.git/info/exclude"
+
 # gc rig add --adopt hard-requires issue_prefix/issue-prefix already present
 # in .beads/config.yaml (fails: "--adopt requires a valid issue_prefix");
 # bare `bd init -p` reports the prefix but does not persist it to config.yaml.
@@ -109,6 +115,30 @@ if ! adopt_rig; then
     adopt_rig
   fi
 fi
+
+# Adoption currently writes the git origin into sync.remote even when
+# dolt.local-only was already set. Clear the value immediately instead of
+# leaving a window for remote patrol to clean up later. `bd config unset`
+# does not reliably remove this nested key in bd 1.1.0, while an empty value
+# is treated as unset.
+in_rig bd config set sync.remote ""
+
+# Register and seed the same local filesystem backup used by the city's
+# recurring mol-dog-backup order. A newly adopted database is not discovered
+# by that order until it has a DOLT_BACKUP entry of its own.
+dolt_status="$(in_city gc dolt status)"
+dolt_host="$(printf '%s\n' "$dolt_status" | sed -n 's/.*(managed, \([^:][^:]*\):[0-9][0-9]*).*/\1/p')"
+dolt_port="$(printf '%s\n' "$dolt_status" | sed -n 's/.*(managed, [^:][^:]*:\([0-9][0-9]*\)).*/\1/p')"
+dolt_database="$(jq -r '.dolt_database // empty' "$RIG_DIR/.beads/metadata.json")"
+if [ -z "$dolt_host" ] || [ -z "$dolt_port" ] || [ -z "$dolt_database" ]; then
+  echo "error: could not resolve Dolt endpoint/database for local backup" >&2
+  exit 1
+fi
+backup_dir="$CITY_ROOT/.dolt-backup/$dolt_database"
+backup_name="$dolt_database-backup"
+DOLT_CLI_PASSWORD='' dolt --host "$dolt_host" --port "$dolt_port" \
+  --user root --no-tls sql -q \
+  "USE \`$dolt_database\`; CALL DOLT_BACKUP('add', '$backup_name', 'file://$backup_dir'); CALL DOLT_BACKUP('sync', '$backup_name');"
 
 # Restore .gitignore to its exact pre-adopt state.
 if [ -n "$gitignore_snapshot" ]; then

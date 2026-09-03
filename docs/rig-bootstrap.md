@@ -31,8 +31,14 @@ Example: `assets/scripts/bootstrap-rig.sh https://github.com/vllm-project/vllm.g
 
 It clones the repo under `rigs/<prefix>`, initializes beads in stealth mode,
 hardens the Dolt config against ever wiring a remote, adopts the rig into
-gascity, and restores the rig's `.gitignore` to exactly what it was before —
-verified to leave zero uncommitted changes in the adopted repo.
+gascity, registers and seeds its local filesystem backup, and restores the
+rig's `.gitignore` to exactly what it was before — verified to leave zero
+uncommitted changes in the adopted repo.
+
+The city may also install provider integration under a rig-local `.codex/`
+directory during adoption (for example, `hooks.json`). The script adds that
+directory to `.git/info/exclude` before adoption so the integration remains
+available without appearing as upstream project content.
 
 ---
 
@@ -79,8 +85,14 @@ down the actual causes:
   unguarded, the periodic compactor/remote-patrol jobs retry-fail forever and
   the Dolt store bloats. This is exactly the incident fixed in commit
   `7b8d50b`. The script runs `bd config set dolt.local-only true` *before*
-  `gc rig add`, so the periodic doctor patrol strips that remote within
-  minutes instead of it sitting there live and unguarded.
+  `gc rig add`, then explicitly empties `sync.remote` immediately after
+  adoption (bd 1.1.0 does not reliably remove this nested key with `unset`).
+  This closes the window instead of waiting for periodic doctor patrol.
+- **New databases are not automatically registered with the filesystem backup
+  order.** Adoption leaves doctor warning that no Dolt backup exists. The
+  script resolves the managed server endpoint, adds the rig database's
+  `file://<city>/.dolt-backup/<database>` target, and performs its first sync;
+  the recurring `mol-dog-backup` order takes over afterward.
 
 ## Enable dev-pack on the rig
 
@@ -160,9 +172,9 @@ home:
 - `gc rig add --adopt` unconditionally seeds `sync.remote` from the rig's git
   origin — it should default to no remote (or take an explicit
   `--remote`/`--no-remote` flag) instead of inferring push intent from git
-  origin. Pre-setting `dolt.local-only` here closes the window fast, but it's
-  a timing mitigation, not a fix — there's still a brief gap between
-  `gc rig add` running and the next doctor patrol cycle.
+  origin. Pre-setting `dolt.local-only` plus immediately emptying the value
+  here closes the operational window, but the wrapper should not need to
+  correct an inferred remote in the first place.
 - `bd init -p <prefix>` reports the issue prefix but doesn't persist it to
   `config.yaml`, forcing the manual `printf` append in this script.
 
