@@ -14,6 +14,9 @@ hooks/
 # Python bytecode caches
 __pycache__/
 
+# Shared, lazily downloaded Go toolchains and build/module caches
+.go/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 .dolt-backup/

@@ -2,6 +2,11 @@
 provider = "codex"
 install_agent_hooks = ["codex"]
 
+[session]
+# Project test-environment bootstrap hooks may need to download a pinned runtime
+# on their first invocation. Warm starts still complete immediately.
+setup_timeout = "3m"
+
 [providers]
 [providers.claude]
 base = "builtin:claude"
@@ -424,158 +429,222 @@ includes = ["dev-pack"]
 agent = "pr-triage"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "pr-review-synthesizer"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "pr-arbiter"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "pr-runner"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "high" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "pr-follow-up"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "high" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "pr-chat"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "high" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.RigRoot}}"]
 
 [[rigs.patches]]
 agent = "bug-coordinator"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "high" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "feature-dev-frontier-xhigh"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "bug-worker-a-frontier-xhigh"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "bug-worker-b-frontier-xhigh"
 provider = "claude"
 option_defaults = { model = "claude-opus-5", effort = "xhigh" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "pr-reviewer-a-frontier-xhigh"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "xhigh" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "pr-reviewer-b-frontier-xhigh"
 provider = "claude"
 option_defaults = { model = "claude-opus-5", effort = "xhigh" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "feature-dev-frontier-high"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "high" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "bug-worker-a-frontier-high"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "high" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "bug-worker-b-frontier-high"
 provider = "claude"
 option_defaults = { model = "claude-opus-5", effort = "high" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "pr-reviewer-a-frontier-high"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "high" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "pr-reviewer-b-frontier-high"
 provider = "claude"
 option_defaults = { model = "claude-opus-5", effort = "high" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "feature-dev-frontier-medium"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "bug-worker-a-frontier-medium"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "bug-worker-b-frontier-medium"
 provider = "claude"
 option_defaults = { model = "claude-opus-5", effort = "medium" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "pr-reviewer-a-frontier-medium"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-sol", effort = "medium" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "pr-reviewer-b-frontier-medium"
 provider = "claude"
 option_defaults = { model = "claude-opus-5", effort = "medium" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "feature-dev-efficient-xhigh"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "xhigh" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "bug-worker-a-efficient-xhigh"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "xhigh" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "bug-worker-b-efficient-xhigh"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "xhigh" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "pr-reviewer-a-efficient-xhigh"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "xhigh" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "pr-reviewer-b-efficient-xhigh"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "xhigh" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "feature-dev-efficient-medium"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "medium" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "bug-worker-a-efficient-medium"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "medium" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "bug-worker-b-efficient-medium"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "medium" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "pr-reviewer-a-efficient-medium"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "medium" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
 
 [[rigs.patches]]
 agent = "pr-reviewer-b-efficient-medium"
 provider = "codex"
 option_defaults = { model = "gpt-5.6-luna", effort = "medium" }
+env = { GC_PREPARE_TEST_ENV = "/pvc/workspace/tools/paude-proxy/go-testenv.sh" }
+pre_start_append = ["/pvc/workspace/tools/paude-proxy/go-testenv.sh --src {{.WorkDir}}"]
