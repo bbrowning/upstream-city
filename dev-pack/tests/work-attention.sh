@@ -44,9 +44,12 @@ cat >"$TMP/hq.json" <<'JSON'
  {"id":"wo-wait","title":"Dependency-bound work","status":"blocked","priority":2,"issue_type":"task","owner":"human@example.com","created_at":"2026-08-20T00:00:00Z","updated_at":"2026-08-29T00:00:00Z","labels":["wait:dependency"]},
  {"id":"wo-unclear","title":"Unstarted work","status":"open","priority":2,"issue_type":"task","owner":"human@example.com","created_at":"2026-08-20T00:00:00Z","updated_at":"2026-08-20T00:00:00Z","labels":[]},
  {"id":"wo-finished","title":"Recently completed work","status":"closed","priority":2,"issue_type":"task","owner":"human@example.com","created_at":"2026-08-20T00:00:00Z","updated_at":"2026-08-31T20:00:00Z","closed_at":"2026-08-31T20:00:00Z","labels":[]},
+ {"id":"wo-local-approved","title":"Publish approved local feature","status":"closed","priority":1,"issue_type":"feature","owner":"human@example.com","created_at":"2026-08-31T20:00:00Z","updated_at":"2026-08-31T22:50:00Z","closed_at":"2026-08-31T22:50:00Z","metadata":{"gc.lifecycle_json":"{\"schema\":\"work-lifecycle.v1\",\"intent_kind\":\"feature\",\"checkpoint\":\"review\",\"disposition\":\"approved\",\"iteration\":1,\"artifact_id\":\"artifact-local\",\"head_sha\":\"head-local\",\"branch\":\"paude/wo-local-approved\",\"feedback_bead\":\"wo-local-review\",\"reason\":\"approve_with_nits\"}"},"labels":[]},
+ {"id":"wo-local-artifact","title":"local implementation artifact","status":"closed","priority":2,"issue_type":"task","owner":"automation","created_at":"2026-08-31T21:00:00Z","updated_at":"2026-08-31T22:00:00Z","closed_at":"2026-08-31T22:00:00Z","metadata":{"gc.kind":"retry","gc.output_json_schema":"feature-dev.v2","gc.output_json":"{\"schema\":\"feature-dev.v2\",\"summary\":\"Implemented the approved local feature.\",\"files_changed\":[\"src/feature.py\"],\"follow_ups\":[\"Run native integration tests before publication.\"],\"local_change\":{\"schema\":\"local-change.v1\",\"artifact_id\":\"artifact-local\",\"base\":{\"ref\":\"origin/main\",\"sha\":\"base-local\"},\"head\":{\"branch\":\"paude/wo-local-approved\",\"sha\":\"head-local\"},\"producer\":{\"bead\":\"wo-local-approved\",\"intent_kind\":\"feature\"},\"changed_paths\":[\"src/feature.py\"],\"verification\":[{\"command\":\"pytest -q\",\"result\":\"not run: toolchain unavailable\"}],\"worktree\":{\"path\":\"/tmp/local-approved-worktree\"}}}"},"labels":["internal"]},
  {"id":"wo-marker","title":"Intentionally visible","status":"open","priority":3,"issue_type":"task","owner":"automation","created_at":"2026-08-31T00:00:00Z","updated_at":"2026-08-31T00:00:00Z","labels":["human-facing"]},
  {"id":"wo-hidden-step","title":"retry implementation","status":"in_progress","priority":1,"issue_type":"task","owner":"human@example.com","parent":"wo-flight","created_at":"2026-08-31T00:00:00Z","updated_at":"2026-08-31T22:45:00Z","labels":["gc:step"]},
  {"id":"wo-message","title":"workflow result","status":"open","priority":1,"issue_type":"message","owner":"human@example.com","created_at":"2026-08-31T00:00:00Z","updated_at":"2026-08-31T22:45:00Z","labels":[]}
+ ,{"id":"wo-opted-out","title":"Acknowledged human work","status":"open","priority":1,"issue_type":"feature","owner":"human@example.com","created_at":"2026-08-31T00:00:00Z","updated_at":"2026-08-31T22:45:00Z","labels":["attention=false"]}
 ]
 JSON
 
@@ -69,23 +72,53 @@ export GC_BIN="$TMP/bin/gc" GC_CITY_PATH="$TMP/city" WORK_FIXTURE="$TMP"
 export GC_ATTENTION_ACTORS="human@example.com"
 NOW=2026-08-31T23:00:00Z
 
-json=$(DEV_PACK_WORK_NOW="$NOW" "$ROOT/dev-pack/commands/work/run.sh" --citywide --json)
+json=$(DEV_PACK_WORK_NOW="$NOW" "$ROOT/dev-pack/commands/work/run.sh" --citywide --all --json)
 jq -e '
   .schema_version == "dev-pack-work.v1" and
   ([.groups[] | select(.key == "needs-you") | .items[].id] | index("wo-action") != null) and
   ([.groups[] | select(.key == "needs-you") | .items[].id] | index("vllm-needs") != null) and
   ([.groups[] | select(.key == "needs-you") | .items[].id] | index("vllm-recheck") != null) and
+  ([.groups[] | select(.key == "needs-you") | .items[].id] | index("wo-local-approved") != null) and
   ([.groups[] | select(.key == "needs-you") | .items[].id] | index("vllm-adopt-source") != null) and
   ([.groups[] | select(.key == "in-flight") | .items[].id] | index("wo-flight") != null) and
   ([.groups[] | select(.key == "waiting") | .items[].id] | index("wo-wait") != null) and
   ([.groups[] | select(.key == "waiting") | .items[].id] | index("vllm-review") != null) and
   ([.groups[] | select(.key == "stale-unclear") | .items[].id] | index("wo-unclear") != null) and
   ([.groups[] | select(.key == "recently-finished") | .items[].id] | index("wo-finished") != null) and
+  ([.groups[] | select(.key == "recently-finished") | .items[].id] | index("wo-local-approved") == null) and
   ([.groups[].items[].id] | index("wo-marker") != null) and
   ([.groups[].items[].id] | index("wo-hidden-step") == null) and
   ([.groups[].items[].id] | index("wo-message") == null) and
+  ([.groups[].items[].id] | index("wo-opted-out") == null) and
   ([.groups[].items[].id] | index("vllm-adopt-result") == null)
 ' <<<"$json" >/dev/null
+
+local_approved=$(DEV_PACK_WORK_NOW="$NOW" "$ROOT/dev-pack/commands/work/run.sh" show \
+  wo-local-approved --citywide --no-network --json)
+jq -e '
+  .item.group == "needs-you" and
+  (.item.reason | contains("local-only artifact")) and
+  .item.local_handoff.state == "awaiting-human-publication-decision" and
+  .item.local_handoff.artifact_id == "artifact-local" and
+  .item.local_handoff.artifact_bead == "wo-local-artifact" and
+  .item.local_handoff.base_sha == "base-local" and
+  .item.local_handoff.head_sha == "head-local" and
+  .item.local_handoff.worktree == "/tmp/local-approved-worktree" and
+  .item.local_handoff.review_feedback_bead == "wo-local-review" and
+  .item.local_handoff.archive_command == "gc bd update wo-local-approved --add-label attention=false" and
+  .item.local_handoff.verification[0].result == "not run: toolchain unavailable" and
+  ([.evidence.workflow_children[].id] | index("wo-local-artifact") != null)
+' <<<"$local_approved" >/dev/null
+
+local_approved_text=$(DEV_PACK_WORK_NOW="$NOW" "$ROOT/dev-pack/commands/work/run.sh" show \
+  wo-local-approved --citywide --no-network)
+grep -Fq 'APPROVED LOCAL CHANGE — HUMAN HANDOFF' <<<"$local_approved_text"
+grep -Fq 'Nothing has been pushed, no pull request has been opened' <<<"$local_approved_text"
+grep -Fq 'gc dev-pack summary wo-local-review --full' <<<"$local_approved_text"
+grep -Fq 'git -C /tmp/local-approved-worktree diff base-local..head-local' <<<"$local_approved_text"
+grep -Fq 'pytest -q: not run: toolchain unavailable' <<<"$local_approved_text"
+grep -Fq 'git cherry-pick --no-commit base-local..head-local' <<<"$local_approved_text"
+grep -Fq 'gc bd update wo-local-approved --add-label attention=false' <<<"$local_approved_text"
 
 rig_json=$(cd "$TMP/city/rigs/vllm" && DEV_PACK_WORK_NOW="$NOW" GC_RIG=vllm \
   "$ROOT/dev-pack/commands/work/run.sh" --json)

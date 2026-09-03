@@ -33,8 +33,15 @@ internal may be inspected with `--verbose`.
 The groups combine canonical bead/workflow/local evidence with freshness-labeled,
 read-only GitHub PR observation. Exact current and reviewed heads are compared. A
 new author head, an externally closed/merged PR with an open source bead, or legacy
-review evidence missing its exact reviewed SHA is NEEDS YOU. Only closure of the
-human bead is RECENTLY FINISHED. Every ledger invocation uses bd's `--readonly`
+review evidence missing its exact reviewed SHA is NEEDS YOU. An approved local-only
+feature or hard-bug artifact is also NEEDS YOU after its automation bead closes:
+approval finishes the agent lifecycle, but a human must still inspect the exact diff
+and review, run outstanding verification, and decide whether to extract/publish or
+deliberately archive it. `work show` prints its immutable artifact, branch, base/head
+SHAs, durable worktree, verification gaps, a DCO-safe extraction recipe, and the exact
+`attention=false` acknowledgement command to use after publishing or deliberately
+declining publication. Other
+human-bead closure is RECENTLY FINISHED. Every ledger invocation uses bd's `--readonly`
 enforcement; GitHub calls are read-only and mail is never acknowledged or changed.
 The ordinary list/show path never reads or acknowledges mail; only explicit `audit`
 scans message beads under the same read-only ledger enforcement.

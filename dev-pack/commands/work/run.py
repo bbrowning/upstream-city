@@ -130,9 +130,14 @@ def is_internal(bead: dict[str, Any]) -> bool:
 
 def is_marked(bead: dict[str, Any]) -> bool:
     bead_labels = labels(bead)
-    if "attention=false" in bead_labels or "human-facing=false" in bead_labels:
+    if is_opted_out(bead):
         return False
     return bool(bead_labels & ATTENTION_LABELS)
+
+
+def is_opted_out(bead: dict[str, Any]) -> bool:
+    bead_labels = labels(bead)
+    return "attention=false" in bead_labels or "human-facing=false" in bead_labels
 
 
 def is_human_owned(bead: dict[str, Any], actors: set[str]) -> bool:
@@ -161,6 +166,8 @@ def wait_reason(bead: dict[str, Any]) -> str | None:
 
 def workflow_children(bead: dict[str, Any], all_beads: list[dict[str, Any]]) -> list[dict[str, Any]]:
     bead_id = bead.get("id")
+    lifecycle = metadata_json(bead, "gc.lifecycle_json") or {}
+    lifecycle_artifact = str(lifecycle.get("artifact_id") or "")
     external_ref = str(bead.get("external_ref") or "")
     external_number = external_ref[3:] if external_ref.startswith("gh-") else ""
     found: list[dict[str, Any]] = []
@@ -171,14 +178,22 @@ def workflow_children(bead: dict[str, Any], all_beads: list[dict[str, Any]]) -> 
             external_number and output and str(output.get("head_ref") or "") == external_number and
             output_schema(child, output).startswith("pr-review")
         )
+        local_change = (output or {}).get("local_change")
+        producer = local_change.get("producer") if isinstance(local_change, dict) else {}
+        same_local_artifact = bool(
+            isinstance(local_change, dict) and
+            ((lifecycle_artifact and str(local_change.get("artifact_id") or "") == lifecycle_artifact) or
+             (isinstance(producer, dict) and str(producer.get("bead") or "") == str(bead_id)))
+        )
         if (child.get("parent") == bead_id or metadata.get("gc.root_bead_id") == bead_id or
                 metadata.get("gc.human_source_bead") == bead_id or
-                same_external_review):
+                same_external_review or same_local_artifact):
             found.append(child)
     return found
 
 
-def local_artifact(lifecycle: dict[str, Any] | None, rig_path: str) -> dict[str, Any] | None:
+def local_artifact(lifecycle: dict[str, Any] | None, rig_path: str,
+                   children: list[dict[str, Any]] | None = None) -> dict[str, Any] | None:
     if not lifecycle:
         return None
     branch = lifecycle.get("branch") or lifecycle.get("local_branch")
@@ -187,6 +202,31 @@ def local_artifact(lifecycle: dict[str, Any] | None, rig_path: str) -> dict[str,
         key: lifecycle[key] for key in ("artifact_id", "branch", "head_sha", "revision", "disposition")
         if key in lifecycle
     }
+    artifact_id = str(lifecycle.get("artifact_id") or "")
+    artifact_candidates: list[tuple[int, dt.datetime, dict[str, Any], dict[str, Any], dict[str, Any]]] = []
+    for child in children or []:
+        output = metadata_json(child, "gc.output_json")
+        local_change = (output or {}).get("local_change")
+        if not isinstance(local_change, dict) or str(local_change.get("artifact_id") or "") != artifact_id:
+            continue
+        # Retry workflows copy the attempt output onto their durable logical
+        # bead. Prefer that stable bead over the ephemeral attempt, then newest.
+        durable = 0 if child.get("metadata", {}).get("gc.logical_bead_id") else 1
+        artifact_candidates.append((durable, child_time(child), child, output or {}, local_change))
+    if artifact_candidates:
+        _, _, child, output, local_change = max(artifact_candidates, key=lambda value: (value[0], value[1]))
+        base = local_change.get("base") if isinstance(local_change.get("base"), dict) else {}
+        worktree = local_change.get("worktree") if isinstance(local_change.get("worktree"), dict) else {}
+        result.update({
+            "artifact_bead": child.get("id"),
+            "base_ref": base.get("ref"),
+            "base_sha": base.get("sha"),
+            "worktree": worktree.get("path"),
+            "changed_paths": local_change.get("changed_paths") or (output or {}).get("files_changed") or [],
+            "verification": local_change.get("verification") or (output or {}).get("tests") or [],
+            "follow_ups": (output or {}).get("follow_ups") or [],
+            "implementation_summary": (output or {}).get("summary"),
+        })
     if not branch or not expected or not Path(rig_path, ".git").exists():
         return result or None
     probe = subprocess.run(
@@ -200,6 +240,59 @@ def local_artifact(lifecycle: dict[str, Any] | None, rig_path: str) -> dict[str,
         "matches_recorded_head": bool(actual and actual == expected),
     })
     return result
+
+
+def local_publication_handoff(bead: dict[str, Any], lifecycle: dict[str, Any] | None,
+                              artifact: dict[str, Any] | None, rig: str) -> dict[str, Any] | None:
+    if (not lifecycle or not artifact or lifecycle.get("intent_kind") not in {"feature", "hard_bug"} or
+            lifecycle.get("disposition") != "approved"):
+        return None
+    branch = str(artifact.get("branch") or "")
+    head = str(artifact.get("head_sha") or "")
+    worktree = str(artifact.get("worktree") or "")
+    base_sha = str(artifact.get("base_sha") or "")
+    base_ref = str(artifact.get("base_ref") or "")
+    location = worktree or "."
+    feedback = str(lifecycle.get("feedback_bead") or "")
+    summary_command = (f"gc dev-pack summary {shlex.quote(feedback)}{rig_arg(rig)} --full"
+                       if feedback else None)
+    inspect_commands = {
+        "status": f"git -C {shlex.quote(location)} status --short --branch",
+        "commits": (f"git -C {shlex.quote(location)} log --oneline --decorate "
+                    f"{shlex.quote(base_sha)}..{shlex.quote(head)}" if base_sha and head else None),
+        "diff": (f"git -C {shlex.quote(location)} diff {shlex.quote(base_sha)}..{shlex.quote(head)}"
+                 if base_sha and head else None),
+        "review": summary_command,
+    }
+    publish_branch = f"publish/{bead.get('id')}"
+    extraction = [
+        f"git switch -c {shlex.quote(publish_branch)} HUMAN_SELECTED_BASE",
+        (f"git cherry-pick --no-commit {shlex.quote(base_sha + '..' + head)}"
+         if base_sha and head else f"git cherry-pick --no-commit {shlex.quote(head)}" if head else None),
+        "git diff --cached",
+        "git commit --signoff",
+    ]
+    archive_command = (f"gc{rig_arg(rig)} bd update {shlex.quote(str(bead.get('id') or ''))} "
+                       "--add-label attention=false")
+    return {
+        "schema": "local-publication-handoff.v1",
+        "state": "awaiting-human-publication-decision",
+        "artifact_id": artifact.get("artifact_id"),
+        "artifact_bead": artifact.get("artifact_bead"),
+        "branch": branch or None,
+        "head_sha": head or None,
+        "base_ref": base_ref or None,
+        "base_sha": base_sha or None,
+        "worktree": worktree or None,
+        "review_feedback_bead": feedback or None,
+        "implementation_summary": artifact.get("implementation_summary"),
+        "changed_paths": artifact.get("changed_paths") or [],
+        "verification": artifact.get("verification") or [],
+        "follow_ups": artifact.get("follow_ups") or [],
+        "inspect_commands": inspect_commands,
+        "extraction_commands": [command for command in extraction if command],
+        "archive_command": archive_command,
+    }
 
 
 def child_time(bead: dict[str, Any]) -> dt.datetime:
@@ -469,10 +562,11 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
     output = metadata_json(bead, "gc.output_json")
     lifecycle = metadata_json(bead, "gc.lifecycle_json")
     schema = output_schema(bead, output)
-    artifact = local_artifact(lifecycle, rig_path)
+    artifact = local_artifact(lifecycle, rig_path, children)
     adoption = adoption_handoff(children, rig_path)
     if adoption and adoption.get("local_artifact"):
         artifact = adoption["local_artifact"]
+    local_handoff = local_publication_handoff(bead, lifecycle, artifact, rig)
     child_outputs = [child for child in children if metadata_json(child, "gc.output_json")]
     final_output_children = [
         child for child in child_outputs
@@ -501,7 +595,18 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
         github["changed_since_review"] = (None if not reviewed_sha or not github.get("current_head_sha")
                                             else reviewed_sha != github.get("current_head_sha"))
         github["reviewed_head_uncertainty"] = reviewed_uncertainty
-    if status == "closed":
+    if status == "closed" and local_handoff:
+        group = "needs-you"
+        if artifact.get("branch_present") is False:
+            reason = "the approved local-only artifact needs human disposition, but its recorded branch is missing"
+            next_action = "recover or deliberately retire the approved artifact; work show provides the immutable provenance"
+        elif artifact.get("matches_recorded_head") is False:
+            reason = "the approved local-only branch moved after review and needs human inspection"
+            next_action = "inspect branch drift before extracting or publishing anything; work show shows both recorded and current heads"
+        else:
+            reason = "automation approved an exact local-only artifact that still needs human inspection and a publication decision"
+            next_action = "inspect the review and diff, run outstanding verification, then extract/publish or deliberately archive the change; work show provides exact pointers"
+    elif status == "closed":
         group = "recently-finished"
         reason = "the human-facing bead itself is closed"
         next_action = "none; reopen only if the human disposition changes"
@@ -610,6 +715,7 @@ def classify(bead: dict[str, Any], children: list[dict[str, Any]], now: dt.datet
         "active_workflow_children": [child.get("id") for child in active_children],
         "superseded_active_workflow_children": [child.get("id") for child in superseded_active_children],
         "local_artifact": artifact,
+        "local_handoff": local_handoff,
         "adoption_handoff": adoption,
         "github": github,
     }
@@ -933,6 +1039,60 @@ def render_adoption_handoff(handoff: dict[str, Any], github: dict[str, Any] | No
     print(f"\nRecorded recommendation: {handoff.get('recommended_upstream_action')}")
 
 
+def render_local_publication_handoff(handoff: dict[str, Any]) -> None:
+    print("\nAPPROVED LOCAL CHANGE — HUMAN HANDOFF")
+    print("The automated implementation/review lifecycle is complete for this exact local artifact.")
+    print("Nothing has been pushed, no pull request has been opened, and no human publication decision is recorded.")
+    print(f"Artifact: {handoff.get('artifact_id') or 'unknown'}")
+    if handoff.get("artifact_bead"):
+        print(f"Artifact evidence bead: {handoff['artifact_bead']}")
+    print(f"Reviewed branch: {handoff.get('branch') or 'unknown'}")
+    print(f"Reviewed HEAD: {handoff.get('head_sha') or 'unknown'}")
+    if handoff.get("base_sha"):
+        print(f"Reviewed base: {handoff['base_sha']} ({handoff.get('base_ref') or 'recorded base'})")
+    print(f"Durable worktree: {handoff.get('worktree') or 'not recorded'}")
+
+    summary = handoff.get("implementation_summary")
+    if summary:
+        print(f"\nImplementation summary:\n{summary}")
+    changed = handoff.get("changed_paths") or []
+    if changed:
+        print("\nChanged paths:")
+        for path in changed:
+            print(f"  {path}")
+
+    commands = handoff.get("inspect_commands") or {}
+    print("\n1. INSPECT THE EXACT REVIEWED RESULT")
+    if commands.get("review"):
+        print(f"Full synthesized review:\n{commands['review']}")
+    if commands.get("status"):
+        print(f"Confirm worktree state:\n{commands['status']}")
+    if commands.get("commits"):
+        print(f"Inspect the reviewed commit series:\n{commands['commits']}")
+    if commands.get("diff"):
+        print(f"Inspect the complete reviewed diff:\n{commands['diff']}")
+
+    print("\n2. RUN OUTSTANDING VERIFICATION")
+    verification = handoff.get("verification") or []
+    if verification:
+        for check in verification:
+            if isinstance(check, dict):
+                print(f"  {check.get('command') or 'unspecified check'}: {check.get('result') or 'unknown'}")
+    else:
+        print("  Review the repository's native test, formatting, and lint requirements before publication.")
+    for follow_up in handoff.get("follow_ups") or []:
+        print(f"  Follow-up: {follow_up}")
+
+    print("\n3. EXTRACT AND PUBLISH ONLY AFTER HUMAN REVIEW")
+    print("Transfer the reviewed commit/object to your trusted publishing clone first. If human DCO certification is required, extract without committing and create a new human-authored commit:")
+    for command in handoff.get("extraction_commands") or []:
+        print(command)
+    print("Then push and open the pull request using your normal human-controlled workflow.")
+    print("\nAFTER YOUR DECISION")
+    print("After publishing, or after deliberately deciding not to publish, archive this attention reminder:")
+    print(handoff["archive_command"])
+
+
 def main() -> int:
     args = parser().parse_args()
     if args.watch:
@@ -1071,6 +1231,8 @@ def main() -> int:
         marked = is_marked(bead)
         exact_show = args.subcommand == "show" and (
             bead.get("id") == args.target or bead.get("external_ref") == args.target)
+        if not exact_show and is_opted_out(bead):
+            continue
         if not exact_show and not marked and not is_human_owned(bead, actors):
             continue
         if not exact_show and is_internal(bead) and not (args.verbose and marked):
@@ -1118,6 +1280,8 @@ def main() -> int:
             print(item["title"])
             if item.get("upstream_completion"):
                 render_upstream_completion(item["upstream_completion"])
+            elif item.get("local_handoff"):
+                render_local_publication_handoff(item["local_handoff"])
             elif item.get("status") == "closed":
                 pass
             elif item.get("adoption_handoff"):
