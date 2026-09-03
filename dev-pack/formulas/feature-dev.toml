@@ -80,7 +80,12 @@ Method (see your feature-dev prompt for detail):
   +refs/heads/<branch>:refs/remotes/<remote>/<branch>`. This is read-only with
   respect to the remote. When false, contact no remote and record base freshness
   as unverified. Resolve the requested `{{base}}` verbatim, then
+  For revision 1, resolve the requested `{{base}}` verbatim, then
   `git switch -c paude/{{work_bead}} {{base}}` — one branch per assignment.
+  For revision >1, read the exact `dev-pack-human-feedback.v1` or review output
+  from `{{feedback_bead}}`, verify the existing branch is still at its predecessor
+  HEAD, and switch to that branch without recreating, rebasing, or fetching it.
+  Apply only the scoped feedback recorded on that bead.
 - Before design or editing, load base plus only path/subsystem-matched personas through
   the `design` lens; reload through `implementation` when the actual path set is known.
 - Make the smallest change that fully does the job; keep unrelated edits out.
@@ -117,7 +122,8 @@ as awaiting review (never close it here):
   bash "$GC_CITY_PATH/dev-pack/assets/scripts/update-work-lifecycle.sh" \
     --bead {{work_bead}} --intent feature --checkpoint implementation \
     --disposition awaiting_review --iteration {{revision}} \
-    --artifact-id <artifact_id> --head-sha <head_sha> --branch <branch>
+    --artifact-id <artifact_id> --artifact-ref <this-implement-step-bead> \
+    --head-sha <head_sha> --branch <branch>
 Embed its JSON verbatim as `local_change` in this `feature-dev.v2` object, then
 finish atomically with `emit-json.sh` (schema `feature-dev.v2`).
 

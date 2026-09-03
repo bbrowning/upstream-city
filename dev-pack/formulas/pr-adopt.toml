@@ -106,7 +106,8 @@ variables. Mark only the internal adoption bead awaiting review:
 
   update-work-lifecycle.sh --rig {{.Rig}} --bead {{work_bead}} --intent pr_adopt \
     --checkpoint implementation --disposition awaiting_review --iteration {{revision}} \
-    --artifact-id <artifact_id> --head-sha <head_sha> --branch {{branch}}
+    --artifact-id <artifact_id> --artifact-ref <this-implement-step-bead> \
+    --head-sha <head_sha> --branch {{branch}}
 
 Never update or close `{{human_disposition_bead}}`. Embed the complete artifact in
 a `pr-adopt.v1` result with branch, head_sha, source_head_sha, target_base_sha,

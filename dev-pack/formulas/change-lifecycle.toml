@@ -184,7 +184,8 @@ Write the synthesis and settle JSON from your needs edge to unique temporary fil
 run:
   bash "$GC_CITY_PATH/dev-pack/assets/scripts/decide-change-lifecycle.sh" \
     --rig {{.Rig}} --work-bead {{work_bead}} --intent {{intent_kind}} \
-    --artifact-id {{implementation_artifact_id}} --head-sha {{head_ref}} \
+    --artifact-id {{implementation_artifact_id}} --artifact-ref {{implementation_artifact_ref}} \
+    --head-sha {{head_ref}} \
     --branch {{implementation_branch}} --revision {{implementation_revision}} \
     --max-iterations {{max_iterations}} --synthesis-file <synthesis.json> \
     --settle-file <settle.json> --feedback-bead <authoritative-verdict-bead> \

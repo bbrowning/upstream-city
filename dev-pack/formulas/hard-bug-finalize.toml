@@ -85,7 +85,11 @@ description = """
 Implement the converged fix for arc `{{bug_bead}}`, working ONLY in your own
 worktree. Read the agreed root cause and fix plan from `{{bug_bead}}`'s
 hard-bug-state.v1 and the fix-phase lane outputs. Branch off `{{base}}`:
-`git switch -c {{branch_prefix}}{{bug_bead}} {{base}}`. Make the smallest change that fully
+For revision 1, use `git switch -c {{branch_prefix}}{{bug_bead}} {{base}}`.
+For revision >1, read the exact `dev-pack-human-feedback.v1` or review output from
+`{{feedback_bead}}`, verify the existing branch is still at its predecessor HEAD,
+and switch to it without recreating, rebasing, or fetching it. Apply only that
+scoped feedback. Make the smallest change that fully
 fixes the ROOT CAUSE; add the planned tests; RUN them (and existing suites covering
 the area); fix anything they reveal; commit with a concise imperative subject and one
 complete what/why body (message file or one subject plus one body argument; never one
@@ -125,7 +129,8 @@ then mark the parent arc as awaiting review without closing it:
   bash "$GC_CITY_PATH/dev-pack/assets/scripts/update-work-lifecycle.sh" \
     --bead {{bug_bead}} --intent hard_bug --checkpoint implementation \
     --disposition awaiting_review --iteration <revision> \
-    --artifact-id <artifact_id> --head-sha <head_sha> --branch <branch>
+    --artifact-id <artifact_id> --artifact-ref <this-implement-step-bead> \
+    --head-sha <head_sha> --branch <branch>
 then finish:
   bash "$GC_CITY_PATH/dev-pack/assets/scripts/emit-json.sh" --bead <your-step-bead> \\
     --json-file "$out" --schema hard-bug-implement.v2 --outcome pass

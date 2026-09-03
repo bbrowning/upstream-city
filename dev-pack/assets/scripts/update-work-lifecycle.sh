@@ -4,7 +4,8 @@ set -euo pipefail
 
 GC="${GC_BIN:-gc}"
 CITY="" ; RIG="" ; BEAD="" ; INTENT="" ; CHECKPOINT="" ; DISPOSITION=""
-ITERATION="0" ; ARTIFACT_ID="" ; HEAD_SHA="" ; BRANCH="" ; FEEDBACK_BEAD="" ; REASON=""
+ITERATION="0" ; ARTIFACT_ID="" ; ARTIFACT_REF="" ; HEAD_SHA="" ; BRANCH="" ; FEEDBACK_BEAD="" ; REASON=""
+PREDECESSOR_JSON=""
 
 die() { printf '%s\n' "update-work-lifecycle: $*" >&2; exit 2; }
 while [ $# -gt 0 ]; do
@@ -17,10 +18,12 @@ while [ $# -gt 0 ]; do
         --disposition) DISPOSITION="${2:?}"; shift 2 ;; --disposition=*) DISPOSITION="${1#*=}"; shift ;;
         --iteration) ITERATION="${2:?}"; shift 2 ;; --iteration=*) ITERATION="${1#*=}"; shift ;;
         --artifact-id) ARTIFACT_ID="${2:?}"; shift 2 ;; --artifact-id=*) ARTIFACT_ID="${1#*=}"; shift ;;
+        --artifact-ref) ARTIFACT_REF="${2:?}"; shift 2 ;; --artifact-ref=*) ARTIFACT_REF="${1#*=}"; shift ;;
         --head-sha) HEAD_SHA="${2:?}"; shift 2 ;; --head-sha=*) HEAD_SHA="${1#*=}"; shift ;;
         --branch) BRANCH="${2:?}"; shift 2 ;; --branch=*) BRANCH="${1#*=}"; shift ;;
         --feedback-bead) FEEDBACK_BEAD="${2:?}"; shift 2 ;; --feedback-bead=*) FEEDBACK_BEAD="${1#*=}"; shift ;;
         --reason) REASON="${2:?}"; shift 2 ;; --reason=*) REASON="${1#*=}"; shift ;;
+        --predecessor-json) PREDECESSOR_JSON="${2:?}"; shift 2 ;; --predecessor-json=*) PREDECESSOR_JSON="${1#*=}"; shift ;;
         -*) die "unknown option '$1'" ;; *) die "unexpected argument '$1'" ;;
     esac
 done
@@ -32,6 +35,13 @@ case "$DISPOSITION" in implementing|awaiting_review|settling|request_changes|blo
     *) die "invalid --disposition '$DISPOSITION'" ;;
 esac
 case "$ITERATION" in ''|*[!0-9]*) die "--iteration must be a non-negative integer" ;; esac
+if [ -n "$PREDECESSOR_JSON" ]; then
+    printf '%s' "$PREDECESSOR_JSON" | jq -e '
+      type == "object" and (.artifact_id|type == "string") and
+      (.revision|type == "number") and (.head_sha|type == "string") and
+      (.branch|type == "string")' >/dev/null \
+        || die "--predecessor-json must name an exact artifact revision/head/branch"
+fi
 if [ "$DISPOSITION" = "approved" ]; then
     [ -n "$ARTIFACT_ID" ] && [ -n "$HEAD_SHA" ] && [ -n "$BRANCH" ] \
         || die "approved disposition requires --artifact-id, --head-sha, and --branch"
@@ -60,11 +70,15 @@ updated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 lifecycle=$(jq -cn --arg schema work-lifecycle.v1 --arg intent "$INTENT" \
     --arg checkpoint "$CHECKPOINT" --arg disposition "$DISPOSITION" \
     --argjson iteration "$ITERATION" --arg artifact "$ARTIFACT_ID" --arg head "$HEAD_SHA" \
-    --arg branch "$BRANCH" --arg feedback "$FEEDBACK_BEAD" --arg reason "$REASON" --arg updated "$updated_at" \
+    --arg artifact_ref "$ARTIFACT_REF" --arg branch "$BRANCH" --arg feedback "$FEEDBACK_BEAD" \
+    --arg reason "$REASON" --arg updated "$updated_at" \
+    --argjson predecessor "${PREDECESSOR_JSON:-null}" \
     '{schema:$schema,intent_kind:$intent,checkpoint:$checkpoint,disposition:$disposition,
       iteration:$iteration,artifact_id:(if $artifact=="" then null else $artifact end),
+      artifact_ref:(if $artifact_ref=="" then null else $artifact_ref end),
       head_sha:(if $head=="" then null else $head end),branch:(if $branch=="" then null else $branch end),
-      feedback_bead:(if $feedback=="" then null else $feedback end),reason:$reason,updated_at:$updated}')
+      feedback_bead:(if $feedback=="" then null else $feedback end),reason:$reason,updated_at:$updated}
+      + (if $predecessor == null then {} else {predecessor:$predecessor} end)')
 
 "${gc_cmd[@]}" bd update "$BEAD" --status in_progress --set-metadata "gc.lifecycle_json=$lifecycle" >/dev/null
 stored=$("${gc_cmd[@]}" bd show "$BEAD" --json) || die "could not verify lifecycle state for $BEAD"

@@ -6,7 +6,7 @@ GC="${GC_BIN:-gc}"
 CITY="${GC_CITY_PATH:-${GC_CITY:-$PWD}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPDATE="$SCRIPT_DIR/update-work-lifecycle.sh"
-RIG="" WORK_BEAD="" INTENT="" ARTIFACT_ID="" HEAD_SHA="" BRANCH=""
+RIG="" WORK_BEAD="" INTENT="" ARTIFACT_ID="" ARTIFACT_REF="" HEAD_SHA="" BRANCH=""
 REVISION="" MAX_ITERATIONS="" SYNTHESIS_FILE="" SETTLE_FILE="" FEEDBACK_BEAD=""
 SYNTHESIS_BEAD="" SETTLEMENT_BEAD=""
 REVISION_FORMULA="" REVISION_TARGET="" BASE="" BRANCH_PREFIX=""
@@ -22,6 +22,7 @@ while [ $# -gt 0 ]; do
     --work-bead) WORK_BEAD="${2:?}"; shift 2 ;; --work-bead=*) WORK_BEAD="${1#*=}"; shift ;;
     --intent) INTENT="${2:?}"; shift 2 ;; --intent=*) INTENT="${1#*=}"; shift ;;
     --artifact-id) ARTIFACT_ID="${2:?}"; shift 2 ;; --artifact-id=*) ARTIFACT_ID="${1#*=}"; shift ;;
+    --artifact-ref) ARTIFACT_REF="${2:?}"; shift 2 ;; --artifact-ref=*) ARTIFACT_REF="${1#*=}"; shift ;;
     --head-sha) HEAD_SHA="${2:?}"; shift 2 ;; --head-sha=*) HEAD_SHA="${1#*=}"; shift ;;
     --branch) BRANCH="${2:?}"; shift 2 ;; --branch=*) BRANCH="${1#*=}"; shift ;;
     --revision) REVISION="${2:?}"; shift 2 ;; --revision=*) REVISION="${1#*=}"; shift ;;
@@ -73,6 +74,7 @@ case "$verdict" in approve|approve_with_nits|request_changes|blocked) ;; *) die 
 common=(--city "$CITY" --rig "$RIG" --bead "$WORK_BEAD" --intent "$INTENT"
   --checkpoint review --iteration "$REVISION" --artifact-id "$ARTIFACT_ID"
   --head-sha "$HEAD_SHA" --branch "$BRANCH" --feedback-bead "$FEEDBACK_BEAD")
+[ -z "$ARTIFACT_REF" ] || common+=(--artifact-ref "$ARTIFACT_REF")
 
 case "$verdict" in
   approve|approve_with_nits)

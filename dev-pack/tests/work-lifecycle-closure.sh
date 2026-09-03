@@ -38,6 +38,9 @@ case "${1-} ${2-}" in
   "bd close")
     jq '.status="closed"' "${MOCK_GC_STATE}" >"${MOCK_GC_STATE}.next"
     mv "${MOCK_GC_STATE}.next" "${MOCK_GC_STATE}" ;;
+  "bd reopen")
+    jq '.status="open"' "${MOCK_GC_STATE}" >"${MOCK_GC_STATE}.next"
+    mv "${MOCK_GC_STATE}.next" "${MOCK_GC_STATE}" ;;
   *) printf 'unexpected gc call: %s\n' "$*" >&2; exit 99 ;;
 esac
 GC
@@ -55,7 +58,7 @@ done
 update() { "$UPDATE" --bead work-1 --intent feature "$@"; }
 
 update --checkpoint implementation --disposition awaiting_review --iteration 1 \
-  --artifact-id artifact-1 --head-sha head-1 --branch feature/work-1
+  --artifact-id artifact-1 --artifact-ref implementation-1 --head-sha head-1 --branch feature/work-1
 ! grep -q 'bd close work-1' "$TMP/gc.log" || fail "implementation closed parent work"
 
 update --checkpoint review --disposition request_changes --iteration 1 \
@@ -84,5 +87,16 @@ update --checkpoint review --disposition approved --iteration 3 \
 jq -e '.status == "closed" and (.metadata["gc.lifecycle_json"] | fromjson |
   .disposition == "approved" and .artifact_id == "artifact-3" and .head_sha == "head-3")' \
   "$TMP/state.json" >/dev/null || fail "approved terminal state missing"
+
+# A dedicated human action may explicitly reopen the terminal checkpoint, retain
+# its exact predecessor, and begin a later monotonic revision.
+predecessor='{"artifact_ref":"implementation-3","artifact_id":"artifact-3","revision":3,"head_sha":"head-3","branch":"feature/work-1"}'
+"$GC_BIN" bd reopen work-1
+update --checkpoint human_feedback --disposition implementing --iteration 4 \
+  --feedback-bead feedback-4 --reason request_changes --predecessor-json "$predecessor"
+jq -e '.status == "in_progress" and (.metadata["gc.lifecycle_json"] | fromjson |
+  .checkpoint == "human_feedback" and .disposition == "implementing" and .iteration == 4 and
+  .feedback_bead == "feedback-4" and .predecessor.artifact_id == "artifact-3")' \
+  "$TMP/state.json" >/dev/null || fail "human feedback did not establish a legal reopened checkpoint"
 
 printf 'work lifecycle closure: ok\n'

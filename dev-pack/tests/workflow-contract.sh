@@ -57,6 +57,15 @@ bug=$(GC_BIN=gc "$ROOT/dev-pack/commands/bug/run.sh" paude-bug --rig paude --dry
 for expected in 'preset=quality' 'review_n=2' 'max_review_iterations=3' 'local_only=true' 'completion=approved'; do
   printf '%s' "$feature" | grep -q "$expected" || fail "feature dry-run drift: $expected"
 done
+
+iterate_help=$(gc dev-pack iterate --help)
+for phrase in 'approved, closed dev-pack feature or hard bug' '--file' '--max-review-iterations' \
+  '--dry-run' 'never fetches' 'never' 'mutates a remote'; do
+  printf '%s' "$iterate_help" | grep -Fq -- "$phrase" || fail "iterate help missing human revision contract: $phrase"
+done
+for flag in --file --max-review-iterations --dry-run; do
+  grep -q -- "$flag" "$ROOT/dev-pack/commands/iterate/run.py" || fail "iterate parser lacks documented $flag"
+done
 for expected in 'preset=quality' 'diagnosis_n=2' 'loop=true' 'review_n=2' 'max_rounds=3' 'max_review_iterations=3' 'local_only=true'; do
   printf '%s' "$bug" | grep -q "$expected" || fail "bug dry-run drift: $expected"
 done
@@ -135,6 +144,8 @@ docs=$(printf '%s\n' "$ROOT/README.md" "$ROOT/dev-pack/README.md")
 for phrase in 'Implement this feature' 'Fix this bug' 'Review PR N'; do
   grep -q "$phrase" $docs || fail "quickstart missing human request: $phrase"
 done
+grep -Fq 'gc dev-pack iterate' "$ROOT/dev-pack/README.md" \
+  || fail 'canonical guide missing human feedback iteration workflow'
 for phrase in 'N=2 independent review' 'strict synthesis' 'evidence settlement' \
   'maximum 3 revisions' 'branch + exact HEAD SHA' 'gc.lead_escalation_json' \
   'Copy-paste verification' 'local-only' 'AI attribution is not DCO certification' \

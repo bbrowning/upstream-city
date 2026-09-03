@@ -16,6 +16,8 @@ Start with the rig lead in plain language:
 The explicit operator equivalents are `gc dev-pack feature <bead>`, `gc dev-pack bug
 <bead>`, and `gc dev-pack review <PR> --rig <rig>`. Quality is the default. `--fast`
 or `--solo` is an explicit N=1 opt-down; bug `--report-only` stops after diagnosis.
+After approved local work closes, use `gc dev-pack iterate <bead> "<feedback>"` to
+record human feedback and run another lineage-preserving implementation/review pass.
 See [dev-pack/README.md](dev-pack/README.md) for lifecycle monitoring, recovery,
 escalation, exact defaults, and copy-paste verification.
 Use `gc dev-pack work` for the bounded, read-only current attention view across HQ

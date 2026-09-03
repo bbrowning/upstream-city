@@ -174,7 +174,7 @@ jq -e '(.metadata["gc.lead_escalation_json"] | fromjson |
 printf '%s\n' '{"schema":"pr-review-quorum.v1","verdict":"request_changes","has_disputed_major":false}' >"$TMP/bug-request.json"
 : >"$TMP/gc.log"
 "$DECIDE" --rig fixture --work-bead fixture-hard_bug --intent hard_bug \
-  --artifact-id "$BUG_ID" --head-sha "$BUG_HEAD" --branch bug/lifecycle \
+  --artifact-id "$BUG_ID" --artifact-ref fixture-bug-implement --head-sha "$BUG_HEAD" --branch bug/lifecycle \
   --revision 1 --max-iterations 3 --synthesis-file "$TMP/bug-request.json" \
   --feedback-bead synth-bug --revision-formula hard-bug-finalize \
   --revision-target fixture/bug-worker-a-frontier-xhigh --base "$BASE_SHA" \
@@ -196,11 +196,12 @@ printf '%s\n' '{"schema":"pr-review-quorum.v1","verdict":"request_changes","has_
 printf '%s\n' '{"schema":"pr-review-settle.v1","settled_verdict":"approve"}' >"$TMP/bug-settle.json"
 : >"$TMP/gc.log"
 "$DECIDE" --rig fixture --work-bead fixture-hard_bug --intent hard_bug \
-  --artifact-id "$BUG_ID" --head-sha "$BUG_HEAD" --branch bug/lifecycle \
+  --artifact-id "$BUG_ID" --artifact-ref fixture-bug-implement --head-sha "$BUG_HEAD" --branch bug/lifecycle \
   --revision 1 --max-iterations 3 --synthesis-file "$TMP/bug-synth.json" \
   --settle-file "$TMP/bug-settle.json" --feedback-bead settle-bug >"$TMP/bug-decision.json"
 jq -e '.action == "approved" and .effective_verdict == "approve"' "$TMP/bug-decision.json" >/dev/null
-jq -e '.status == "closed" and (.metadata["gc.lifecycle_json"] | fromjson | .artifact_id == $id and .head_sha == $head)' \
+jq -e '.status == "closed" and (.metadata["gc.lifecycle_json"] | fromjson |
+  .artifact_id == $id and .artifact_ref == "fixture-bug-implement" and .head_sha == $head)' \
   --arg id "$BUG_ID" --arg head "$BUG_HEAD" "$TMP/state.json" >/dev/null || fail 'settled approval did not close exact checkpoint'
 ! grep -q ' sling ' "$TMP/gc.log" || fail 'settled approval launched an unnecessary revision'
 

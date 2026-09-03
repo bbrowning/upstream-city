@@ -205,6 +205,18 @@ per-bead lock shared across worktrees, and require `gc.output_json` to still be 
 A competing or stale writer therefore fails closed instead of overwriting a durable
 verdict, bug result, feature handoff, or follow-up answer.
 
+## Human-requested artifact iteration
+
+`gc dev-pack iterate` is the explicit transition from a closed approved feature or
+hard-bug checkpoint back to implementation. Under a per-work lock it validates the
+approved lifecycle tuple and current local branch, creates a closed
+`dev-pack-human-feedback.v1` evidence bead, records the predecessor tuple, and reopens
+the parent at `human_feedback/implementing`. The next artifact keeps a monotonic
+revision number and names the predecessor artifact plus feedback bead. A stable
+feedback-bead workflow scope makes interrupted dispatch resumable without duplication.
+Each explicit human request receives a fresh bounded review budget; it never fetches,
+rebases, publishes, or mutates a remote.
+
 ## Human attention projection
 
 `gc dev-pack work` is a CLI projection over existing authority, not a workflow or

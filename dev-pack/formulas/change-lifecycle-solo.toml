@@ -127,7 +127,9 @@ hold, and leaves the parent open. Emit change-lifecycle-final.v1. Never mutate a
 
 Write the review JSON to a unique temporary synthesis file, adding
 has_disputed_major=false, then invoke decide-change-lifecycle.sh with every exact value
-named by this step (artifact/head/branch/revision/bound, revision formula/target/base,
+named by this step (`--artifact-id {{implementation_artifact_id}}`,
+`--artifact-ref {{implementation_artifact_ref}}`, head/branch/revision/bound,
+revision formula/target/base,
 and hard-bug targets when present), `--feedback-bead <review-step-bead>`,
 `--synthesis-bead <review-step-bead>`, and
 `--review-n 1 --lane-a-target {{lane_a_target}}`. For pr_adopt also pass

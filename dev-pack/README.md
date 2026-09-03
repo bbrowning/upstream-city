@@ -93,9 +93,6 @@ Ask `<rig>/lead` to implement the feature, or dispatch an existing rig bead:
 
 ```bash
 gc dev-pack feature vllm-123
-gc dev-pack feature vllm-123 --fast
-gc dev-pack feature vllm-123 --review-n 2 \
-  --review-lanes vllm/pr-reviewer-a-frontier-high,vllm/pr-reviewer-b-frontier-high
 gc dev-pack feature vllm-123 --dry-run
 ```
 
@@ -105,15 +102,25 @@ uses evidence settlement for disputed major findings, and either approves the
 artifact or requests another bounded revision. The tracking bead does not close
 on the implementer's self-report.
 
+To continue an approved, closed feature or bug from explicit human feedback:
+
+```bash
+gc dev-pack iterate vllm-123 "Address findings 2 and 4 only."
+gc dev-pack iterate vllm-123 --file feedback.md
+gc dev-pack iterate vllm-123  # opens $VISUAL/$EDITOR/vi
+```
+
+`iterate` infers the intent, predecessor artifact, revision, branch, and implementation
+target. It records a separate feedback bead, legally reopens the parent, and starts a
+fresh bounded review pass without fetching, rebasing, or mutating a remote.
+
 ## Hard-bug work
 
 Ask `<rig>/lead` to fix the bug, or dispatch its rig bead:
 
 ```bash
 gc dev-pack bug vllm-456
-gc dev-pack bug vllm-456 --fast
 gc dev-pack bug vllm-456 --report-only
-gc dev-pack bug vllm-456 --n 2 --review-n 1
 gc dev-pack bug vllm-456 --dry-run
 ```
 
@@ -135,11 +142,7 @@ implementation-output bead:
 
 ```bash
 gc dev-pack review 53174 --rig vllm
-gc dev-pack review vllm#53174 --fast
-gc dev-pack review paude/vllm-123 --rig vllm --base origin/main
 gc dev-pack review --artifact /path/to/local-change.json --rig vllm
-gc dev-pack review <implementation-step-bead> --rig vllm
-gc dev-pack review 53174 --rig vllm --lanes a-frontier-high,b-frontier-high
 gc dev-pack review 53174 --rig vllm --dry-run
 ```
 
@@ -160,7 +163,6 @@ evidence. Re-render a stored verdict without an LLM:
 
 ```bash
 gc dev-pack summary 53174
-gc dev-pack summary <verdict-bead>
 ```
 
 ### Materialize a reviewed PR
@@ -169,16 +171,10 @@ Create a durable human-owned checkout of the real PR:
 
 ```bash
 gc dev-pack materialize 53174 --rig vllm
-cd <city>/pr-worktrees/vllm/pr-53174
-git diff origin/main...HEAD
 ```
 
 Re-running is idempotent. Use `--force` to refresh a moved PR head, which
-discards local changes in that materialized tree. Remove it when finished:
-
-```bash
-gc dev-pack materialize 53174 --rig vllm --remove
-```
+discards local changes in that materialized tree.
 
 ### Ask about a reviewed PR
 
@@ -337,6 +333,7 @@ gc dev-pack bug --help
 gc dev-pack review --help
 gc dev-pack ask --help
 gc dev-pack work --help
+gc dev-pack iterate --help
 ```
 
 The known `gc.output_json` deprecation warnings from current v2 formulas are

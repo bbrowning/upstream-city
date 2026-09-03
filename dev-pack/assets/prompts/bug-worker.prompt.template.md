@@ -196,6 +196,10 @@ committing, then create the publication commit with their configured identity an
 sign-off.
 Any history rewrite or review-driven revision must emit a new artifact revision and be
 re-reviewed.
+For revision >1, read the named feedback bead first. A
+`dev-pack-human-feedback.v1` record is the exact human scope: verify the existing
+branch at its predecessor HEAD and continue it without fetching, rebasing, or
+creating a replacement branch.
 
 ## Task: Cross-review — read-only
 

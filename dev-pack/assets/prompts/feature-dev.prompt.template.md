@@ -98,6 +98,10 @@ Create the canonical immutable artifact after committing with
 assignment's revision and lineage values, rig, assignment bead, requested base
 ref verbatim, exact branch, base-fetch evidence, and a JSON array of claimed
 checks through `--verification-file`.
+For revision >1, read the named feedback bead first. If it carries
+`dev-pack-human-feedback.v1`, follow its scoped human request, verify the existing
+branch is still at the recorded predecessor HEAD, and continue it without a fetch,
+rebase, or new branch.
 Artifact emission runs the deterministic base-to-head commit-message quality gate; fix
 every reported SHA/rule before retrying it. It rejects a detectable agent
 `Signed-off-by` and never rewrites history. If the target requires DCO, report that
